@@ -74,3 +74,6 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Both pulls refused (HTTP 412): need a newer Ollama than 0.22.1. Latest release v0.40.13 (2026-10-28); installer 1.6 GB, portable zip 1.5 GB. Asked Ivan: side-by-side portable copy in C:\Users\Ivan\JarvisTrial (own port and model folder, leaves his Ollama alone) or update his Ollama. Nothing installed.
 - tests/model_pick_test.py now falls back when a model has no thinking switch and writes tests/model_pick_results_<models>.json instead of overwriting.
 - Gemini free key in Jarvis: its settings allow an OpenAI-style server (llm_provider openai_compatible + base URL + key); Gemini has such an endpoint (untested). Ivan must paste his own key; Claude does not handle API keys.
+
+## 2026-11-02 - Model bake-off paused at Ivan's request
+- Ivan said "stop pulling" while the side-by-side Ollama download (v0.40.13 zip, 1.5 GB) was running. Claude stopped the download script and gh; a partial 564 MB file remains in C:\Users\Ivan\JarvisTrial\ollama-new\dl (Ivan may delete it). Nothing extracted, no models pulled, his own Ollama untouched and still running. D13 recorded as [proposed] (Gemini + Claude brain), awaiting his yes.
