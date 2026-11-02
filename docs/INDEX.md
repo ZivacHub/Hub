@@ -18,7 +18,7 @@ Every document with "read when". Keep this list current: new doc => new row, sam
 | docs/plan/phases/08-personality-and-clipforge.md | working on Phase 8 |
 | docs/reference/PRIOR_ART.md | choosing or adopting any outside part (wake phrase, hearing, voice, dashboard ideas) |
 | docs/reference/TASKS.md | starting a phase that could use parallel helpers, or closing a phase |
-| docs/reference/COMMANDS.md (created in step 2.2) | adding or changing what Jarvis may do |
+| docs/reference/COMMANDS.md | adding or changing what Jarvis may do (draft written 2026-11-03, step 2.2) |
 | docs/reference/PC_FIT.md (created in step 0.3) | deciding what loads when, or any memory problem |
 | CLAUDE.md | always (rules, stack, docs map) |
 | docs/reference/ARCHITECTURE.md | adding a part or changing how the voice program and dashboard talk |

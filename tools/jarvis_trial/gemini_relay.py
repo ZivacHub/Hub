@@ -112,6 +112,28 @@ def speak_from_response(buf, ctype):
         pass  # the speaker being down must never break Jarvis
 
 
+# Jarvis's built-in tools that Ivan's rules do not allow: localFiles can read, write, append and DELETE any file in the
+# home folder without asking; screenshot would send screen text to Google; the meal tools are irrelevant. The relay removes
+# them from every request, so the model never sees them (Jarvis has no setting to turn them off).
+DENY_TOOLS = {"localFiles", "screenshot", "logMeal", "fetchMeals", "deleteMeal"}
+
+
+def strip_tools(body):
+    """Remove denied tools from a chat request. Returns how many were removed."""
+    tools = body.get("tools")
+    if not isinstance(tools, list):
+        return 0
+    kept = [t for t in tools if (t.get("function") or {}).get("name") not in DENY_TOOLS]
+    removed = len(tools) - len(kept)
+    if removed:
+        if kept:
+            body["tools"] = kept
+        else:
+            body.pop("tools", None)
+            body.pop("tool_choice", None)
+    return removed
+
+
 def log(entry):
     with _lock, open(LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
@@ -127,12 +149,13 @@ class Handler(BaseHTTPRequestHandler):
         t0 = time.time()
         n = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(n) if n else b""
-        changed, model = None, None
+        changed, model, stripped = None, None, 0
         if raw and self.path.endswith("/chat/completions"):
             try:
                 body = json.loads(raw)
                 model = body.get("model")
                 body, changed = rewrite_body(body)
+                stripped = strip_tools(body)
                 raw = json.dumps(body).encode()
             except Exception:
                 changed = None
@@ -168,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(502, "relay: " + type(e).__name__)
             status = status or 502
         log(dict(t=time.strftime("%F %T"), method=self.command, path=self.path.split("?")[0], model=model,
-                 persona_rewritten=changed, status=status, seconds=round(time.time() - t0, 2)))
+                 persona_rewritten=changed, tools_removed=stripped, status=status, seconds=round(time.time() - t0, 2)))
 
     do_GET = do_POST = do_PUT = do_DELETE = _forward
 
@@ -193,6 +216,12 @@ def selftest():
     tc = json.dumps({"choices": [{"message": {"content": None, "tool_calls": [{"function": {"name": "stop"}}]}}]}).encode()
     assert extract_reply(tc, "application/json") == ("", ["stop"])
     print("selftest OK: reply extraction (json, stream, tool call)")
+    fn = lambda n: {"type": "function", "function": {"name": n}}
+    b = {"tools": [fn("localFiles"), fn("webSearch"), fn("screenshot"), fn("hub__project_status"), fn("deleteMeal")], "tool_choice": "auto"}
+    assert strip_tools(b) == 3 and [t["function"]["name"] for t in b["tools"]] == ["webSearch", "hub__project_status"]
+    b = {"tools": [fn("localFiles")], "tool_choice": "auto"}
+    assert strip_tools(b) == 1 and "tools" not in b and "tool_choice" not in b
+    print("selftest OK: dangerous tools removed (localFiles, screenshot, meal tools), others kept")
 
 
 if __name__ == "__main__":

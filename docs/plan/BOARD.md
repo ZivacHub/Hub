@@ -20,10 +20,10 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [ ] 1.3 Voice test page: actor-style, butler-style, Kokoro
   - [ ] 1.4 Ivan picks the voice (closes D4)
   - [ ] 1.5 First loop: wake, listen, repeat back aloud
-- [ ] Phase 2 — Project status by voice
-  - [ ] 2.1 Read every project's status from its files
+- [~] Phase 2 — Project status by voice
+  - [x] 2.1 Read every project's status from its files — tools/hub_status/status.mjs reuses busnus.mjs; `node tools/hub_status/server.mjs --selftest`: 16 projects match `busnus-status` (phases done, decisions waiting), nickname ClipForge works, ambiguous/unknown names refused; asked by voice through Jarvis: "which projects" and "decisions waiting" answered with the real numbers (2026-11-03)
   - [ ] 2.2 Write the safe command list
-  - [ ] 2.3 Local model picks the command (accuracy test)
+  - [ ] 2.3 The brain (Gemini inside Jarvis) picks the right fetch tool (accuracy test)
   - [ ] 2.4 Project names and nicknames (ClipForge)
   - [ ] 2.5 Spoken answers built from real data
   - [ ] 2.6 Milestone demo: ask three questions by voice
@@ -72,6 +72,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-03 (Ivan: "Yes, Phase 2 now (Recommended)" after "Sounds good" about Daniel's voice): Phase 2 started before Phase 1 is finished. Steps 1.1 to 1.5 are PARKED, not dropped: for now the voice part (ears, Gemini brain D13, Daniel's voice D4, persona relay, Claude hand-off) runs inside the installed Jarvis trial; D12 (own loop or Jarvis) stays open and the parked steps come back if we build our own loop. Step 2.3 now reads "the brain picks the right fetch tool" (Gemini inside Jarvis instead of a local model). Fetch tools are built as a read-only helper in tools/hub_status/ and work with either route.
 - 2026-11-02 (outside the phase order, at Ivan's go): D13 decided (brain = Gemini free key + Claude for delegated jobs + small local backup). Built early in the isair/jarvis trial, not product code: tools/jarvis_trial/ (persona relay, start script) and tools/claude_bridge/ (read-only `ask_claude` helper, protocol self-test passes; real Claude call blocked until Ivan logs the `claude` command line in again). Phase 1 steps unchanged; Phase 7 (start work from voice) will reuse the bridge. D12 still open.
 - 2026-11-02 (no plan change): Phase 1 gate passed (Ivan: "Yes, start Phase 1", D11). Step 1.1 started, target not yet met. D12 (try a ready-made local Jarvis as shell) opened by Ivan's question; not decided.
 - 2026-11-02 (no plan change): Phase 0 closed; step 0.4 ticked with D10 (memory layout to be settled at step 1.4).

@@ -14,6 +14,12 @@ Layout: the two sections below. When a decision is answered, move its block from
 **Claude's reading, not a decision:** keep the plan, but add a one-hour trial of isair/jarvis in a separate folder before step 1.5. If it can call our fetch tools through MCP and sounds good, we write only the fetch tools + dashboard; if not, we continue our own loop. Nothing is installed for this until Ivan says yes.
 **Affects:** Phase 1.5, Phase 2
 
+## D14 — Who is the voice shell for now: the installed Jarvis (with our relay), or our own voice loop?   [decided 2026-11-03: the Jarvis trial for now, own loop parked]
+**Question:** (the fork left open as D12's second half) Phase 2 and later need a voice shell: the installed isair/jarvis with our additions, or our own loop from Phase 1.
+**The owner said (2026-11-03):** after hearing Daniel speak for Jarvis ("Sounds good"), chose "Yes, Phase 2 now (Recommended)": start Phase 2 on top of the working Jarvis and park the rest of Phase 1.
+**Result:** Phase 2 and the fetch tools are built on the Jarvis trial (Gemini brain D13, Daniel voice D4, persona relay, Claude helper). Phase 1 steps 1.1 to 1.5 are parked, not dropped. Revisit if Jarvis blocks something we need (voice switching, standby memory, Windows quirks, licence limits: free for personal use only). Fetch tools work with either route.
+**Affects:** all later phases
+
 ## D13 — What should the brain be: a small local model, a cloud model, or both?   [decided 2026-11-02: Gemini free key + Claude for delegated jobs + small local backup]
 **Decided (2026-11-02), his words:** "Yes, that is it. Let's try to integrate that." (after the restated proposal below, with the Google privacy cost spelled out). Order of work: first Gemini inside the Jarvis trial, then the Claude hand-off (read-only first). Which small local model is the backup is still open and cheap to settle.
 **Question:** Ivan asked (2026-11-02): "better models ... Kimi or DeepSeek ... or ... talk to you, the Claude, or maybe some free API key, maybe like Gemini". Facts and options: docs/reference/PRIOR_ART.md, section "Feature: brain options".
