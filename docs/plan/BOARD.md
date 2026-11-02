@@ -72,6 +72,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-02 (outside the phase order, at Ivan's go): D13 decided (brain = Gemini free key + Claude for delegated jobs + small local backup). Built early in the isair/jarvis trial, not product code: tools/jarvis_trial/ (persona relay, start script) and tools/claude_bridge/ (read-only `ask_claude` helper, protocol self-test passes; real Claude call blocked until Ivan logs the `claude` command line in again). Phase 1 steps unchanged; Phase 7 (start work from voice) will reuse the bridge. D12 still open.
 - 2026-11-02 (no plan change): Phase 1 gate passed (Ivan: "Yes, start Phase 1", D11). Step 1.1 started, target not yet met. D12 (try a ready-made local Jarvis as shell) opened by Ivan's question; not decided.
 - 2026-11-02 (no plan change): Phase 0 closed; step 0.4 ticked with D10 (memory layout to be settled at step 1.4).
 - 2026-11-02 (no plan change): step 0.3 ticked; PC_FIT.md has the measured numbers.
