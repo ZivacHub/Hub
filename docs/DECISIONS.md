@@ -30,8 +30,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 - B) Licence-free butler-style sample: sounds similar, not identical. You'd notice: slightly different voice. Cost/risk: none.
 - C) Try both, decide after hearing them in the plan's voice test.
 **Recommendation:** C, because you can hear both before choosing.
-**The owner said:** (not answered yet)
-**Result:** (open)
+**The owner said (2026-11-02, after hearing 10 British male voices on the audition page):** top two = "gemini Iapetus" and "kokoro bm daniel". Earlier: the current Jarvis voice (Piper Alan) is "okay" but "not that UK butlery". He has not yet chosen between the film actor's cloned voice and these.
+**Shortlist (his picks, not yet the final voice):** kokoro bm_daniel (local, 0.1 s a sentence, no limit) and Gemini Iapetus (Google voice service, free tier 3 requests a minute, about 4 s a sentence). Constraint found: the installed isair/jarvis can only use Piper voice files (Chatterbox cloning only when run from source), so neither pick works inside it as it is. Where the voice runs depends on D12.
+**Result:** (open: final voice after D12; film-actor clone still to be heard in step 1.3)
 **Affects:** the voice phase
 
 ## D8 — Defaults for the small technical points   [decided 2026-11-02]
