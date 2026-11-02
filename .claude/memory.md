@@ -77,3 +77,9 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-02 - Model bake-off paused at Ivan's request
 - Ivan said "stop pulling" while the side-by-side Ollama download (v0.40.13 zip, 1.5 GB) was running. Claude stopped the download script and gh; a partial 564 MB file remains in C:\Users\Ivan\JarvisTrial\ollama-new\dl (Ivan may delete it). Nothing extracted, no models pulled, his own Ollama untouched and still running. D13 recorded as [proposed] (Gemini + Claude brain), awaiting his yes.
+
+## 2026-11-02 - D13 decided; Gemini brain working inside the Jarvis trial
+- Ivan: "Yes, that is it. Let's try to integrate that." D13 decided (Gemini free key brain + Claude for delegated jobs + small local backup); PRODUCT.md "Changed" line added. He pasted his own key into C:\Users\Ivan\.config\jarvis\config.json (Claude never saw it; key checks print only length). The backup copy C:\Users\Ivan\JarvisTrial\config_gemini_working.json has the key blanked.
+- Gemini via the OpenAI-compatible endpoint (https://generativelanguage.googleapis.com/v1beta/openai) works with this key. Direct timing: gemini-3.5-flash-lite 0.4-0.8 s typical (one 4.5 s outlier); gemini-3.6-flash 1.3-1.7 s with reasoning_effort=none but truncated/slow (2.8-4.2 s) by default because of hidden thinking; gemini-3.8-flash overloaded (503, 28 s). Jarvis set to flash-lite for chat and fast model; embeddings stay on local bge-m3.
+- Jarvis end to end (computer voice through speakers, Array mic, wait 1.5 s, endpoint 600 ms): first spoken word 4.8-5.9 s after the question in 3 of 5 rounds (10.8 s and 28 s outliers, 1 round not heard), against 20-36 s with local models. Answers correct ("Two plus two is four. ...").
+- Next: Ivan tries his own voice; Claude hand-off (read-only first); backup local model choice. Jarvis left running with the face hidden.
