@@ -68,3 +68,9 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Ivan asked to delete models (llama definitely) and to research better ~8B models, Kimi/DeepSeek, a cloud brain (Gemini free key, Claude) and reading/answering Instagram messages by voice. Per the safety rule Claude does not hard-delete files: gave him Run-button commands instead (nothing deleted yet).
 - Findings in docs/reference/PRIOR_ART.md (section "Feature: brain options ..."); new open decision D13 (brain local vs cloud vs both). Claude's reading: local small picker + optional spoken "ask the big brain". Instagram reading/replying: no official personal-account route, unofficial = terms break/ban risk; Telegram has an official one.
 - Nothing downloaded or installed. Ivan said Jarvis (isair) would be "nice to have" for occasional use: D12 not decided yet.
+
+## 2026-11-02 - Model bake-off blocked: Ollama too old
+- Ivan ran the delete command for the 3 llama models (free disk about 39.6 GB afterwards). Told him the right size of the 4 test models is about 21-24 GB (not the 15 GB first said); started only the two small ones (qwen3.5:4b, gemma4:e2b).
+- Both pulls refused (HTTP 412): need a newer Ollama than 0.22.1. Latest release v0.40.13 (2026-10-28); installer 1.6 GB, portable zip 1.5 GB. Asked Ivan: side-by-side portable copy in C:\Users\Ivan\JarvisTrial (own port and model folder, leaves his Ollama alone) or update his Ollama. Nothing installed.
+- tests/model_pick_test.py now falls back when a model has no thinking switch and writes tests/model_pick_results_<models>.json instead of overwriting.
+- Gemini free key in Jarvis: its settings allow an OpenAI-style server (llm_provider openai_compatible + base URL + key); Gemini has such an endpoint (untested). Ivan must paste his own key; Claude does not handle API keys.

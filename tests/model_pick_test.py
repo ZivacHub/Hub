@@ -63,11 +63,21 @@ def ask(model, sentence):
         "options": {"temperature": 0},
         "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": sentence}],
     }
-    req = urllib.request.Request(URL, json.dumps(body).encode(), {"Content-Type": "application/json"})
     t0 = time.time()
-    with urllib.request.urlopen(req, timeout=300) as r:
-        data = json.load(r)
+    try:
+        data = _post(body)
+    except urllib.error.HTTPError as e:
+        if e.code != 400:
+            raise
+        body.pop("think")  # model has no thinking switch
+        data = _post(body)
     return data, time.time() - t0
+
+
+def _post(body):
+    req = urllib.request.Request(URL, json.dumps(body).encode(), {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        return json.load(r)
 
 
 def main(models):
@@ -96,7 +106,8 @@ def main(models):
             )
         results[model] = dict(load_and_first_s=round(load_s, 1), peak_gpu_mib=peak, rows=rows)
         subprocess.run(["ollama", "stop", model], capture_output=True)
-    json.dump(results, open("tests/model_pick_results.json", "w"), indent=2)
+    name = "_".join(m.replace(":", "-").replace("/", "-") for m in models)
+    json.dump(results, open(f"tests/model_pick_results_{name}.json", "w"), indent=2)
     for model, res in results.items():
         ok = sum(r["ok"] for r in res["rows"])
         avg = sum(r["seconds"] for r in res["rows"]) / len(res["rows"])
