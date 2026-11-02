@@ -22,7 +22,7 @@ Layout: the two sections below. When a decision is answered, move its block from
 **[proposed, restated for a yes]:** brain = Gemini free key (cloud, fast, frees the PC); Claude does delegated jobs; a small local model stays only as the offline fallback. Cost to know: Google says free-tier prompts are used to improve its products, humans may read them, and it asks not to send personal or confidential information. This replaces the "local model only" rule (D2, PRODUCT.md non-negotiables), so it needs his explicit yes and a dated "Changed" line in PRODUCT.md.
 **Affects:** Phase 1.4, Phase 2, Phase 7
 
-## D4 — Which voice for Jarvis: the film actor's cloned voice, or a licence-free butler-style voice?   [open]
+## D4 — Which voice for Jarvis: the film actor's cloned voice, or a licence-free butler-style voice?   [decided 2026-11-02: local copy of Gemini Iapetus]
 **Question:** Should Jarvis sound like the actor from the Iron Man films (cloned from film audio), or like a similar British butler voice cloned from a sample that is free to use?
 **Why it matters:** Cloning a real actor's voice is fine to try privately on your own PC, but it must never be published or used in anything public. A licence-free sample has no such limit.
 **Options:**
@@ -32,7 +32,8 @@ Layout: the two sections below. When a decision is answered, move its block from
 **Recommendation:** C, because you can hear both before choosing.
 **The owner said (2026-11-02, after hearing 10 British male voices on the audition page):** top two = "gemini Iapetus" and "kokoro bm daniel". Earlier: the current Jarvis voice (Piper Alan) is "okay" but "not that UK butlery". He has not yet chosen between the film actor's cloned voice and these.
 **Shortlist (his picks, not yet the final voice):** kokoro bm_daniel (local, 0.1 s a sentence, no limit) and Gemini Iapetus (Google voice service, free tier 3 requests a minute, about 4 s a sentence). Constraint found: the installed isair/jarvis can only use Piper voice files (Chatterbox cloning only when run from source), so neither pick works inside it as it is. Where the voice runs depends on D12.
-**Result:** (open: final voice after D12; film-actor clone still to be heard in step 1.3)
+**Decided (2026-11-02), his words:** "I think that Lepidus local copy only is just enough." (He means the local Chatterbox copy of Gemini Iapetus, after hearing Daniel, Google's Iapetus and the local copy played back to back, and after being told the local copy takes about 8-9 s a sentence, holds about 3-4 GB only while he talks, and needs a load of 15-17 s from standby; he said these costs are fine.)
+**Result:** Voice = local copy of Gemini Iapetus (Chatterbox cloned from tests/audio/voice_audition/gemini_Iapetus.wav, to be regenerated with a longer, cleaner reference). Daniel and the film actor's clone are not used unless he asks later. It only runs inside our own loop or Jarvis-from-source (Chatterbox is not in the installed Jarvis): where it runs depends on D12.
 **Affects:** the voice phase
 
 ## D8 — Defaults for the small technical points   [decided 2026-11-02]
