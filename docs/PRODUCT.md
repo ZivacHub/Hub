@@ -13,7 +13,7 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 
 ## Non-negotiables (decisions that must not drift)
 - Jarvis fetches answers, it does not hold them: the data stays in each project (plan board, decisions, handoff, chat history files, the AI_Orcestration Manager). Read chat history files read-only; they stay on this PC.
-- Local model only, no Anthropic API key (D2). Voice free, unlimited, cloned from a short sample (D3, D4 open: which voice).
+- Brain: Gemini free API key in the cloud, Claude for delegated jobs, a small local model only as offline backup (D13, replaces "local model only"; Google may read free-tier prompts, Ivan accepted). No Anthropic API key (D2). Voice free, unlimited, cloned from a short sample (D3, D4 open: which voice).
 - Nothing essential may depend on a paid tool.
 - Runs as a web page on his PC; clean modern dashboard look; "Hey Jarvis" wake phrase; English only. Starts with Windows (Ivan's choice; keep the idle cost small and measure it).
 - Never on its own: post or publish, spend money, delete or overwrite files, speak sensitive things aloud. Anything that changes something asks for a spoken yes first.
@@ -32,3 +32,4 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 
 ## Changed
 - 2026-11-01: created from Ivan's answers (D1 to D3 in DECISIONS.md).
+- 2026-11-02: brain changed from "local model only" to Gemini free key + Claude for delegated jobs + small local backup (D13), after Ivan: "Yes, that is it. Let's try to integrate that." He was told Google may use and read free-tier prompts and asks not to send personal information.
