@@ -9,6 +9,7 @@ One-line purpose: a Jarvis voice assistant that starts with Windows on Ivan's PC
 - PC: i7-13650HX, 15.6 GB RAM, RTX 4060 Laptop with 8 GB graphics memory, 41 GB disk free. Announce model/download sizes before downloading.
 
 ## Commands
+- Versions on this PC (checked 2026-11-02): `python` = 3.11.9 (use this one; `py` alone opens 3.14.0, too new for voice libraries, so use `py -3.11`), Node v24.13.1, Ollama 0.22.1 (not running until started), ffmpeg not installed (add only if a part needs it, with Ivan's yes).
 - Dev / Build / Test: not defined yet. They are created in Phases 0 to 3 and written here then.
 
 ## Conventions
@@ -40,7 +41,7 @@ No new skills were installed (search found nothing worth adding; paid voice skil
 - UI work: Design stack above · DB: none · Docs/versions: context7
 
 ## Current state
-- Plan APPROVED 2026-11-02 (docs/plan/BOARD.md, 9 phases, 43 steps). No code yet. Next: Phase 0 gate, then step 0.1.
+- Plan APPROVED 2026-11-02 (docs/plan/BOARD.md, 9 phases, 43 steps). No code yet. Phase 0 gate passed, step 0.1 done. Next: 0.2 (try the two local models).
 
 ## How we work here (BUSNUS workflow v3, details in ~/.claude/CLAUDE.md)
 - docs/PRODUCT.md = the goal in the owner's words (compass). docs/plan/BOARD.md = progress, in order. docs/DECISIONS.md = what the owner decided.

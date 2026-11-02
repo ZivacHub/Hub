@@ -64,3 +64,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-02):** ticked all four: openWakeWord ("Hey Jarvis"), faster-whisper (hearing), Chatterbox cloning voice, Kokoro as the light backup voice.
 **Result:** These four are tested in the voice phase; the final pick of each comes after Ivan hears and tries them. Nothing is installed before the plan is approved.
 **Affects:** voice phase
+
+## D9 — Name of the private GitHub backup   [decided 2026-11-02]
+**Question:** What should the private backup copy be called?
+**The owner said (2026-11-02):** chose "Hub".
+**Result:** Private repo https://github.com/ZivacHub/Hub (account ZivacHub), main pushed, 25 files, secrets re-scanned right before the push (clean). Nothing else is uploaded.
+**Affects:** foundation (backup)

@@ -19,4 +19,4 @@ Find out, before building anything, whether your laptop (8 GB graphics memory, 1
 - Disk: models take about 10-15 GB of the 41 GB free; the sizes are announced before download.
 
 ## Phase gate record
-- Plain-words preview shown: (not yet). Skills/repos search: done for the whole project 2026-11-02 (docs/reference/PRIOR_ART.md; no skills worth installing). Decisions asked: none. The owner's go: (not yet).
+- Plain-words preview shown: 2026-11-02. Skills/repos search: done for the whole project 2026-11-02 (docs/reference/PRIOR_ART.md; no skills worth installing). Decisions asked: none. The owner's go: 2026-11-02 ("Go, start Phase 0"). Repo name asked in the same card: D9.
