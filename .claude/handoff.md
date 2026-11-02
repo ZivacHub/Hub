@@ -1,5 +1,5 @@
 # Handoff: Hub   (updated 2026-11-02)
-Git: main @ 0abf6bc "Hub: step 0.3 done, voice parts measured (PC_FIT.md), test scripts" · pushed: yes (private https://github.com/ZivacHub/Hub) · uncommitted: D10, board ticks for 0.4 and Phase 0, memory, this handoff
+Git: main @ 343a45c "Hub: Phase 0 closed (D10), handoff" · pushed: yes (private https://github.com/ZivacHub/Hub) · uncommitted: this line
 
 ## Where we are in the plan
 Phase 0 of 9 is DONE (4/4). Phase 1 of 9 — Ears and mouth: 0/5 steps. Steps done 4/43. Next per plan: 1.1 "Hey Jarvis" wake-phrase test, after the Phase 1 gate (preview shown, Ivan's go pending).
