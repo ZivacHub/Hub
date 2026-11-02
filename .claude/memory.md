@@ -18,3 +18,10 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Ivan said yes to the downloads. llama3.1:8b was already installed (4.9 GB); pulled qwen3:8b (5.2 GB). Started Ollama server (left running, idle).
 - tests/model_pick_test.py + tests/model_pick_results.json; results table in docs/reference/PC_FIT.md. Llama 10/10 (0.75 s), Qwen3 9/10 (0.51 s, missed the dictate-idea sentence). Both about 5.5 GB graphics memory. Not a winner yet: 40-sentence test in 2.3.
 - Other models already on disk (not ours, untouched): lexi/uncensored llama variants, wizardlm 13b, gpt-oss cloud, embedding models.
+
+## 2026-11-02: step 0.3 done (voice parts measured)
+- Ivan said yes ("small parts first"). Created Hub/.venv (Python 3.11.9, git-ignored); installed openwakeword 0.6.0, faster-whisper 1.2.1, torch 2.6.0+cu124, kokoro, chatterbox-tts 0.1.7 (pins numpy 1.26.4, transformers 5.2.0). Disk free went from 40 GB to about 21 GB (venv ~6 GB, HF cache with whisper small.en + large-v3-turbo + Kokoro + Chatterbox, Qwen3 5.2 GB).
+- faster-whisper needed cublas64_12.dll; fixed by importing torch first in the same process (no extra download).
+- Results in docs/reference/PC_FIT.md. Fits: brain + hearing(small.en) + Kokoro = 6.9 GB of 8.19. Chatterbox + brain = 7.5 GB, brain 31% on processor. All three heavy on the card does not fit; hearing on processor takes 1.15 s per clip (measured). Chatterbox is the slow part (about 1.5 to 4 s per sentence); wake phrase costs 4% of one core idle.
+- Scripts: tests/measure_part.py, measure_ollama_proc.py, measure_combo.py; spoken test clip and voice samples in tests/audio/ (git-ignored; kokoro_sample.wav, chatterbox_sample.wav for Ivan to hear later).
+- Lesson: pip installs of cu124 PyTorch must use the pytorch index; default PyPI gives a processor-only build.

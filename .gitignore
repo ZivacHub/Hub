@@ -10,3 +10,5 @@ models/
 logs/
 ideas/
 *.log
+
+tests/audio/
