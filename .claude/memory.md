@@ -25,3 +25,7 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Results in docs/reference/PC_FIT.md. Fits: brain + hearing(small.en) + Kokoro = 6.9 GB of 8.19. Chatterbox + brain = 7.5 GB, brain 31% on processor. All three heavy on the card does not fit; hearing on processor takes 1.15 s per clip (measured). Chatterbox is the slow part (about 1.5 to 4 s per sentence); wake phrase costs 4% of one core idle.
 - Scripts: tests/measure_part.py, measure_ollama_proc.py, measure_combo.py; spoken test clip and voice samples in tests/audio/ (git-ignored; kokoro_sample.wav, chatterbox_sample.wav for Ivan to hear later).
 - Lesson: pip installs of cu124 PyTorch must use the pytorch index; default PyPI gives a processor-only build.
+
+## 2026-11-02: Phase 0 closed
+- Step 0.4: Ivan read the fit result in plain words and chose "Go to Phase 1, decide the layout after I hear the voices" (D10). Phase 0 ticked (4/4 steps, 43 total, 4 done).
+- Open: memory layout (hearing on processor vs card) decided together with D4 in step 1.4.

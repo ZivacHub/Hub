@@ -9,11 +9,11 @@ This board is the ONLY place that tracks progress. Tick a step in the same chang
 (phases = top-level lines, steps = indented lines), so keep exactly this shape. Each phase title starts with `Phase <number>`
 and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, two digits: Phase 4 -> `04-screens.md`).
 
-- [~] Phase 0 — Check the PC
+- [x] Phase 0 — Check the PC
   - [x] 0.1 Install the basics (with Ivan's yes) — all three already installed, nothing downloaded: Python 3.11.9, Node v24.13.1, Ollama 0.22.1 (2026-11-02)
   - [x] 0.2 Try the two local models on sample commands — llama3.1:8b 10/10 at 0.75 s, qwen3:8b 9/10 at 0.51 s, both about 5.5 GB graphics memory; table in docs/reference/PC_FIT.md (2026-11-02)
   - [x] 0.3 Measure each voice part (idle and active) — all 5 parts plus both brains measured, plus 3 combinations really loaded together; table in docs/reference/PC_FIT.md (2026-11-02)
-  - [ ] 0.4 Show Ivan the fit result and get his go
+  - [x] 0.4 Show Ivan the fit result and get his go — Ivan: "Go to Phase 1, decide the layout after I hear the voices" (D10, 2026-11-02)
 - [ ] Phase 1 — Ears and mouth
   - [ ] 1.1 "Hey Jarvis" wake-phrase test
   - [ ] 1.2 Speech-to-text test
@@ -72,6 +72,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-02 (no plan change): Phase 0 closed; step 0.4 ticked with D10 (memory layout to be settled at step 1.4).
 - 2026-11-02 (no plan change): step 0.3 ticked; PC_FIT.md has the measured numbers.
 - 2026-11-02 (no plan change): Phase 0 gate passed (Ivan: "Go, start Phase 0"); step 0.1 ticked, the tools were already on the PC.
 - 2026-11-02 (Ivan approved the plan, grades 3 light / 26 standard / 14 strong): Status set to APPROVED. Setup files (CLAUDE.md, README, reference docs, git) added the same day.

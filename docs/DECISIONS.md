@@ -70,3 +70,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-02):** chose "Hub".
 **Result:** Private repo https://github.com/ZivacHub/Hub (account ZivacHub), main pushed, 25 files, secrets re-scanned right before the push (clean). Nothing else is uploaded.
 **Affects:** foundation (backup)
+
+## D10 — Phase 0 result accepted; memory layout for voice and hearing   [decided 2026-11-02]
+**Question:** After the PC check: move on to Phase 1, and settle now whether hearing runs on the card or the processor?
+**The owner said (2026-11-02):** chose "Go to Phase 1, decide the layout after I hear the voices".
+**Result:** Phase 0 closed. Memory layout (hearing on the processor if the cloned voice is chosen, otherwise everything on the card) is NOT decided; it is settled in one sentence right after D4 (step 1.4). Facts it rests on: docs/reference/PC_FIT.md.
+**Affects:** Phase 1 (1.3, 1.4), Phase 5 (5.2)
