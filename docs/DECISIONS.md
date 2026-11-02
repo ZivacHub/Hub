@@ -7,6 +7,11 @@ Layout: the two sections below. When a decision is answered, move its block from
 
 ## Waiting on the owner (open and proposed)
 
+## D12 — Build our own voice loop, or try a ready-made local Jarvis (isair/jarvis) as the shell?   [open]
+**Question:** Ivan asked (2026-11-02): "So we are building our own? Research the web... what about openjarvis, jarvis-ai...?" The research (docs/reference/PRIOR_ART.md, newest section) found three free local Windows projects.
+**Claude's reading, not a decision:** keep the plan, but add a one-hour trial of isair/jarvis in a separate folder before step 1.5. If it can call our fetch tools through MCP and sounds good, we write only the fetch tools + dashboard; if not, we continue our own loop. Nothing is installed for this until Ivan says yes.
+**Affects:** Phase 1.5, Phase 2
+
 ## D4 — Which voice for Jarvis: the film actor's cloned voice, or a licence-free butler-style voice?   [open]
 **Question:** Should Jarvis sound like the actor from the Iron Man films (cloned from film audio), or like a similar British butler voice cloned from a sample that is free to use?
 **Why it matters:** Cloning a real actor's voice is fine to try privately on your own PC, but it must never be published or used in anything public. A licence-free sample has no such limit.
@@ -76,3 +81,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-02):** chose "Go to Phase 1, decide the layout after I hear the voices".
 **Result:** Phase 0 closed. Memory layout (hearing on the processor if the cloned voice is chosen, otherwise everything on the card) is NOT decided; it is settled in one sentence right after D4 (step 1.4). Facts it rests on: docs/reference/PC_FIT.md.
 **Affects:** Phase 1 (1.3, 1.4), Phase 5 (5.2)
+
+## D11 — Microphone and voice-sample source for Phase 1   [decided 2026-11-02]
+**Question:** Which microphone do you normally speak into, and where does the Jarvis voice sample come from?
+**The owner said (2026-11-02):** microphone "Laptop built-in (Array)"; voice sample "Both: your clip and a butler sample (Recommended)".
+**Result:** Wake and hearing tests use the laptop's built-in Microphone Array (Realtek). For step 1.3 Ivan supplies a clean clip (about 10 s) of the film voice (private use only, never published) and Claude finds a licence-free British butler-style clip and shows its licence; Kokoro is the third voice. D4 itself stays open until step 1.4.
+**Affects:** Phase 1 (1.1, 1.2, 1.3)

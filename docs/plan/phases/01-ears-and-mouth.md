@@ -20,4 +20,4 @@ Jarvis can hear "Hey Jarvis", hear what you say after it, and talk back in a clo
 - A film-actor voice is for private use on this PC only; never published or put in anything public (D4).
 
 ## Phase gate record
-- Plain-words preview shown: (not yet). Skills/repos search: (not yet; see PRIOR_ART.md). Decisions asked: D4. The owner's go: (not yet).
+- Plain-words preview shown: 2026-11-02. Skills/repos search: PRIOR_ART.md (the four D7 parts, nothing new except the tiny sound package `sounddevice`). Decisions asked: D11 (microphone, voice-sample source); D4 stays for step 1.4. The owner's go: 2026-11-02 ("Yes, start Phase 1").

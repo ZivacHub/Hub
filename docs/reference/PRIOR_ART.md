@@ -62,3 +62,17 @@ No ready-made project does all of this. The parts (wake phrase, speech-to-text, 
 ## Don't copy
 - ethanplusai/jarvis code: licence limits it to personal, non-commercial use and it only works on Mac.
 - Anything needing an Anthropic API key, ElevenLabs or Fish Audio, because of the free-and-unlimited rule.
+
+
+## Feature: ready-made Jarvis shells that run locally on Windows (2026-11-02, asked by Ivan: "what about openjarvis, jarvis-ai?")
+Read from the GitHub pages themselves (WebFetch). Anything the page did not say is marked "not stated"; dates of last commits were not shown.
+
+| Repo | Stars | Licence | What it is | Voice parts | Windows | Key/paid? | Can it fetch from BUSNUS files? |
+|---|---|---|---|---|---|---|---|
+| open-jarvis/OpenJarvis (Stanford labs) | 12.9k | Apache-2.0 | Framework for personal agents on your own device; Ollama; skills/tools; `jarvis gui` chat page; scheduled digests | Text-to-speech in the "morning digest"; wake word, hearing, cloning: not stated | Native installer + scheduled-task service | not stated for local use | Yes in principle: skills are tools it can call. Bigger than needed |
+| isair/jarvis | 2.2k | not named on the page ("free for personal use, commercial: contact author") | Desktop assistant: voice + text, memory (diary, knowledge graph), dictation, MCP tools | faster-whisper; Piper, and Chatterbox on source installs; addressed by name anywhere in a sentence (no literal wake file); cloning not stated | Windows zip, but "development primarily on macOS" | No key; optional Brave search key | Yes: supports MCP, so a small BUSNUS "fetch" tool could be plugged in |
+| PanPenek/JarvisAi | 21 | MIT | Voice assistant with Iron-Man-style web page, 31 tools (screen reading, clicking, typing, volume, lock screen, power, run Python) | openWakeWord "Hey Jarvis", faster-whisper, Kokoro: the SAME parts we tested; cloning not stated | `install.bat` + `start.bat` | Local by default | Adding tools: not stated. Only 3 commits; its desktop-control tools break our rule "nothing changes anything without a spoken yes" unless removed |
+
+Reading: the first three Jarvis repos from the earlier search (Julian-Ivanov, vsomayaji2004, ethanplusai) are paid/Mac-only. These three are different: free and local. None of them knows the BUSNUS plan boards, decisions, handoffs or chat files, and none states a cloned Jarvis voice. PanPenek's repo uses the exact stack we measured (openWakeWord, faster-whisper, Kokoro, Qwen3 8B), which supports D7. isair/jarvis is the one most worth a time-boxed trial as a shell (MCP lets us add our own fetch tool).
+- [ ] pending (Ivan decides, D12): try isair/jarvis in a separate folder for about an hour, to see whether it can replace our own voice loop (Phase 1.5, 2.x) while we still write the BUSNUS fetch tools and the dashboard.
+- [ ] pending: borrow ideas only from PanPenek/JarvisAi (web page style, tool registry) and OpenJarvis (skills as tools, scheduled digest); no code copied.
