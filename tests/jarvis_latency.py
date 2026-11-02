@@ -63,7 +63,7 @@ for r in range(rounds):
     first = {}
     for t, s in changes:
         first.setdefault(s, round(t - t_end, 1))
-    res = dict(round=r + 1, clip_s=round(clip_s, 1), first_seen_after_question_end_s=first,
+    res = dict(round=r + 1, question_end_epoch=round(t_end, 2), clip_s=round(clip_s, 1), first_seen_after_question_end_s=first,
                changes=[(round(t - t_end, 1), s) for t, s in changes], answered=seen_speaking)
     print(json.dumps(res), flush=True)
     results.append(res)

@@ -65,6 +65,53 @@ def rewrite_body(body):
     return body, changed
 
 
+SPEAK_URL = None  # set with --speak http://127.0.0.1:8788 : replies are also sent to the Daniel speaker service
+
+
+def extract_reply(buf, ctype):
+    """Return (reply text, names of tools the model asked for) from a chat-completions response (JSON or event stream)."""
+    text, tools = "", []
+    raw = buf.decode("utf-8", errors="replace")
+    pieces = []
+    if "event-stream" in ctype:
+        for line in raw.splitlines():
+            if line.startswith("data:") and line[5:].strip() not in ("", "[DONE]"):
+                try:
+                    pieces.append(json.loads(line[5:].strip()))
+                except ValueError:
+                    pass
+    else:
+        try:
+            j = json.loads(raw)
+            pieces = j if isinstance(j, list) else [j]
+        except ValueError:
+            pass
+    for j in pieces:
+        for ch in j.get("choices", []):
+            d = ch.get("delta") or ch.get("message") or {}
+            text += d.get("content") or ""
+            for tc in d.get("tool_calls") or []:
+                tools.append((tc.get("function") or {}).get("name"))
+    return text, tools
+
+
+def _post(path, payload=None):
+    import urllib.request
+    body = json.dumps(payload or {}).encode()
+    urllib.request.urlopen(urllib.request.Request(SPEAK_URL + path, body, {"Content-Type": "application/json"}), timeout=5).read()
+
+
+def speak_from_response(buf, ctype):
+    try:
+        text, tools = extract_reply(buf, ctype)
+        if "stop" in tools:
+            _post("/stop")
+        elif text.strip() and not tools:
+            _post("/say", {"text": text})
+    except Exception:
+        pass  # the speaker being down must never break Jarvis
+
+
 def log(entry):
     with _lock, open(LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
@@ -105,12 +152,17 @@ class Handler(BaseHTTPRequestHandler):
                 if k.lower() not in ("transfer-encoding", "content-length", "connection", "content-encoding"):
                     self.send_header(k, v)
             self.end_headers()
+            ctype = r.getheader("Content-Type", "")
+            buf = bytearray()
             while True:
                 chunk = r.read(2048)
                 if not chunk:
                     break
+                buf.extend(chunk)
                 self.wfile.write(chunk)
                 self.wfile.flush()
+            if SPEAK_URL and changed and status == 200:
+                threading.Thread(target=speak_from_response, args=(bytes(buf), ctype), daemon=True).start()
         except Exception as e:  # report upstream trouble to Jarvis as a gateway error, never print secrets
             if not status:
                 self.send_error(502, "relay: " + type(e).__name__)
@@ -133,11 +185,24 @@ def selftest():
     assert ok, "persona paragraph not found in Jarvis's current prompt"
     assert "witty" not in new and "No jokes" in new and "[Context:" in new and "Always respond in a short" in new
     print("selftest OK: persona replaced, context line and formatting rules kept;", len(prompt), "->", len(new), "chars")
+    # reply extraction: plain JSON, event stream, and a tool call
+    t, tools = extract_reply(json.dumps({"choices": [{"message": {"content": "Four."}}]}).encode(), "application/json")
+    assert (t, tools) == ("Four.", [])
+    sse = b'data: {"choices":[{"delta":{"content":"Two plus "}}]}\n\ndata: {"choices":[{"delta":{"content":"two."}}]}\n\ndata: [DONE]\n\n'
+    assert extract_reply(sse, "text/event-stream") == ("Two plus two.", [])
+    tc = json.dumps({"choices": [{"message": {"content": None, "tool_calls": [{"function": {"name": "stop"}}]}}]}).encode()
+    assert extract_reply(tc, "application/json") == ("", ["stop"])
+    print("selftest OK: reply extraction (json, stream, tool call)")
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest()
     else:
-        port = int(sys.argv[1]) if len(sys.argv) > 1 else 8787
+        args = [a for a in sys.argv[1:]]
+        if "--speak" in args:
+            i = args.index("--speak")
+            SPEAK_URL = args[i + 1]
+            del args[i:i + 2]
+        port = int(args[0]) if args else 8787
         ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
