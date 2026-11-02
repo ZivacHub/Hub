@@ -76,3 +76,19 @@ Read from the GitHub pages themselves (WebFetch). Anything the page did not say 
 Reading: the first three Jarvis repos from the earlier search (Julian-Ivanov, vsomayaji2004, ethanplusai) are paid/Mac-only. These three are different: free and local. None of them knows the BUSNUS plan boards, decisions, handoffs or chat files, and none states a cloned Jarvis voice. PanPenek's repo uses the exact stack we measured (openWakeWord, faster-whisper, Kokoro, Qwen3 8B), which supports D7. isair/jarvis is the one most worth a time-boxed trial as a shell (MCP lets us add our own fetch tool).
 - [ ] pending (Ivan decides, D12): try isair/jarvis in a separate folder for about an hour, to see whether it can replace our own voice loop (Phase 1.5, 2.x) while we still write the BUSNUS fetch tools and the dashboard.
 - [ ] pending: borrow ideas only from PanPenek/JarvisAi (web page style, tool registry) and OpenJarvis (skills as tools, scheduled digest); no code copied.
+
+## Feature: brain options and "read my messages by voice" (2026-11-02)
+Searched: best local models for an 8 GB card, Ollama pages for Qwen3.5, Gemma 4, DeepSeek-R1, Kimi, Ollama cloud pricing, Gemini free-tier terms, Claude Code headless policy, Instagram DM automation. Blog benchmarks are self-reported; sizes come from ollama.com.
+| Option | Size / cost | Notes |
+|---|---|---|
+| qwen3.5:4b | 3.3-4.0 GB | newest Qwen family, tools + thinking, 256K context; fits beside hearing and voice. Untested here. |
+| qwen3.5:9b | 6.6-7.6 GB | strongest that "fits"; leaves almost nothing on an 8 GB card, would spill to the processor. Untested here. |
+| gemma4:e2b / e4b | 4.6 / 6.6 GB | native tools, audio input; e4b is big. Untested here. |
+| deepseek-r1:8b | 5.2 GB | a "thinks a lot" model, slow for voice. MIT licence. Not recommended for the picker. |
+| Kimi (k2.6, k3, k2.7-code) | cloud only on Ollama | too big to run locally; the only small Kimi found (Kimi-VL-A3B, 16B total) is a vision model, not on Ollama. |
+| Ollama cloud (Kimi k3, DeepSeek v4, gpt-oss 120b) | "free" plan = pay per token, no included credits; Pro $20/mo | same interface as local models; page says prompts are never logged or trained on. Ivan already has gpt-oss:120b-cloud listed. |
+| Gemini API free tier | free, rate-limited | per search results, Google may use free-tier prompts to improve products and humans may read them (verify on Google's own page). Everything said goes to Google. |
+| Claude via `claude -p` (his subscription) | covered by plan / Agent SDK credit from 2026-06-15 per Anthropic support text | personal local use tolerated; products for others must use an API key; sources disagree, verify the current wording. Several seconds per answer (unmeasured). |
+- [ ] pending: test Qwen3.5 4B/9B and Gemma 4 E2B/E4B against qwen3:8b on this card (D13)
+- [ ] pending: optional spoken "ask the big brain" cloud command (D13)
+- [ ] pending: read and answer chat messages by voice. Instagram: no official way for a personal account (the official API is for business/creator accounts); unofficial tools break Instagram's terms and can get the account restricted or banned (vendor blogs, Meta's own text not found); would also need his login stored on the PC. Telegram has an official way for personal accounts. Voice side (read back, "tell her this", read-back and spoken "yes" before sending) fits our existing safety rule.

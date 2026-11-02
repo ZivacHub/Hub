@@ -63,3 +63,8 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Jarvis with that brain + planner off, wait 1.5 s, keyword tools, follow-up window off: still 22-30 s to first spoken word in 4 of 5 played questions (heard at 0.3-6 s, thinking at 4-14 s, speaking at 22-30 s). Brain speed was therefore not the main cause.
 - Log of one round: heard 20:02:00; "directed" 20:02:03; 9 s until the tool list appeared (12 tools selected, every query); answer took 10 s (prompt carries 12 tool descriptions); about 6 s for Piper to make the voice (runs at roughly real-time speed on the processor). Each stage is built into the app, so cutting them needs code changes (running it from source), not settings.
 - Config restored to original; Jarvis stopped; models unloaded. D12 still open for Ivan.
+
+## 2026-11-02 - Research: brain options and messages by voice (Ivan's questions after the Jarvis trial)
+- Ivan asked to delete models (llama definitely) and to research better ~8B models, Kimi/DeepSeek, a cloud brain (Gemini free key, Claude) and reading/answering Instagram messages by voice. Per the safety rule Claude does not hard-delete files: gave him Run-button commands instead (nothing deleted yet).
+- Findings in docs/reference/PRIOR_ART.md (section "Feature: brain options ..."); new open decision D13 (brain local vs cloud vs both). Claude's reading: local small picker + optional spoken "ask the big brain". Instagram reading/replying: no official personal-account route, unofficial = terms break/ban risk; Telegram has an official one.
+- Nothing downloaded or installed. Ivan said Jarvis (isair) would be "nice to have" for occasional use: D12 not decided yet.

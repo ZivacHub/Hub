@@ -14,6 +14,11 @@ Layout: the two sections below. When a decision is answered, move its block from
 **Claude's reading, not a decision:** keep the plan, but add a one-hour trial of isair/jarvis in a separate folder before step 1.5. If it can call our fetch tools through MCP and sounds good, we write only the fetch tools + dashboard; if not, we continue our own loop. Nothing is installed for this until Ivan says yes.
 **Affects:** Phase 1.5, Phase 2
 
+## D13 — What should the brain be: a small local model, a cloud model, or both?   [open]
+**Question:** Ivan asked (2026-11-02): "better models ... Kimi or DeepSeek ... or ... talk to you, the Claude, or maybe some free API key, maybe like Gemini". Facts and options: docs/reference/PRIOR_ART.md, section "Feature: brain options".
+**Claude's reading, not a decision:** keep a small local model as the always-on picker (fast, private, free; PRODUCT.md and D2 say local, no API key), and add an optional spoken "ask the big brain" command that sends one question to a cloud model only when Ivan says so, with a spoken warning that it leaves the PC. Changing D2 needs his words. Which local model: a short test of Qwen3.5 4B and 9B and Gemma 4 E2B/E4B against qwen3:8b would settle it (downloads 3.3 to 7.6 GB each, only with his yes).
+**Affects:** Phase 1.4, Phase 2, Phase 7
+
 ## D4 — Which voice for Jarvis: the film actor's cloned voice, or a licence-free butler-style voice?   [open]
 **Question:** Should Jarvis sound like the actor from the Iron Man films (cloned from film audio), or like a similar British butler voice cloned from a sample that is free to use?
 **Why it matters:** Cloning a real actor's voice is fine to try privately on your own PC, but it must never be published or used in anything public. A licence-free sample has no such limit.
