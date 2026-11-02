@@ -14,8 +14,8 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 0.2 Try the two local models on sample commands — llama3.1:8b 10/10 at 0.75 s, qwen3:8b 9/10 at 0.51 s, both about 5.5 GB graphics memory; table in docs/reference/PC_FIT.md (2026-11-02)
   - [x] 0.3 Measure each voice part (idle and active) — all 5 parts plus both brains measured, plus 3 combinations really loaded together; table in docs/reference/PC_FIT.md (2026-11-02)
   - [x] 0.4 Show Ivan the fit result and get his go — Ivan: "Go to Phase 1, decide the layout after I hear the voices" (D10, 2026-11-02)
-- [ ] Phase 1 — Ears and mouth
-  - [ ] 1.1 "Hey Jarvis" wake-phrase test
+- [~] Phase 1 — Ears and mouth
+  - [~] 1.1 "Hey Jarvis" wake-phrase test — NOT met yet: 16/20 woke at the standard setting (target 18); 20 min of video: 0 false wakes at 0.5, loudest 0.48. See memory 2026-11-02
   - [ ] 1.2 Speech-to-text test
   - [ ] 1.3 Voice test page: actor-style, butler-style, Kokoro
   - [ ] 1.4 Ivan picks the voice (closes D4)
@@ -72,6 +72,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-02 (no plan change): Phase 1 gate passed (Ivan: "Yes, start Phase 1", D11). Step 1.1 started, target not yet met. D12 (try a ready-made local Jarvis as shell) opened by Ivan's question; not decided.
 - 2026-11-02 (no plan change): Phase 0 closed; step 0.4 ticked with D10 (memory layout to be settled at step 1.4).
 - 2026-11-02 (no plan change): step 0.3 ticked; PC_FIT.md has the measured numbers.
 - 2026-11-02 (no plan change): Phase 0 gate passed (Ivan: "Go, start Phase 0"); step 0.1 ticked, the tools were already on the PC.
