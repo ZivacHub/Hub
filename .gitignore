@@ -15,3 +15,4 @@ tests/audio/
 
 tools/jarvis_trial/relay_log.jsonl
 tools/claude_bridge/bridge_log.jsonl
+tests/audio/voice_audition/
