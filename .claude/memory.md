@@ -43,3 +43,9 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Measured: running, brain 6.0 GB on the graphics card (100% GPU), whole card 6.3 GB, Jarvis process about 620 MB RAM. Its wake word is the spoken word "jarvis" found in the speech-to-text output (not a separate wake model).
 - Not verified: whether it heard a played test sentence (no log window readable; database stayed empty). A real test needs Ivan's voice and the tray Logs window.
 - Lessons: Ivan's earlier error was "unexpected response, $0" at first launch; did not reproduce. Screenshot of the full screen can catch his private windows: capture only the app window (PrintWindow). Stopped Jarvis and unloaded qwen3 afterwards.
+
+## 2026-11-02 - D12 trial: first live test with Ivan's voice (his pasted Jarvis log, 18:57-19:01)
+- Hearing: whisper small.en on the card, 0.3-0.44 s per utterance, wrote "Jarvis, what is 2 plus 2?" exactly twice; a bare "Jarvis" was dropped (confidence 0.03). Sentences without "Jarvis" were correctly ignored. Its wake word is the word "jarvis" in the transcript, so it transcribes every sound (no separate wake model).
+- Slow: about 26 s, 20 s and 22 s from end of speech to first spoken word. Steps: intent judge about 5 s, wait for more speech 4.6 s (voice_collect_seconds 4.5), tool picking about 5 s, answer about 7 s, Piper voice about 4 s; all on one qwen3:8b so the calls queue up.
+- Wrong/odd: "2+2" answered "5. A most elegant..." (wrong), then "4." (right), then ignored the question. Persona prompt (British butler) adds jokes; 8B model not reliable on facts, which supports our design (model only picks commands, code builds answers).
+- Not tested: MCP custom fetch tool, tuning of speed settings, voice cloning (Piper Alan only). Jarvis left running at the time of writing; stop it to free 6 GB of the card.
