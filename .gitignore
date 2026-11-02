@@ -12,3 +12,5 @@ ideas/
 *.log
 
 tests/audio/
+
+tools/jarvis_trial/relay_log.jsonl
