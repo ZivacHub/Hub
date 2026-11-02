@@ -7,7 +7,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 
 ## Waiting on the owner (open and proposed)
 
-## D12 — Build our own voice loop, or try a ready-made local Jarvis (isair/jarvis) as the shell?   [open]
+## D12 — Build our own voice loop, or try a ready-made local Jarvis (isair/jarvis) as the shell?   [decided 2026-11-02: one-hour trial first; install itself waits for his yes to the download size]
+**The owner said (2026-11-02):** "Yes, try it first"
+**Result:** Do the one-hour trial of isair/jarvis in a separate folder before step 1.5. Facts told to him before install: Windows zip 223 MB (release v2.8.0, 2026-10-19), licence = free for non-commercial/personal use only (fine for Ivan alone), first start downloads its own hearing + voice models on top (size shown by its setup wizard; we pick small ones), 21 GB disk free. Outcome (keep it / not) is logged here after the trial.
 **Question:** Ivan asked (2026-11-02): "So we are building our own? Research the web... what about openjarvis, jarvis-ai...?" The research (docs/reference/PRIOR_ART.md, newest section) found three free local Windows projects.
 **Claude's reading, not a decision:** keep the plan, but add a one-hour trial of isair/jarvis in a separate folder before step 1.5. If it can call our fetch tools through MCP and sounds good, we write only the fetch tools + dashboard; if not, we continue our own loop. Nothing is installed for this until Ivan says yes.
 **Affects:** Phase 1.5, Phase 2
