@@ -31,6 +31,14 @@ SYSTEM = (
     "Never read .env files, key files or credentials, and never repeat secrets. If you are unsure, say so in one sentence."
 )
 
+# Hard blocks (a model cannot talk its way past these): secret-looking files anywhere under the allowed folder.
+# Patterns start with "//**/" = anchored at the filesystem root, any depth (Claude Code's docs: rules without that
+# prefix only apply under Claude's own working folder, which is NOT where the projects are; tested).
+_DENY_PATTERNS = [".env", ".env.*", "*.env", "*.pem", "*.key", "*.pfx", "*secret*", "*credential*", "*token*",
+                  "*password*", "*apikey*", "*api_key*", "id_rsa*", "*.sqlite*", "*cookies*", ".git/**", ".venv/**",
+                  "node_modules/**", "**/.config/jarvis/**", "**/.claude/**"]
+DENY_SETTINGS = {"permissions": {"deny": ["Read(//**/" + p + ")" for p in _DENY_PATTERNS]}}
+
 TOOL = {
     "name": "ask_claude",
     "description": (
@@ -60,9 +68,11 @@ def ask_claude(question):
     if os.environ.get("CLAUDE_BRIDGE_STUB"):
         return "Stand-in answer: the bridge works, Claude was not called.", True
     os.makedirs(CWD, exist_ok=True)
+    # No blanket "allow Read": that let Claude read ANY file (tested). Reads are only auto-allowed inside the
+    # folders given with --add-dir; anything else is denied because nobody can click "yes" in this mode.
     cmd = [CLAUDE, "-p", question, "--output-format", "json", "--no-session-persistence",
-           "--allowedTools", "Read", "Grep", "Glob",
            "--disallowedTools", "Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch",
+           "--settings", json.dumps(DENY_SETTINGS),
            "--add-dir", READ_ROOT, "--max-budget-usd", "0.50", "--append-system-prompt", SYSTEM]
     ok, text = False, "Claude could not be reached."
     try:
