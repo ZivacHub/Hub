@@ -1,0 +1,12 @@
+.env
+.env.*
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+voices/*.wav
+voices/*.mp3
+models/
+logs/
+ideas/
+*.log
