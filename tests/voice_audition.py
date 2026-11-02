@@ -108,7 +108,27 @@ def gemini():
         time.sleep(6)  # stay well inside free-tier rate limits
 
 
+def chatterbox():
+    """Clone the Iapetus and Daniel samples with Chatterbox (local). Reference clip = the sample made above."""
+    import torch  # noqa: F401  load CUDA helper libraries first
+    import torchaudio as ta
+    from chatterbox.tts import ChatterboxTTS
+    m = ChatterboxTTS.from_pretrained(device="cuda")
+    for src in ("gemini_Iapetus", "kokoro_bm_daniel"):
+        ref = os.path.join(OUT, src + ".wav")
+        for _ in range(2):
+            t = time.time()
+            wav = m.generate(TEXT, audio_prompt_path=ref)
+            secs = time.time() - t
+        name = "chatterbox_clone_of_" + src
+        ta.save(os.path.join(OUT, name + ".wav"), wav.cpu(), m.sr)
+        save_timing(name, make_seconds=round(secs, 2), audio_seconds=round(wav.shape[-1] / m.sr, 1))
+        print(f"{name}: made in {secs:.2f}s ({wav.shape[-1]/m.sr:.1f}s of speech)", flush=True)
+
+
 NOTES = {
+    "chatterbox_clone_of_gemini_Iapetus": "Chatterbox, local. Copies the Iapetus sample as its voice: no daily limit once made.",
+    "chatterbox_clone_of_kokoro_bm_daniel": "Chatterbox, local. Copies the Daniel sample as its voice.",
     "kokoro_bm_george": "Kokoro, local. British male, the best-rated British male in Kokoro (grade C).",
     "kokoro_bm_fable": "Kokoro, local. British male, storyteller tone (grade C).",
     "kokoro_bm_lewis": "Kokoro, local. British male (grade D+).",
@@ -138,4 +158,4 @@ body{{background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;ma
 
 
 if __name__ == "__main__":
-    {"kokoro": kokoro, "gemini": gemini, "page": page}[sys.argv[1]]()
+    {"kokoro": kokoro, "gemini": gemini, "chatterbox": chatterbox, "page": page}[sys.argv[1]]()
