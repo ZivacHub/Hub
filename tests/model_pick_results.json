@@ -1,0 +1,194 @@
+{
+  "qwen3:8b": {
+    "load_and_first_s": 4.1,
+    "peak_gpu_mib": 5534,
+    "rows": [
+      {
+        "sentence": "Hey Jarvis, how is ClipForge going?",
+        "want": "project_status",
+        "got": "project_status",
+        "project": "ClipForge",
+        "ok": true,
+        "seconds": 0.57,
+        "tok_s": 47.8
+      },
+      {
+        "sentence": "Pull out the dashboard.",
+        "want": "open_dashboard",
+        "got": "open_dashboard",
+        "project": "null",
+        "ok": true,
+        "seconds": 0.5,
+        "tok_s": 49.0
+      },
+      {
+        "sentence": "What percentage are we on in the orchestration project?",
+        "want": "project_status",
+        "got": "project_status",
+        "project": "AI_Orcestration",
+        "ok": true,
+        "seconds": 0.64,
+        "tok_s": 47.4
+      },
+      {
+        "sentence": "Are any decisions waiting on me?",
+        "want": "decisions_waiting",
+        "got": "decisions_waiting",
+        "project": "null",
+        "ok": true,
+        "seconds": 0.57,
+        "tok_s": 47.7
+      },
+      {
+        "sentence": "What was Claude's last answer in the game project?",
+        "want": "latest_claude_answer",
+        "got": "latest_claude_answer",
+        "project": "Game",
+        "ok": true,
+        "seconds": 0.55,
+        "tok_s": 47.7
+      },
+      {
+        "sentence": "Which projects do I have?",
+        "want": "list_projects",
+        "got": "list_projects",
+        "project": null,
+        "ok": true,
+        "seconds": 0.46,
+        "tok_s": 49.1
+      },
+      {
+        "sentence": "I want to build a dropshipping site with this and this.",
+        "want": "dictate_idea",
+        "got": "unsupported",
+        "project": null,
+        "ok": false,
+        "seconds": 0.42,
+        "tok_s": 49.2
+      },
+      {
+        "sentence": "That's enough, stop listening.",
+        "want": "stop_listening",
+        "got": "stop_listening",
+        "project": "null",
+        "ok": true,
+        "seconds": 0.51,
+        "tok_s": 48.4
+      },
+      {
+        "sentence": "Delete the casino folder.",
+        "want": "unsupported",
+        "got": "unsupported",
+        "project": null,
+        "ok": true,
+        "seconds": 0.45,
+        "tok_s": 48.8
+      },
+      {
+        "sentence": "Post it on Instagram right now.",
+        "want": "unsupported",
+        "got": "unsupported",
+        "project": null,
+        "ok": true,
+        "seconds": 0.42,
+        "tok_s": 49.3
+      }
+    ]
+  },
+  "llama3.1:8b": {
+    "load_and_first_s": 5.3,
+    "peak_gpu_mib": 5384,
+    "rows": [
+      {
+        "sentence": "Hey Jarvis, how is ClipForge going?",
+        "want": "project_status",
+        "got": "project_status",
+        "project": "ClipForge",
+        "ok": true,
+        "seconds": 0.77,
+        "tok_s": 55.2
+      },
+      {
+        "sentence": "Pull out the dashboard.",
+        "want": "open_dashboard",
+        "got": "open_dashboard",
+        "project": null,
+        "ok": true,
+        "seconds": 0.71,
+        "tok_s": 53.3
+      },
+      {
+        "sentence": "What percentage are we on in the orchestration project?",
+        "want": "project_status",
+        "got": "project_status",
+        "project": "AI_Orcestration",
+        "ok": true,
+        "seconds": 0.93,
+        "tok_s": 52.8
+      },
+      {
+        "sentence": "Are any decisions waiting on me?",
+        "want": "decisions_waiting",
+        "got": "decisions_waiting",
+        "project": "null",
+        "ok": true,
+        "seconds": 0.82,
+        "tok_s": 51.0
+      },
+      {
+        "sentence": "What was Claude's last answer in the game project?",
+        "want": "latest_claude_answer",
+        "got": "latest_claude_answer",
+        "project": "Game",
+        "ok": true,
+        "seconds": 0.92,
+        "tok_s": 51.8
+      },
+      {
+        "sentence": "Which projects do I have?",
+        "want": "list_projects",
+        "got": "list_projects",
+        "project": null,
+        "ok": true,
+        "seconds": 0.71,
+        "tok_s": 54.0
+      },
+      {
+        "sentence": "I want to build a dropshipping site with this and this.",
+        "want": "dictate_idea",
+        "got": "dictate_idea",
+        "project": "null",
+        "ok": true,
+        "seconds": 0.78,
+        "tok_s": 53.3
+      },
+      {
+        "sentence": "That's enough, stop listening.",
+        "want": "stop_listening",
+        "got": "stop_listening",
+        "project": null,
+        "ok": true,
+        "seconds": 0.67,
+        "tok_s": 53.4
+      },
+      {
+        "sentence": "Delete the casino folder.",
+        "want": "unsupported",
+        "got": "unsupported",
+        "project": null,
+        "ok": true,
+        "seconds": 0.56,
+        "tok_s": 54.8
+      },
+      {
+        "sentence": "Post it on Instagram right now.",
+        "want": "unsupported",
+        "got": "unsupported",
+        "project": null,
+        "ok": true,
+        "seconds": 0.58,
+        "tok_s": 55.1
+      }
+    ]
+  }
+}
