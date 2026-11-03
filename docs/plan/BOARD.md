@@ -24,8 +24,8 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 2.1 Read every project's status from its files — tools/hub_status/status.mjs reuses busnus.mjs; `node tools/hub_status/server.mjs --selftest`: 16 projects match `busnus-status` (phases done, decisions waiting), nickname ClipForge works, ambiguous/unknown names refused; asked by voice through Jarvis: "which projects" and "decisions waiting" answered with the real numbers (2026-11-03)
   - [x] 2.2 Write the safe command list — docs/reference/COMMANDS.md; Ivan: "they're all fine" (2026-11-03); also hides Jarvis's file-deleting and screen-reading built-ins via the relay (tested)
   - [x] 2.3 The brain (Gemini inside Jarvis) picks the right fetch tool (accuracy test) — tests/tool_pick_test.py: 39/40 right (97%, target 90%) with Jarvis's real tool list through the relay, incl. slang, mumbles, chit-chat and 5 unsupported requests all declined; 1 miss ("approval in the Hub" asked for all projects, harmless); first run 38/40 before fixing the "Rewamp" spelling alias and the tool description (2026-11-03)
-  - [ ] 2.4 Project names and nicknames (ClipForge)
-  - [ ] 2.5 Spoken answers built from real data
+  - [x] 2.4 Project names and nicknames (ClipForge) — 30 nicknames in tools/hub_status/aliases.json, every one resolved to the right project (check run, 0 mismatches); Ivan said "Use defaults", so they are Claude's proposal (D15, [proposed], waits for his yes); "casino" asks which one; short folder names match only exactly (2026-11-03)
+  - [x] 2.5 Spoken answers built from real data — sentences built by code (tools/hub_status/status.mjs); `python tests/spoken_check.py` counts phase, steps, percent, next step and decisions waiting a second way from the plan board and decisions files: 5/5 projects match (Hub, Game, Socials Automatisation, Automatic_Job_Application, Learning_Script_Maker); the check also showed the library correctly ignores a "superseded" decision (2026-11-03)
   - [ ] 2.6 Milestone demo: ask three questions by voice
 - [ ] Phase 3 — Dashboard by voice
   - [ ] 3.1 Local data feed for the dashboard

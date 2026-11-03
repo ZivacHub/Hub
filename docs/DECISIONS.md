@@ -14,6 +14,12 @@ Layout: the two sections below. When a decision is answered, move its block from
 **Claude's reading, not a decision:** keep the plan, but add a one-hour trial of isair/jarvis in a separate folder before step 1.5. If it can call our fetch tools through MCP and sounds good, we write only the fetch tools + dashboard; if not, we continue our own loop. Nothing is installed for this until Ivan says yes.
 **Affects:** Phase 1.5, Phase 2
 
+## D15 — Project nicknames Jarvis understands   [proposed 2026-11-03: Claude's defaults, waiting for Ivan's yes]
+**Question:** Which nicknames should Jarvis understand for each project (step 2.4)? Asked on 2026-11-03.
+**The owner said:** "Use defaults" (so these are Claude's proposal, not his choice).
+**Proposal (30 nicknames, tools/hub_status/aliases.json):** ClipForge / clips / socials = Socials Automatisation; orchestration / orchestrator = AI_Orcestration; the game / my game = Game; jobs / job applier = Automatic_Job_Application; script maker = Learning_Script_Maker; new casino / casino revamp = Casino Rewamp; old casino = Casino Old; navigator = Daily_Navigator; cash gate = Cash_Gate; local tts = lokalni_tts; portfolio = Porfolio_Site; roblox = Rblx game; the hub = Hub. "Casino" alone makes Jarvis ask which one. Say "accept all" or name the ones to change.
+**Affects:** step 2.4 (ticked with these defaults), Phase 2
+
 ## D14 — Who is the voice shell for now: the installed Jarvis (with our relay), or our own voice loop?   [decided 2026-11-03: the Jarvis trial for now, own loop parked]
 **Question:** (the fork left open as D12's second half) Phase 2 and later need a voice shell: the installed isair/jarvis with our additions, or our own loop from Phase 1.
 **The owner said (2026-11-03):** after hearing Daniel speak for Jarvis ("Sounds good"), chose "Yes, Phase 2 now (Recommended)": start Phase 2 on top of the working Jarvis and park the rest of Phase 1.

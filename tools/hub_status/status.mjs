@@ -76,7 +76,9 @@ export function findProject(query, rows = allProjects()) {
   const al = Object.entries(aliases()).find(([k]) => norm(k) === q);
   const target = al ? norm(al[1]) : q;
   let hit = rows.filter((r) => norm(r.name) === target);
-  if (!hit.length) hit = rows.filter((r) => norm(r.name).includes(target) || target.includes(norm(r.name)));
+  // partial match: the project name inside what was said ("the hub project") or what was said inside the name ("casino");
+  // very short folder names (like "SA") only match exactly, otherwise "usage" would hit them
+  if (!hit.length) hit = rows.filter((r) => norm(r.name).includes(target) || (norm(r.name).length >= 4 && target.includes(norm(r.name))));
   if (hit.length === 1) return { project: hit[0] };
   if (hit.length > 1) return { error: `That could be ${hit.map((h) => h.name).join(", or ")}. Which one?` };
   return { error: `I don't know a project called ${query}.` };
