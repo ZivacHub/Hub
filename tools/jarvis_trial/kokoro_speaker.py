@@ -22,11 +22,32 @@ import sounddevice as sd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.join(HERE, "speaker_log.jsonl")
-VOICE, SPEED = "bm_daniel", 0.95
+VOICE = "bm_daniel"
+SPEED = float(os.environ.get("KOKORO_SPEED", "0.95"))  # Daniel's pace; matched to Jarvis's own voice timing (see memory)
 DEVICE = os.environ.get("KOKORO_DEVICE", "cpu")
 q = queue.Queue()
 stop_flag = threading.Event()
 _pipe = None
+
+
+def mute_jarvis_loop():
+    """Keep Jarvis.exe's own audio muted in Windows' volume mixer (its Piper voice, beeps and tune). Jarvis must keep its
+    own voice ON so it still opens its follow-up listening window when it finishes speaking; Daniel is what you hear.
+    Only the mixer entry of Jarvis.exe is touched, nothing else."""
+    import comtypes
+    from pycaw.pycaw import AudioUtilities
+    comtypes.CoInitialize()
+    while True:
+        try:
+            for s in AudioUtilities.GetAllSessions():
+                p = s.Process
+                if p is not None and p.name().lower() == "jarvis.exe":
+                    vol = s.SimpleAudioVolume
+                    if not vol.GetMute():
+                        vol.SetMute(1, None)
+        except Exception:
+            pass
+        time.sleep(0.15)
 
 
 def clean(text):
@@ -110,5 +131,6 @@ class H(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8788
     threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=mute_jarvis_loop, daemon=True).start()
     pipe()  # load now so the first reply is not slow
     ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
