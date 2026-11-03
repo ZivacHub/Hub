@@ -22,7 +22,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [ ] 1.5 First loop: wake, listen, repeat back aloud
 - [~] Phase 2 — Project status by voice
   - [x] 2.1 Read every project's status from its files — tools/hub_status/status.mjs reuses busnus.mjs; `node tools/hub_status/server.mjs --selftest`: 16 projects match `busnus-status` (phases done, decisions waiting), nickname ClipForge works, ambiguous/unknown names refused; asked by voice through Jarvis: "which projects" and "decisions waiting" answered with the real numbers (2026-11-03)
-  - [ ] 2.2 Write the safe command list
+  - [x] 2.2 Write the safe command list — docs/reference/COMMANDS.md; Ivan: "they're all fine" (2026-11-03); also hides Jarvis's file-deleting and screen-reading built-ins via the relay (tested)
   - [ ] 2.3 The brain (Gemini inside Jarvis) picks the right fetch tool (accuracy test)
   - [ ] 2.4 Project names and nicknames (ClipForge)
   - [ ] 2.5 Spoken answers built from real data

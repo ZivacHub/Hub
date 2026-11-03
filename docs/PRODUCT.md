@@ -27,9 +27,12 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 - NICE LATER: dictate new ideas to notes; start or run work in projects (open the chat, or run quietly, per request); Jarvis-style personality ("a bit more vulgar"); ClipForge actions (pull up clips, post it).
 - Biggest worries: it mishears and does the wrong thing; it slows his PC or games; the voice sounds robotic.
 
+- ALSO LATER (Ivan, 2026-11-03): "have overview of my messages, emails and such"; "the ability to boot up certain projects ... ask him, hey, what's going on there? And he will tell me, and then I can answer him. And then the Claude will continue working on the project with what I said." (Fits phases 4 and 7; messages/emails are new and not yet in the plan. Instagram has no official route for personal accounts; see docs/reference/PRIOR_ART.md.)
+
 ## Not doing (on purpose)
 - No Anthropic API key, no paid voice, no other languages, no phone app or sharing, not a replacement for the AI_Orcestration Manager (it uses it).
 
 ## Changed
 - 2026-11-01: created from Ivan's answers (D1 to D3 in DECISIONS.md).
+- 2026-11-03: added to "also later": overview of messages and emails, and the loop "ask a project what is going on, answer it, Claude continues with the answer" (Ivan's words, after approving COMMANDS.md).
 - 2026-11-02: brain changed from "local model only" to Gemini free key + Claude for delegated jobs + small local backup (D13), after Ivan: "Yes, that is it. Let's try to integrate that." He was told Google may use and read free-tier prompts and asks not to send personal information.
