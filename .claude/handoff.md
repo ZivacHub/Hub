@@ -1,5 +1,5 @@
 # Handoff: Hub   (updated 2026-11-03)
-Git: main @ 0276fea "Handoff rewritten for Phase 2" · pushed: yes (private https://github.com/ZivacHub/Hub) · uncommitted: this file, board, tests (committed right after writing)
+Git: main @ 33f97ee "Plan: new Phase 9 (continue a project's Claude chat by voice) placed after Phase 2, at Ivan's OK" · pushed: yes (private https://github.com/ZivacHub/Hub) · uncommitted: this file (committed right after writing)
 
 ## Where we are in the plan
 Phase 2 of 10 (Phase 0 to 8 plus the new Phase 9, placed right after Phase 2) — Project status by voice, in progress: 5/6 steps ticked (2.1 to 2.5). Steps done 9/48. Next per plan: 2.6 Milestone demo (needs Ivan's voice). Phase 1 "Ears and mouth" is PARKED at 0/5 (1.1 stays `[~]`) with Ivan's OK ("Yes, Phase 2 now", D14; board Change log 2026-11-03).
