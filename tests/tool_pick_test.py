@@ -29,13 +29,23 @@ TOOLS = [
          {"project": {"type": "string", "description": "Project name or nickname as the user said it."}}, ["project"]),
     tool("hub__decisions_waiting", "Decisions that are waiting on Ivan, for one project or for all projects ('all'). Use for 'are any decisions waiting on me?'. Read-only.",
          {"project": {"type": "string", "description": "The project the user named, exactly as said. Use 'all' only when the user named no project."}}),
-    tool("claude__ask_claude", "Ask Claude a question that needs real reading or reasoning, for example about Ivan's BUSNUS projects (plan boards, decisions, handoffs, notes). Read-only: it cannot change, send, post or delete anything. Use it when the question is too big for a quick answer. Returns a short spoken-style answer.",
+    tool("claude__ask_claude", "Ask Claude a question that needs real reading or reasoning about Ivan's BUSNUS project files (notes, plans, handoffs). Slow: 10 to 40 seconds. Use ONLY when the user explicitly says to ask Claude, or when the hub__ status tools cannot answer. Never use it for simple progress, phase, step, percent or decisions questions. Read-only: it cannot change, send, post or delete anything. Returns a short spoken-style answer.",
          {"question": {"type": "string", "description": "The question, in one or two plain sentences."}}, ["question"]),
     tool("webSearch", "Search the web for current information.", {"query": {"type": "string"}}, ["query"]),
     tool("stop", "Stop speaking or listening right now."),
 ]
-SYSTEM = ("You are Jarvis, a precise, courteous British butler and voice assistant for Ivan. Use a tool when one fits the request. "
-          "If no tool fits, or the request would change, send, post, delete or spend anything, do not use a tool: say briefly that you cannot do that yet.")
+def real_prompt():
+    """Jarvis's REAL system prompt (from its GitHub source), so the relay rewrites it exactly as in daily use."""
+    cache = os.path.join(HERE, "_jarvis_prompt.txt")
+    if not os.path.exists(cache):
+        src = urllib.request.urlopen("https://raw.githubusercontent.com/isair/jarvis/main/src/jarvis/system_prompt.py", timeout=30).read().decode()
+        ns = {}
+        exec(src, ns)
+        open(cache, "w", encoding="utf-8").write(ns["build_system_prompt"]("Jarvis"))
+    return open(cache, encoding="utf-8").read() + "\n[Context: Monday, 12:00, Zagreb]"
+
+
+SYSTEM = real_prompt()
 
 # (sentence, expected tool or None, expected project folder (or None / "all"))
 T = [
@@ -47,6 +57,10 @@ T = [
     ("How far along is the job application thing?", "project_status", "Automatic_Job_Application"),
     ("What's the next step for the script maker?", "project_status", "Learning_Script_Maker"),
     ("Is ClipForge close to done?", "project_status", "Socials Automatisation"),
+    ("On which step is Ivan's game project?", "project_status", "Game"),
+    ("Which step is the hub project on?", "project_status", "Hub"),
+    ("What's going on in the learning script maker?", "project_status", "Learning_Script_Maker"),
+    ("What's going on there?", None, None),
     ("Give me a status on the game project.", "project_status", "Game"),
     ("How's the hub coming along?", "project_status", "Hub"),
     ("Uh, clip... forge, how we doing?", "project_status", "Socials Automatisation"),

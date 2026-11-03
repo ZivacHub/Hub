@@ -64,6 +64,38 @@
   "reply": ""
  },
  {
+  "sentence": "On which step is Ivan's game project?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='game'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Which step is the hub project on?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='hub'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What's going on in the learning script maker?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='learning script maker'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What's going on there?",
+  "want": null,
+  "got": "list_projects",
+  "note": "",
+  "ok": false,
+  "reply": ""
+ },
+ {
   "sentence": "Give me a status on the game project.",
   "want": "project_status",
   "got": "project_status",
@@ -99,7 +131,7 @@
   "sentence": "Status of casino rewamp.",
   "want": "project_status",
   "got": "project_status",
-  "note": "project='casino rewamp'",
+  "note": "project='casino revamp'",
   "ok": true,
   "reply": ""
  },
@@ -163,7 +195,7 @@
   "sentence": "Do I owe anyone an answer in the game project?",
   "want": "decisions_waiting",
   "got": "decisions_waiting",
-  "note": "project='game'",
+  "note": "project='game project'",
   "ok": true,
   "reply": ""
  },
@@ -203,7 +235,7 @@
   "sentence": "Has the game project got questions for me?",
   "want": "decisions_waiting",
   "got": "decisions_waiting",
-  "note": "project='game'",
+  "note": "project='game project'",
   "ok": true,
   "reply": ""
  },
@@ -277,7 +309,7 @@
   "got": null,
   "note": "",
   "ok": true,
-  "reply": "I am very well indeed, thank you for asking, sir. How may I be of assistance to "
+  "reply": "I am quite well, thank you, sir."
  },
  {
   "sentence": "Thank you.",
@@ -285,7 +317,7 @@
   "got": null,
   "note": "",
   "ok": true,
-  "reply": "A pleasure as always, sir. Do let me know if there is anything else you require."
+  "reply": "You are welcome, sir."
  },
  {
   "sentence": "Delete the casino folder.",
@@ -293,7 +325,7 @@
   "got": null,
   "note": "",
   "ok": true,
-  "reply": "I am afraid I cannot delete any files or folders yet, sir."
+  "reply": "I cannot delete files or folders, sir."
  },
  {
   "sentence": "Post it on Instagram right now.",
@@ -301,7 +333,7 @@
   "got": null,
   "note": "",
   "ok": true,
-  "reply": "I am afraid I cannot post anything to Instagram yet, sir."
+  "reply": "I am unable to post to Instagram, sir, as I lack the capability to interact with"
  },
  {
   "sentence": "Send an email to my girlfriend saying I'm late.",
@@ -309,14 +341,14 @@
   "got": null,
   "note": "",
   "ok": true,
-  "reply": "I am terribly sorry, sir, but I am unable to send emails or messages on your beh"
+  "reply": "I am unable to send emails, sir."
  },
  {
   "sentence": "Reply to the decision in the game project with yes.",
   "want": null,
-  "got": null,
+  "got": "decisions_waiting",
   "note": "",
-  "ok": true,
-  "reply": "I am afraid I cannot do that yet, sir. I am currently unable to send or reply to"
+  "ok": false,
+  "reply": ""
  }
 ]

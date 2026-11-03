@@ -42,9 +42,10 @@ DENY_SETTINGS = {"permissions": {"deny": ["Read(//**/" + p + ")" for p in _DENY_
 TOOL = {
     "name": "ask_claude",
     "description": (
-        "Ask Claude a question that needs real reading or reasoning, for example about Ivan's BUSNUS projects "
-        "(plan boards, decisions, handoffs, notes). Read-only: it cannot change, send, post or delete anything. "
-        "Use it when the question is too big for a quick answer. Returns a short spoken-style answer."),
+        "Ask Claude a question that needs real reading or reasoning about Ivan's BUSNUS project files (notes, plans, "
+        "handoffs). Slow: 10 to 40 seconds. Use ONLY when the user explicitly says to ask Claude, or when the hub__ "
+        "status tools cannot answer. Never use it for simple progress, phase, step, percent or decisions questions. "
+        "Read-only: it cannot change, send, post or delete anything. Returns a short spoken-style answer."),
     "inputSchema": {
         "type": "object",
         "properties": {"question": {"type": "string", "description": "The question, in one or two plain sentences."}},
