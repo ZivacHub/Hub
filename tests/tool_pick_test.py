@@ -14,8 +14,8 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 cfg = json.load(open(r"C:\Users\Ivan\.config\jarvis\config.json", encoding="utf-8"))
-KEY, MODEL = cfg["llm_api_key"], cfg["llm_chat_model"]
-URL = "http://127.0.0.1:8787/v1beta/openai/chat/completions"
+KEY, MODEL = cfg["llm_api_key"], os.environ.get("PICK_MODEL", cfg["llm_chat_model"])
+URL = os.environ.get("PICK_URL", "http://127.0.0.1:8787/v1beta/openai/chat/completions")
 
 
 def tool(name, desc, props=None, req=None):

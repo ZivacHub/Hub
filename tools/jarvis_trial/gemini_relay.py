@@ -24,6 +24,24 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LOG = os.path.join(HERE, "relay_log.jsonl")
 _lock = threading.Lock()
 
+FIRST_BYTE_S = float(os.environ.get("RELAY_FIRST_BYTE_S", "5"))  # give up on a model that has not started answering
+BACKUP_MODELS = [m for m in os.environ.get("RELAY_BACKUP_MODELS", "gemini-3.1-flash-lite").split(",") if m]
+SKIP_S = 120  # a model that stalled or was overloaded is tried last for this long
+RETRY_STATUS = (429, 500, 502, 503, 504)
+_bad_until = {}
+
+
+def mark_bad(m):
+    _bad_until[m] = time.time() + SKIP_S
+
+
+def model_order(model):
+    """The asked-for model first, then the backups; models that failed recently go to the back."""
+    order = [model] + [m for m in BACKUP_MODELS if m != model]
+    now = time.time()
+    return [m for m in order if _bad_until.get(m, 0) <= now] + [m for m in order if _bad_until.get(m, 0) > now]
+
+
 PERSONA_RE = re.compile(
     r"Persona: you are a British butler named (\w+).*?Never stack multiple jokes in one reply\. ", re.DOTALL)
 
@@ -154,7 +172,7 @@ class Handler(BaseHTTPRequestHandler):
         t0 = time.time()
         n = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(n) if n else b""
-        changed, model, stripped = None, None, 0
+        changed, model, stripped, body = None, None, 0, None
         if raw and self.path.endswith("/chat/completions"):
             try:
                 body = json.loads(raw)
@@ -163,17 +181,49 @@ class Handler(BaseHTTPRequestHandler):
                 stripped = strip_tools(body)
                 raw = json.dumps(body).encode()
             except Exception:
-                changed = None
+                changed, body = None, None
         headers = {k: v for k, v in self.headers.items()
                    if k.lower() not in ("host", "content-length", "accept-encoding", "connection")}
         headers["Accept-Encoding"] = "identity"
         if raw:
             headers["Content-Length"] = str(len(raw))
-        status = 0
+        kind = None
+        if body is not None:  # what kind of call is it? Only the first words of Jarvis's own fixed instructions, never speech
+            sysm = next((m.get("content") for m in body.get("messages", []) if m.get("role") == "system"), "")
+            kind = dict(sys="main" if changed else (sysm[:60] if isinstance(sysm, str) else "?"),
+                        msgs=len(body.get("messages", [])), tools=len(body.get("tools") or []), kb=len(raw) // 1024)
+        status, used = 0, model
         try:
-            conn = http.client.HTTPSConnection(UPSTREAM, timeout=120, context=ssl.create_default_context())
-            conn.request(self.command, self.path, body=raw or None, headers=headers)
-            r = conn.getresponse()
+            # The free tier sometimes stalls for 10-30 s or answers 503. Chat requests therefore get a short
+            # time to start answering; if the model is too slow or overloaded the next model in line is asked
+            # (the same request, only the model name differs) and a failing model is skipped for SKIP_S seconds.
+            order = model_order(model) if body is not None and model else [None]
+            for i, m in enumerate(order):
+                last = i == len(order) - 1
+                if m is not None and m != body.get("model"):
+                    body["model"] = m
+                    raw = json.dumps(body).encode()
+                    headers["Content-Length"] = str(len(raw))
+                used = m or model
+                conn = http.client.HTTPSConnection(UPSTREAM, timeout=120 if last or m is None else FIRST_BYTE_S,
+                                                   context=ssl.create_default_context())
+                try:
+                    conn.request(self.command, self.path, body=raw or None, headers=headers)
+                    r = conn.getresponse()
+                except (TimeoutError, OSError):
+                    if last or m is None:
+                        raise
+                    mark_bad(m)
+                    conn.close()
+                    continue
+                if r.status in RETRY_STATUS and not last and m is not None:
+                    mark_bad(m)
+                    r.read()
+                    conn.close()
+                    continue
+                break
+            if conn.sock:
+                conn.sock.settimeout(120)  # the answer has started: reading the rest may take its time
             status = r.status
             self.send_response(r.status)
             for k, v in r.getheaders():
@@ -195,8 +245,8 @@ class Handler(BaseHTTPRequestHandler):
             if not status:
                 self.send_error(502, "relay: " + type(e).__name__)
             status = status or 502
-        log(dict(t=time.strftime("%F %T"), method=self.command, path=self.path.split("?")[0], model=model,
-                 persona_rewritten=changed, tools_removed=stripped, status=status, seconds=round(time.time() - t0, 2)))
+        log(dict(t=time.strftime("%F %T"), method=self.command, path=self.path.split("?")[0], model=used,
+                 asked=model if used != model else None, kind=kind, persona_rewritten=changed, tools_removed=stripped, status=status, seconds=round(time.time() - t0, 2)))
 
     do_GET = do_POST = do_PUT = do_DELETE = _forward
 
