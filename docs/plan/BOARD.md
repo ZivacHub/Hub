@@ -27,6 +27,12 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 2.4 Project names and nicknames (ClipForge) — 30 nicknames in tools/hub_status/aliases.json, every one resolved to the right project (check run, 0 mismatches); Ivan said "Use defaults", so they are Claude's proposal (D15, [proposed], waits for his yes); "casino" asks which one; short folder names match only exactly (2026-11-03)
   - [x] 2.5 Spoken answers built from real data — sentences built by code (tools/hub_status/status.mjs); `python tests/spoken_check.py` counts phase, steps, percent, next step and decisions waiting a second way from the plan board and decisions files: 5/5 projects match (Hub, Game, Socials Automatisation, Automatic_Job_Application, Learning_Script_Maker); the check also showed the library correctly ignores a "superseded" decision (2026-11-03)
   - [ ] 2.6 Milestone demo: ask three questions by voice
+- [ ] Phase 9 — Continue a project's Claude chat by voice (placed here on purpose: runs right after Phase 2)
+  - [ ] 9.1 Find a project's chats, read-only
+  - [ ] 9.2 Say what the newest chat last said
+  - [ ] 9.3 Take the instruction, read it back, wait for "yes"
+  - [ ] 9.4 Send it to Claude, on a scratch project first
+  - [ ] 9.5 Milestone demo
 - [ ] Phase 3 — Dashboard by voice
   - [ ] 3.1 Local data feed for the dashboard
   - [ ] 3.2 Design direction for the dashboard (Ivan sees it)
@@ -72,6 +78,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-03 (Ivan: "Yes, move it up"): NEW Phase 9 "Continue a project's Claude chat by voice" (5 steps, detail in docs/plan/phases/09-continue-claude-chat-by-voice.md), placed right after Phase 2 in the list on purpose (numbers are never changed, so it keeps number 9). It is the narrow first version of Ivan's wish "ask a project what's going on, answer, Claude continues"; Phase 7's 7.3 and 7.4 may shrink later. Its phase gate (preview, search, decisions) still runs before it starts. Messages and email overview are still only recorded as ideas.
 - 2026-11-03 (Ivan: "Yes, Phase 2 now (Recommended)" after "Sounds good" about Daniel's voice): Phase 2 started before Phase 1 is finished. Steps 1.1 to 1.5 are PARKED, not dropped: for now the voice part (ears, Gemini brain D13, Daniel's voice D4, persona relay, Claude hand-off) runs inside the installed Jarvis trial; D12 (own loop or Jarvis) stays open and the parked steps come back if we build our own loop. Step 2.3 now reads "the brain picks the right fetch tool" (Gemini inside Jarvis instead of a local model). Fetch tools are built as a read-only helper in tools/hub_status/ and work with either route.
 - 2026-11-02 (outside the phase order, at Ivan's go): D13 decided (brain = Gemini free key + Claude for delegated jobs + small local backup). Built early in the isair/jarvis trial, not product code: tools/jarvis_trial/ (persona relay, start script) and tools/claude_bridge/ (read-only `ask_claude` helper, protocol self-test passes; real Claude call blocked until Ivan logs the `claude` command line in again). Phase 1 steps unchanged; Phase 7 (start work from voice) will reuse the bridge. D12 still open.
 - 2026-11-02 (no plan change): Phase 1 gate passed (Ivan: "Yes, start Phase 1", D11). Step 1.1 started, target not yet met. D12 (try a ready-made local Jarvis as shell) opened by Ivan's question; not decided.

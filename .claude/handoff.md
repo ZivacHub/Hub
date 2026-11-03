@@ -2,7 +2,7 @@
 Git: main @ 0276fea "Handoff rewritten for Phase 2" · pushed: yes (private https://github.com/ZivacHub/Hub) · uncommitted: this file, board, tests (committed right after writing)
 
 ## Where we are in the plan
-Phase 2 of 9 (Phase 0 to 8) — Project status by voice, in progress: 5/6 steps ticked (2.1 to 2.5). Steps done 9/43. Next per plan: 2.6 Milestone demo (needs Ivan's voice). Phase 1 "Ears and mouth" is PARKED at 0/5 (1.1 stays `[~]`) with Ivan's OK ("Yes, Phase 2 now", D14; board Change log 2026-11-03).
+Phase 2 of 10 (Phase 0 to 8 plus the new Phase 9, placed right after Phase 2) — Project status by voice, in progress: 5/6 steps ticked (2.1 to 2.5). Steps done 9/48. Next per plan: 2.6 Milestone demo (needs Ivan's voice). Phase 1 "Ears and mouth" is PARKED at 0/5 (1.1 stays `[~]`) with Ivan's OK ("Yes, Phase 2 now", D14; board Change log 2026-11-03).
 (Copied from docs/plan/BOARD.md. Plan approved 2026-11-02.)
 
 ## What we're building
@@ -16,7 +16,7 @@ A Jarvis voice assistant on Ivan's PC and a clean dashboard of all BUSNUS projec
 ## Next steps (strictly in order; step 1 is where the next session starts)
 1. (Plan order would say 1.1, but 1.1 to 1.5 are parked on purpose: D14 and the board Change log 2026-11-03, Ivan's "Yes, Phase 2 now".) Step 2.6 milestone demo: start everything with tools/jarvis_trial/start_jarvis_trial.ps1, warn Ivan before he speaks, he asks three real project questions by voice (for example how ClipForge is going, which projects he has, decisions waiting) and gets right answers; show the log. Done when he says the answers were right.
    Read first: docs/plan/phases/02-project-status-by-voice.md, docs/reference/COMMANDS.md
-2. Close Phase 2 (tick it, show what works, handoff), then run the Phase 3 gate (dashboard by voice). His later wishes (messages and email overview; "ask a project what's going on, answer, Claude continues") are recorded as pending in docs/reference/PRIOR_ART.md and PRODUCT.md and need his OK to become phases.
+2. Close Phase 2 (tick it, show what works, handoff), then run the gate of Phase 9 "Continue a project's Claude chat by voice" (Ivan: "Yes, move it up", board Change log 2026-11-03; detail and the decisions he must make: docs/plan/phases/09-continue-claude-chat-by-voice.md), then the Phase 3 gate (dashboard by voice). Messages and email overview are still only recorded as pending ideas (docs/reference/PRIOR_ART.md, PRODUCT.md) and need his OK to become a phase.
 
 ## Waiting on the owner
 - D15: his yes (or changes) on the 30 default nicknames (tools/hub_status/aliases.json); he said "Use defaults".
