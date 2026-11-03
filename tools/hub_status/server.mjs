@@ -23,7 +23,7 @@ const TOOLS = [
   {
     name: "decisions_waiting",
     description: "Decisions that are waiting on Ivan, for one project or for all projects ('all'). Use for 'are any decisions waiting on me?'. Read-only.",
-    inputSchema: { type: "object", properties: { project: { type: "string", description: "Project name, or 'all'." } } },
+    inputSchema: { type: "object", properties: { project: { type: "string", description: "The project the user named, exactly as said. Use 'all' only when the user named no project." } } },
   },
 ];
 

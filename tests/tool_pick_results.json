@@ -1,0 +1,322 @@
+[
+ {
+  "sentence": "How is ClipForge going?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='ClipForge'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What percentage are we on in the orchestration project?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='orchestration'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Where are we with the game?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='game'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Yo, what's up with Clip Forge?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='ClipForge'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Tell me about the Hub project progress.",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='Hub'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "How far along is the job application thing?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='job application'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What's the next step for the script maker?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='script maker'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Is ClipForge close to done?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='ClipForge'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Give me a status on the game project.",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='game'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "How's the hub coming along?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='hub'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Uh, clip... forge, how we doing?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='ClipForge'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What phase is the learning script maker on?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='learning script maker'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Status of casino rewamp.",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='casino rewamp'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "How's the daily navigator project?",
+  "want": "project_status",
+  "got": "project_status",
+  "note": "project='daily navigator'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Which projects do I have?",
+  "want": "list_projects",
+  "got": "list_projects",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "List my projects.",
+  "want": "list_projects",
+  "got": "list_projects",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What am I working on overall?",
+  "want": "list_projects",
+  "got": "list_projects",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Show me everything I've got going.",
+  "want": "list_projects",
+  "got": "list_projects",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "How are all my projects doing?",
+  "want": "list_projects",
+  "got": "list_projects",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Are any decisions waiting on me?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='all'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Do I owe anyone an answer in the game project?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='game'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "What needs my decision?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='all'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Any open decisions in ClipForge?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='ClipForge'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Anything waiting for my approval in the Hub?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='all'",
+  "ok": false,
+  "reply": ""
+ },
+ {
+  "sentence": "What decisions are pending?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='all'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Has the game project got questions for me?",
+  "want": "decisions_waiting",
+  "got": "decisions_waiting",
+  "note": "project='game'",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Ask Claude which phase the Hub project is in.",
+  "want": "ask_claude",
+  "got": "ask_claude",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Ask Claude to summarise the last handoff of the game project.",
+  "want": "ask_claude",
+  "got": "ask_claude",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Have Claude check what the ClipForge plan says about publishing.",
+  "want": "ask_claude",
+  "got": "ask_claude",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Ask Claude why the Hub is slower than planned.",
+  "want": "ask_claude",
+  "got": "ask_claude",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Ask Claude what the biggest risk in the orchestration project is.",
+  "want": "ask_claude",
+  "got": "ask_claude",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Search the web for the newest Gemini model.",
+  "want": "webSearch",
+  "got": "webSearch",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Look up the weather forecast for Zagreb.",
+  "want": "webSearch",
+  "got": "webSearch",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "Stop.",
+  "want": "stop",
+  "got": "stop",
+  "note": "",
+  "ok": true,
+  "reply": ""
+ },
+ {
+  "sentence": "How are you today?",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "I am very well indeed, thank you for asking, sir. How may I be of assistance to "
+ },
+ {
+  "sentence": "Thank you.",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "A pleasure as always, sir. Do let me know if there is anything else you require."
+ },
+ {
+  "sentence": "Delete the casino folder.",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "I am afraid I cannot delete any files or folders yet, sir."
+ },
+ {
+  "sentence": "Post it on Instagram right now.",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "I am afraid I cannot post anything to Instagram yet, sir."
+ },
+ {
+  "sentence": "Send an email to my girlfriend saying I'm late.",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "I am terribly sorry, sir, but I am unable to send emails or messages on your beh"
+ },
+ {
+  "sentence": "Reply to the decision in the game project with yes.",
+  "want": null,
+  "got": null,
+  "note": "",
+  "ok": true,
+  "reply": "I am afraid I cannot do that yet, sir. I am currently unable to send or reply to"
+ }
+]

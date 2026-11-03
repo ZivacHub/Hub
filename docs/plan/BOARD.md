@@ -23,7 +23,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - [~] Phase 2 — Project status by voice
   - [x] 2.1 Read every project's status from its files — tools/hub_status/status.mjs reuses busnus.mjs; `node tools/hub_status/server.mjs --selftest`: 16 projects match `busnus-status` (phases done, decisions waiting), nickname ClipForge works, ambiguous/unknown names refused; asked by voice through Jarvis: "which projects" and "decisions waiting" answered with the real numbers (2026-11-03)
   - [x] 2.2 Write the safe command list — docs/reference/COMMANDS.md; Ivan: "they're all fine" (2026-11-03); also hides Jarvis's file-deleting and screen-reading built-ins via the relay (tested)
-  - [ ] 2.3 The brain (Gemini inside Jarvis) picks the right fetch tool (accuracy test)
+  - [x] 2.3 The brain (Gemini inside Jarvis) picks the right fetch tool (accuracy test) — tests/tool_pick_test.py: 39/40 right (97%, target 90%) with Jarvis's real tool list through the relay, incl. slang, mumbles, chit-chat and 5 unsupported requests all declined; 1 miss ("approval in the Hub" asked for all projects, harmless); first run 38/40 before fixing the "Rewamp" spelling alias and the tool description (2026-11-03)
   - [ ] 2.4 Project names and nicknames (ClipForge)
   - [ ] 2.5 Spoken answers built from real data
   - [ ] 2.6 Milestone demo: ask three questions by voice
