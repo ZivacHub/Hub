@@ -124,3 +124,8 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-04):** wait time "6 seconds (as now)"; follow-up window "12s"; small fixes "Yes, both (Recommended)".
 **Result:** voice_collect_seconds stays 6.0 (known cost: every answer starts about 6 s after he stops talking; the log showed exactly 7 s from "Working on it" to the plan on 8 of 8 turns); hot_window_seconds 8 -> 12; goodbye/goodnight gets a spoken farewell and the stop tool is used only for stop / quiet / shut up / stop listening; wake aliases get jarrus, jarris, jarvas, jarvez added to Jarvis's 12 defaults; the repeat remark fires only on a near word-for-word repeat and remarks never state unknown facts (time of day).
 **Affects:** C:/Users/Ivan/.config/jarvis/config.json, tools/jarvis_trial/gemini_relay.py
+
+## D18 — More look-alike spellings of "Jarvis" as wake words   [decided 2026-11-04]
+**The owner said (2026-11-04):** "He some times missheards, so add similar words to be wake words, like Jarice or any similar".
+**Result:** 13 more spellings added to Jarvis's wake_aliases (29 in total with the 12 defaults and the 4 from D17): jarice, jarrice, jarise, jarus, jaurus, jarvice, jervice, gervis, jarius, jarvous, jarvic, jarves, yarvis. Jarvis already treats anything at least 78 percent similar to "jarvis" as the name (wake_fuzzy_ratio 0.78, checked with difflib), so the list targets the misses ("jarice" 0.67, "jarrus" 0.67, "gervis" 0.67, "jarus" 0.73). Real words and names were kept off the list on purpose ("service" 0.46, "travis" 0.67, "harvest" 0.62, "janice" 0.50 would wake him by accident).
+**Affects:** C:/Users/Ivan/.config/jarvis/config.json (backup: JarvisTrial/config_pre_aliases2.json, holds the key: do not copy or commit)
