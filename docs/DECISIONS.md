@@ -112,3 +112,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-02):** microphone "Laptop built-in (Array)"; voice sample "Both: your clip and a butler sample (Recommended)".
 **Result:** Wake and hearing tests use the laptop's built-in Microphone Array (Realtek). For step 1.3 Ivan supplies a clean clip (about 10 s) of the film voice (private use only, never published) and Claude finds a licence-free British butler-style clip and shows its licence; Kokoro is the third voice. D4 itself stays open until step 1.4.
 **Affects:** Phase 1 (1.1, 1.2, 1.3)
+
+## D16 — Jarvis personality: an exact answer, now and then one dry remark; Gemini only   [decided 2026-11-04]
+**Question:** Ivan wanted an uncensored model (and AirLLM to run a big one) so Jarvis could talk back in a sarcastic, provocative way. Card 2026-11-04: when should he be sarcastic, and with which brain?
+**The owner said (2026-11-04):** "he awnsers, but somethines adds a lil bit in the end, or like ohh your asking me again this are we... like that, maby we can reasarch online and see if someone already has smt like this set up some instructions or smt..." and "ok so it will be only gemeni with a new personality".
+**Result:** Gemini only, no uncensored local model. AirLLM not used (it reads the whole model from disk for every word: seconds to minutes per word, about 140 GB of disk for a 70B model, 39 GB free; Ivan: "if the response time is much slower, then it just isn't worth it"). Personality: precise answer first; only now and then one short dry remark at the end; a dry comment when he asks the same thing again. The off / mild / spicy switch (step 8.1) is still open.
+**Affects:** tools/jarvis_trial/gemini_relay.py (persona text), step 8.1 (partly pulled forward, board Change log 2026-11-04)

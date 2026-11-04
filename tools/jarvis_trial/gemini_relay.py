@@ -12,6 +12,7 @@ Test:  python tools/jarvis_trial/gemini_relay.py --selftest
 import http.client
 import json
 import os
+import random
 import re
 import ssl
 import sys
@@ -27,6 +28,8 @@ _lock = threading.Lock()
 FIRST_BYTE_S = float(os.environ.get("RELAY_FIRST_BYTE_S", "5"))  # give up on a model that has not started answering
 BACKUP_MODELS = [m for m in os.environ.get("RELAY_BACKUP_MODELS", "gemini-3.1-flash-lite").split(",") if m]
 SKIP_S = 120  # a model that stalled or was overloaded is tried last for this long
+LAST_TIMEOUT_S = 30  # the last model in line gets this long in total to answer; after that Jarvis gets an error, not a late answer
+STALE_S = 40  # a reply that took longer than this is never spoken: Ivan has moved on (Jarvis's own timeout is set to match)
 RETRY_STATUS = (429, 500, 502, 503, 504)
 _bad_until = {}
 
@@ -46,12 +49,17 @@ PERSONA_RE = re.compile(
     r"Persona: you are a British butler named (\w+).*?Never stack multiple jokes in one reply\. ", re.DOTALL)
 
 NEW_PERSONA = (
-    "Persona: you are a British butler named {name}: formal, courteous, exact and composed. "
-    "Speak like a seasoned, real butler: plain, correct, unhurried. "
-    "No jokes, no wit, no sarcasm, no puns, no asides, no teasing, no remarks about the situation "
-    "and no commentary about yourself. "
-    "Answer the question directly and precisely in as few words as are correct, then stop. "
-    "Never pad the answer and never add anything that was not asked for. "
+    "Persona: you are a British butler named {name}: formal, courteous, exact and composed, with a very dry sense of "
+    "humour that you ration. Speak like a seasoned, real butler: plain, correct, unhurried. "
+    "The answer always comes first, complete and exact; wit never changes, hides or delays it. "
+    "No jokes inside the answer, none about facts, numbers or Ivan's work, no puns, no teasing about mistakes, "
+    "no commentary about yourself. "
+    "Answer the question directly and precisely in as few words as are correct. "
+    "Never pad the answer and never add anything that was not asked for, except the one allowed remark described below. "
+    "Answer ONLY Ivan's most recent message. Earlier messages in this conversation that were never answered are stale: "
+    "never answer them now unless he asks them again. "
+    "If Ivan asks something he already asked and you already answered earlier in this conversation, you may say so first "
+    "in one short dry line (for example 'Again, sir? The answer has not changed.') and then give the answer again. "
     "If you do not know, or a tool failed, say so plainly in one sentence. "
     "You may address the user as 'sir', at most once per reply and only when it sounds natural. "
     "Never open with 'Ah,' / 'Very good' / 'Certainly' or any other theatrical filler, "
@@ -64,10 +72,40 @@ NEW_PERSONA = (
 )
 
 
+BANTER_PCT = float(os.environ.get("RELAY_BANTER", "30"))  # how often (percent of replies) a dry remark is allowed
+BANTER_ON = (
+    "For THIS reply only: after the complete, exact answer you may add ONE short dry remark of at most twelve words: "
+    "deadpan, understated, a little sarcastic, aimed at the situation or gently at Ivan, never cruel and never about the facts. "
+    "If you cannot think of a really good one, add nothing. "
+)
+BANTER_OFF = "For THIS reply only: no remark at all, just the exact answer. "
+
+
+def banter_line(rnd=random.random):
+    """The dice are thrown here, not by the model: a model cannot be trusted to ration its own jokes."""
+    return BANTER_ON if rnd() * 100 < BANTER_PCT else BANTER_OFF
+
+
 def rewrite_text(text):
     """Return (new_text, changed)."""
-    new, n = PERSONA_RE.subn(lambda m: NEW_PERSONA.format(name=m.group(1)), text, count=1)
+    new, n = PERSONA_RE.subn(lambda m: NEW_PERSONA.format(name=m.group(1)) + banter_line(), text, count=1)
     return new, bool(n)
+
+
+def drop_stale_questions(body):
+    """Several user messages in a row with no answer between them means earlier turns failed or were abandoned
+    (Google down, Jarvis restarted). Telling the model to ignore them is not reliable (it answered an old weather
+    question and invented a forecast), so only the newest message of each such run is kept. Returns how many were dropped."""
+    out, dropped = [], 0
+    for msg in body.get("messages", []):
+        if out and msg.get("role") == "user" and out[-1].get("role") == "user" \
+                and isinstance(out[-1].get("content"), str) and isinstance(msg.get("content"), str):
+            out[-1] = msg
+            dropped += 1
+        else:
+            out.append(msg)
+    body["messages"] = out
+    return dropped
 
 
 def rewrite_body(body):
@@ -85,6 +123,8 @@ def rewrite_body(body):
                 if isinstance(part, dict) and isinstance(part.get("text"), str):
                     part["text"], ch = rewrite_text(part["text"])
                     changed |= ch
+    if changed:  # only the main conversation calls, not Jarvis's small helper calls
+        drop_stale_questions(body)
     return body, changed
 
 
@@ -205,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
                     raw = json.dumps(body).encode()
                     headers["Content-Length"] = str(len(raw))
                 used = m or model
-                conn = http.client.HTTPSConnection(UPSTREAM, timeout=120 if last or m is None else FIRST_BYTE_S,
+                conn = http.client.HTTPSConnection(UPSTREAM, timeout=LAST_TIMEOUT_S if last or m is None else FIRST_BYTE_S,
                                                    context=ssl.create_default_context())
                 try:
                     conn.request(self.command, self.path, body=raw or None, headers=headers)
@@ -223,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 break
             if conn.sock:
-                conn.sock.settimeout(120)  # the answer has started: reading the rest may take its time
+                conn.sock.settimeout(LAST_TIMEOUT_S)  # the answer has started: reading the rest may take a little
             status = r.status
             self.send_response(r.status)
             for k, v in r.getheaders():
@@ -239,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
                 buf.extend(chunk)
                 self.wfile.write(chunk)
                 self.wfile.flush()
-            if SPEAK_URL and changed and status == 200:
+            if SPEAK_URL and changed and status == 200 and time.time() - t0 <= STALE_S:
                 threading.Thread(target=speak_from_response, args=(bytes(buf), ctype), daemon=True).start()
         except Exception as e:  # report upstream trouble to Jarvis as a gateway error, never print secrets
             if not status:
@@ -263,6 +303,18 @@ def selftest():
     assert ok, "persona paragraph not found in Jarvis's current prompt"
     assert "witty" not in new and "No jokes" in new and "[Context:" in new and "Always respond in a short" in new
     print("selftest OK: persona replaced, context line and formatting rules kept;", len(prompt), "->", len(new), "chars")
+    assert "Answer ONLY Ivan's most recent message" in new and ("For THIS reply only" in new)
+    assert banter_line(lambda: 0.0) == BANTER_ON and banter_line(lambda: 0.999) == BANTER_OFF
+    on = sum(banter_line() == BANTER_ON for _ in range(20000)) / 200
+    assert abs(on - BANTER_PCT) < 2, on
+    print(f"selftest OK: dry remark allowed in {on:.1f} percent of replies (setting {BANTER_PCT:.0f}); stale-question rule present")
+    u = lambda t: {"role": "user", "content": t}
+    a = lambda t: {"role": "assistant", "content": t}
+    b = {"messages": [{"role": "system", "content": "s"}, u("old1"), u("old2"), a("answer"), u("old3"), u("new")]}
+    assert drop_stale_questions(b) == 2 and [m["content"] for m in b["messages"]] == ["s", "old2", "answer", "new"]
+    b = {"messages": [{"role": "system", "content": "s"}, u("q1"), a("x"), u("q2")]}
+    assert drop_stale_questions(b) == 0 and len(b["messages"]) == 4
+    print("selftest OK: unanswered earlier questions are dropped, answered ones kept")
     # reply extraction: plain JSON, event stream, and a tool call
     t, tools = extract_reply(json.dumps({"choices": [{"message": {"content": "Four."}}]}).encode(), "application/json")
     assert (t, tools) == ("Four.", [])
