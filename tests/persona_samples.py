@@ -40,26 +40,43 @@ SCENARIOS = {
 }
 
 
-def ask(messages, remark_on):
+STOP_TOOL = {"type": "function", "function": {"name": "stop", "description": "Stop speaking or listening right now.",
+                                              "parameters": {"type": "object", "properties": {}}}}  # Jarvis's real wording is not known to us
+SCENARIOS["goodnight (stop tool offered)"] = [{"role": "user", "content": "Jarvis, I'm going to log off now, goodnight."}]
+SCENARIOS["different question, not a repeat"] = [
+    {"role": "user", "content": "Jarvis, how are you today?"}, {"role": "assistant", "content": "Functioning well, sir."},
+    {"role": "user", "content": "Jarvis, can you be more sarcastic?"}]
+SCENARIOS["real stop request"] = [{"role": "user", "content": "Jarvis, be quiet."}]
+TOOLS_FOR = {"goodnight (stop tool offered)", "real stop request"}
+
+
+def ask(messages, remark_on, tools=False):
     r.BANTER_PCT = 100 if remark_on else 0
     body = {"model": MODEL, "max_tokens": 200, "temperature": 0.9,
             "messages": [{"role": "system", "content": PROMPT}] + messages}
+    if tools:
+        body["tools"] = [STOP_TOOL]
     body, changed = r.rewrite_body(body)
     assert changed
     for m in (MODEL, "gemini-3.1-flash-lite"):
         body["model"] = m
         s, t, d = g.call("/chat/completions", body, timeout=45)
         if d:
-            return (d["choices"][0]["message"].get("content") or "").strip(), t
+            msg = d["choices"][0]["message"]
+            called = [c["function"]["name"] for c in (msg.get("tool_calls") or [])]
+            return ((msg.get("content") or "").strip() + (f"  <<TOOL CALL: {called}>>" if called else "")), t
     return "(no answer: Google too slow)", 0
 
 
 if __name__ == "__main__":
     n_on = int(sys.argv[1]) if len(sys.argv) > 1 else 2
+    only = sys.argv[2] if len(sys.argv) > 2 else None
     for name, msgs in SCENARIOS.items():
+        if only and only not in name:
+            continue
         print(f"\n=== {name}")
-        txt, t = ask(msgs, False)
+        txt, t = ask(msgs, False, name in TOOLS_FOR)
         print(f"  [no remark, {t:.1f}s] {txt}")
         for i in range(n_on):
-            txt, t = ask(msgs, True)
+            txt, t = ask(msgs, True, name in TOOLS_FOR)
             print(f"  [remark allowed #{i+1}, {t:.1f}s] {txt}")
