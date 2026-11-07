@@ -3,6 +3,7 @@
 //   node tools/dashboard/server.mjs --demo    made-up sample data (for screenshots, safe to show to anyone)
 //   node tools/dashboard/server.mjs --selftest  start on a spare port and check the safety rules
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,9 +52,21 @@ const server = createServer(async (req, res) => {
   }
 });
 
+server.on("error", (e) => {
+  console.error(e.code === "EADDRINUSE" ? `Port ${PORT} is already in use. The dashboard may already be running: open http://${HOST}:${PORT}` : `Could not start: ${e.message}`);
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, async () => {
   const port = server.address().port;
-  if (!SELFTEST) return console.log(`Hub dashboard${DEMO ? " (sample data)" : ""}: http://${HOST}:${port}`);
+  if (!SELFTEST) {
+    console.log(`Hub dashboard${DEMO ? " (sample data)" : ""}: http://${HOST}:${port}`);
+    // read every project once now so the first page load is quick, then (with --open) open the browser: it never opens to a dead page
+    try { if (!DEMO) { console.log("Reading your projects..."); await Promise.all([real.projects(), real.decisions(), real.answers(), real.manager()]); } } catch { /* the page shows its own error */ }
+    if (args.includes("--open") && process.platform === "win32") spawn("cmd", ["/c", "start", "", `http://${HOST}:${port}`], { stdio: "ignore", detached: true }).unref();
+    console.log("Ready.");
+    return;
+  }
   const base = `http://${HOST}:${port}`;
   const ok = (name, cond) => { console.log(`${cond ? "OK  " : "FAIL"} ${name}`); if (!cond) process.exitCode = 1; };
   const r1 = await fetch(base + "/api/projects"); const j = await r1.json();

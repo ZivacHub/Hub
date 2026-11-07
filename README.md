@@ -22,7 +22,7 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 
 ## Run it
 
-Developed on Node 24. No dependencies to install. On Windows, double-click `tools/dashboard/Start Hub Dashboard.bat` (add `demo` after the name for sample data); it starts the server and opens the page.
+Developed on Node 24. No dependencies to install. On Windows, double-click `Start Hub Dashboard.bat` in the main folder (add `demo` after the name for sample data); it starts the server and opens the page.
 
 ```bash
 node tools/dashboard/server.mjs          # real data from your projects -> http://127.0.0.1:4780
@@ -55,6 +55,7 @@ Done: local data feed, project cards, waiting-decisions list, light/dark switch,
 
 | Path | What |
 |---|---|
+| `Start Hub Dashboard.bat` | double-click launcher (Windows) |
 | `tools/dashboard/` | the dashboard: server, data readers, page, sample data |
 | `tools/hub_status/` | read-only project status reader (also used by the voice layer) |
 | `tools/jarvis_trial/`, `tools/claude_bridge/` | optional voice layer parts |

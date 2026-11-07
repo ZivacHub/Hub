@@ -10,7 +10,7 @@ One-line purpose: a Jarvis voice assistant that starts with Windows on Ivan's PC
 
 ## Commands
 - Versions on this PC (checked 2026-11-02): `python` = 3.11.9 (use this one; `py` alone opens 3.14.0, too new for voice libraries, so use `py -3.11`), Node v24.13.1, Ollama 0.22.1 (not running until started), ffmpeg not installed (add only if a part needs it, with Ivan's yes).
-- Dashboard: double-click `tools/dashboard/Start Hub Dashboard.bat` (Ivan's launcher), or `node tools/dashboard/server.mjs` (add `--demo` for sample data); test: `node tools/dashboard/server.mjs --selftest`. Voice tools: see tools/hub_status and tools/jarvis_trial.
+- Dashboard: double-click `Start Hub Dashboard.bat` in the project root (Ivan's launcher), or `node tools/dashboard/server.mjs` (add `--demo` for sample data); test: `node tools/dashboard/server.mjs --selftest`. Voice tools: see tools/hub_status and tools/jarvis_trial.
 
 ## Conventions
 - Voice commands come from the safe list in docs/reference/COMMANDS.md (created in step 2.2). The model only PICKS a command; answers are built by code from fetched data.
@@ -52,7 +52,7 @@ No new skills were installed (search found nothing worth adding; paid voice skil
 - Always read: this file, docs/PRODUCT.md, docs/plan/BOARD.md, docs/DECISIONS.md (open part), .claude/handoff.md.
 - Current phase only: docs/plan/phases/NN-name.md. The handoff's `Read first:` line names the rest for the next step.
 - On demand: docs/reference/ (ARCHITECTURE, DESIGN, TESTING, TASKS, SECURITY_CHECKLIST, PRIOR_ART; COMMANDS and PC_FIT once created). History: .claude/memory.md.
-- Root of the project = code + this file + README.md only. New doc? Put it in docs/ and add a row to docs/INDEX.md.
+- Root of the project = code + this file + README.md + LICENSE + Start Hub Dashboard.bat (Ivan wants the launcher in the root, 2026-11-07). New doc? Put it in docs/ and add a row to docs/INDEX.md.
 
 ## Tools (Claude starts these itself; paid ones are optional extras)
 - Security: Claude's own review + local probing (free, default). Strix only if configured (paid API).
