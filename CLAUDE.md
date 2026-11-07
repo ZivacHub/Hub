@@ -10,7 +10,7 @@ One-line purpose: a Jarvis voice assistant that starts with Windows on Ivan's PC
 
 ## Commands
 - Versions on this PC (checked 2026-11-02): `python` = 3.11.9 (use this one; `py` alone opens 3.14.0, too new for voice libraries, so use `py -3.11`), Node v24.13.1, Ollama 0.22.1 (not running until started), ffmpeg not installed (add only if a part needs it, with Ivan's yes).
-- Dev / Build / Test: not defined yet. They are created in Phases 0 to 3 and written here then.
+- Dashboard: `node tools/dashboard/server.mjs` (add `--demo` for sample data); test: `node tools/dashboard/server.mjs --selftest`. Voice tools: see tools/hub_status and tools/jarvis_trial.
 
 ## Conventions
 - Voice commands come from the safe list in docs/reference/COMMANDS.md (created in step 2.2). The model only PICKS a command; answers are built by code from fetched data.
@@ -41,7 +41,7 @@ No new skills were installed (search found nothing worth adding; paid voice skil
 - UI work: Design stack above · DB: none · Docs/versions: context7
 
 ## Current state
-- Plan APPROVED 2026-11-02 (docs/plan/BOARD.md, 9 phases, 43 steps). No code yet. Phase 0 gate passed, step 0.1 done. Next: 0.2 (try the two local models).
+- Plan v2, re-ordered 2026-11-07 (D19): dashboard first, voice optional (Jarvis chat). Dashboard runs: `node tools/dashboard/server.mjs` (real data, http://127.0.0.1:4780) or `--demo` (sample data). Steps 3.1, 3.3, 3.6, 3.7, 6.4 done; 3.2 waits for Ivan's look approval; next 3.8 (Ivan's milestone). This chat owns tools/dashboard/; the Jarvis chat owns tools/jarvis_trial/.
 
 ## How we work here (BUSNUS workflow v3, details in ~/.claude/CLAUDE.md)
 - docs/PRODUCT.md = the goal in the owner's words (compass). docs/plan/BOARD.md = progress, in order. docs/DECISIONS.md = what the owner decided.

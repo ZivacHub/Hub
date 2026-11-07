@@ -129,3 +129,14 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-04):** "He some times missheards, so add similar words to be wake words, like Jarice or any similar".
 **Result:** 13 more spellings added to Jarvis's wake_aliases (29 in total with the 12 defaults and the 4 from D17): jarice, jarrice, jarise, jarus, jaurus, jarvice, jervice, gervis, jarius, jarvous, jarvic, jarves, yarvis. Jarvis already treats anything at least 78 percent similar to "jarvis" as the name (wake_fuzzy_ratio 0.78, checked with difflib), so the list targets the misses ("jarice" 0.67, "jarrus" 0.67, "gervis" 0.67, "jarus" 0.73). Real words and names were kept off the list on purpose ("service" 0.46, "travis" 0.67, "harvest" 0.62, "janice" 0.50 would wake him by accident).
 **Affects:** C:/Users/Ivan/.config/jarvis/config.json (backup: JarvisTrial/config_pre_aliases2.json, holds the key: do not copy or commit)
+
+## D19 — Dashboard first, Jarvis optional   [decided 2026-11-05]
+**Question:** Start the dashboard now, beside the Jarvis chat, or wait for the voice steps?
+**The owner said (2026-11-05):** "lets focus on dashboard itself, so we can menage all projects from there, jarvis is an optional thing and probaly will not live up"
+**Result:** The dashboard is the main product and is worked on in this chat; Jarvis/voice stays optional in the other chat and no longer gates anything. This changes the order in the plan (a re-ordered phase list is shown to Ivan for his yes before the board changes). Files: this chat owns tools/dashboard/ and the dashboard docs; the Jarvis chat owns tools/jarvis_trial/.
+**Affects:** whole plan order, Phase 3
+
+## D20 — What the first dashboard shows, whether it can act, and how it looks   [decided 2026-11-05]
+**The owner said (2026-11-05):** shows: "Project cards, All waiting decisions in one list, Claude's latest answer per project, AI_Orcestration Manager card"; acting: "Look only for now (Recommended)"; look: "both modes avaliable to change, but default is light and clean".
+**Result:** First version = those four things, read-only (nothing on the page changes any file). Light theme by default with a switch to dark. Acting from the page (open folder, answer decisions) is a later phase.
+**Affects:** Phase 3, Phase 6 (latest answers pulled forward), docs/reference/DESIGN.md

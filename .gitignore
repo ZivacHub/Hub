@@ -18,3 +18,6 @@ tools/claude_bridge/bridge_log.jsonl
 tests/audio/voice_audition/
 tools/jarvis_trial/speaker_log.jsonl
 tests/_jarvis_prompt.txt
+
+# browser-test snapshots can contain real project data
+.playwright-cli/
