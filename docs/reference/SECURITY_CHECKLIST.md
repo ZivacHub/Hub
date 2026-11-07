@@ -20,3 +20,12 @@ From the owner's saved list "19 things to check" (2026-10-15). Run it in the sec
 17. [ ] Production debug off
 18. [ ] Patch dependencies (known-vulnerability check)
 19. [ ] Claude security scan (`/security-review` + probing the running app)
+
+## Dashboard start/stop buttons (Phase 11, D25) — checked 2026-11-07
+- Only ids from config/projects.json can start; no command text from the page; spawn without a shell, arguments from the file. [x] control --selftest
+- POST needs per-run token + same Origin + application/json + confirm:true + Host check; otherwise refused. [x] server --selftest 16/16
+- Stop only ends processes the Hub started (PID in data/hub_state.json, taskkill of that tree). [x] control --selftest
+- Open in Claude Code: the folder must be an existing directory directly under the projects folder, no shell characters. [x] server --selftest
+- Every action and refusal is logged to logs/hub_actions.log (git-ignored). [x]
+- Windows start-up is changed only by Ivan running Install Hub Autostart.bat; Claude never edits it. [x]
+- Still to do in step 10.2: a probe of the running page from a second website and from the LAN.

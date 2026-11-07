@@ -2,11 +2,15 @@
 
 A local dashboard that gives one-glance control over a whole folder of software projects, with an optional Jarvis-style voice assistant on top.
 
-I run many projects side by side, each planned and built with Claude Code. Hub reads each project's own plan, decisions and chat history from disk and shows, on one page, where every project stands, what is waiting on me, and what Claude last said in each one. It never holds the answers itself; it only fetches them, read-only.
+I run many projects side by side, each planned and built with Claude Code. Hub reads each project's own plan, decisions and chat history from disk and shows, on one page, where every project stands, what is waiting on me, and what Claude last said in each one. It never holds the answers itself: it reads them from disk. It can also start and stop the programs on a short list I choose, and open any project in Claude Code.
 
 ![Hub dashboard, light theme](docs/screenshots/dashboard-light.png)
 
 *Screenshots use made-up sample data (`--demo`), not my real projects.*
+
+![Start asks a question first](docs/screenshots/dashboard-start-question.png)
+
+*Start, Stop and Open in Claude Code always ask first.*
 
 | Dark theme | Phone width |
 |---|---|
@@ -17,7 +21,8 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 - **Project cards:** progress bar, current phase, next step, decisions waiting, and how old the last save-point is. Projects with no plan yet sit in a small "not set up" group.
 - **Waiting on you:** every open question across all projects in one list, with the full question text.
 - **Claude's latest words:** the last thing Claude said in each project's chat, read from the saved chat files on the same PC. Click a card to expand it.
-- **Manager card:** status of a separate orchestration service (running or not, queue, current goal).
+- **Manager card:** status of a separate orchestration service (running or not, queue, current goal), with Start and Stop.
+- **Start / Stop / Open in Claude Code:** each project on my start list gets Running or Stopped, Start and Stop buttons, and a "Start with PC" switch; every project gets an "Open in Claude Code" button. Each one asks "Start X?" first.
 - Light by default, dark by switch (remembered), refreshes itself every 30 seconds.
 
 ## Run it
@@ -32,13 +37,15 @@ node tools/dashboard/server.mjs --demo   # sample data, safe to screenshot or sh
 node tools/dashboard/server.mjs --selftest
 ```
 
+**Start with Windows:** double-click `Install Hub Autostart.bat` once (it adds one entry to your Windows start-up folder; `Remove Hub Autostart.bat` undoes it). The Hub then runs in the background and, a few seconds after boot, starts the projects you switched on with "Start with PC".
+
 `--demo` runs anywhere. Real mode expects a folder of projects that each keep a plan board, a decisions file and a handoff note (layout in `docs/INDEX.md`), read through my own shared reader (`~/.claude/hooks/lib/busnus.mjs`, not part of this repository).
 
 ## How it is built
 
 - **Plain Node, no framework, no build step.** A small HTTP server (`tools/dashboard/server.mjs`) serves JSON feeds and a static page (`tools/dashboard/public/`). The page writes all text with `textContent`, never HTML, because the text comes from project files.
-- **Read-only by design.** Every request is a GET; nothing on the page can change a file.
-- **This PC only.** The server binds to `127.0.0.1`, rejects any other `Host` header (DNS-rebinding guard), and sends a strict Content-Security-Policy. `--selftest` checks the JSON feed, the page, refused POSTs, refused path tricks and refused foreign hosts.
+- **Reads with GET, acts through one guarded route.** The only POST route (`/api/action`) can start or stop programs listed in `config/projects.json`, open Claude Code in a real project folder, or flip a start-up switch. The page can never send a command line; programs run with no shell and the arguments from that file. Start and Stop only end programs the Hub itself started.
+- **This PC only, and guarded against other websites.** The server binds to `127.0.0.1`, rejects any other `Host` header (DNS-rebinding guard), sends a strict Content-Security-Policy, and the action route also needs a per-run secret token, a same-origin request, a JSON body and an explicit confirm flag. Every action is logged. `--selftest` checks 16 cases (including refused cross-site, token-less, unlisted and oversized requests) and `node tools/dashboard/lib/control.mjs --selftest` starts and stops a fake project through the engine.
 - **Secrets never reach the page.** A filter replaces key-like text (API keys, tokens, `password=`, long random strings) in Claude's words and decisions with `[hidden]`.
 - **Numbers come from one source.** Progress and decision counts use the same reader as my `busnus-status` command, so the dashboard and the terminal agree.
 - **Design:** an Operate-style surface (calm, scannable, one accent colour, tabular numbers, visible focus, reduced-motion respected), checked with Playwright screenshots at desktop and phone width and a design linter.
@@ -51,14 +58,16 @@ A Jarvis-style assistant ("Hey Jarvis, how is the game going?", "any decisions w
 
 The dashboard is the main product now; the voice layer is optional and developed separately. Progress, in order, is tracked in `docs/plan/BOARD.md` and every decision with its date and the reason in `docs/DECISIONS.md`.
 
-Done: local data feed, project cards, waiting-decisions list, light/dark switch, Claude's latest words, secret filter. Next: Manager card against a live Manager, start-with-Windows, a security pass, and (later) answering decisions from the page with a read-back and confirm step.
+Done: local data feed, project cards, waiting-decisions list, light/dark switch, Claude's latest words, secret filter, start/stop engine with its safety checks, Start / Stop / Open in Claude Code buttons, start-with-PC install files. Next: a live test with the real projects, a security pass, and (later) answering decisions from the page with a read-back and confirm step.
 
 ## Repository map
 
 | Path | What |
 |---|---|
 | `Start Hub Dashboard.bat` | double-click launcher (Windows) |
-| `tools/dashboard/` | the dashboard: server, data readers, page, sample data |
+| `Install Hub Autostart.bat`, `Remove Hub Autostart.bat` | add or remove the Windows start-up entry |
+| `config/projects.json` | the list of programs the dashboard may start |
+| `tools/dashboard/` | the dashboard: server, data readers, start/stop engine, page, sample data |
 | `tools/hub_status/` | read-only project status reader (also used by the voice layer) |
 | `tools/jarvis_trial/`, `tools/claude_bridge/` | optional voice layer parts |
 | `docs/` | goal, plan board, decisions, design notes, screenshots |

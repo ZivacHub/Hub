@@ -1,25 +1,257 @@
 {
   "_note": "Made-up sample data for screenshots and the README. Not real projects. `node tools/dashboard/server.mjs --demo` serves this instead of reading the PC.",
   "projects": [
-    { "name": "Clip Studio", "setUp": true, "phase": { "number": 4, "title": "Auto-captions and export", "of": 8 }, "phasesDone": 3, "phasesTotal": 8, "stepsDone": 21, "stepsTotal": 44, "percent": 48, "nextStep": "4.3 Burn captions into the vertical cut", "decisionsWaiting": 2, "handoffDaysOld": 0, "lastCommit": "2026-11-07" },
-    { "name": "Job Applier", "setUp": true, "phase": { "number": 2, "title": "Match listings to the CV", "of": 6 }, "phasesDone": 1, "phasesTotal": 6, "stepsDone": 9, "stepsTotal": 31, "percent": 29, "nextStep": "2.2 Score a listing against the CV", "decisionsWaiting": 1, "handoffDaysOld": 1, "lastCommit": "2026-11-06" },
-    { "name": "Space Game", "setUp": true, "phase": { "number": 5, "title": "Enemy waves and boss fights", "of": 9 }, "phasesDone": 4, "phasesTotal": 9, "stepsDone": 38, "stepsTotal": 71, "percent": 54, "nextStep": "5.4 Boss phase two attack pattern", "decisionsWaiting": 0, "handoffDaysOld": 2, "lastCommit": "2026-11-05" },
-    { "name": "Script Maker", "setUp": true, "phase": { "number": 3, "title": "Lesson outlines", "of": 5 }, "phasesDone": 2, "phasesTotal": 5, "stepsDone": 17, "stepsTotal": 26, "percent": 65, "nextStep": "3.2 Generate the quiz at the end of each lesson", "decisionsWaiting": 0, "handoffDaysOld": 4, "lastCommit": "2026-11-03" },
-    { "name": "Portfolio Site", "setUp": true, "phase": { "number": 2, "title": "Case-study pages", "of": 4 }, "phasesDone": 1, "phasesTotal": 4, "stepsDone": 6, "stepsTotal": 15, "percent": 40, "nextStep": "2.1 Write the first case study", "decisionsWaiting": 0, "handoffDaysOld": 11, "lastCommit": "2026-10-27" },
-    { "name": "Daily Navigator", "setUp": true, "phase": null, "phasesDone": 5, "phasesTotal": 5, "stepsDone": 22, "stepsTotal": 22, "percent": 100, "nextStep": null, "decisionsWaiting": 0, "handoffDaysOld": 19, "lastCommit": "2026-10-19" },
-    { "name": "Local TTS", "setUp": false, "hasCode": true, "planning": false },
-    { "name": "Idea Parking Lot", "setUp": false, "hasCode": false, "planning": false }
+    {
+      "name": "Clip Studio",
+      "setUp": true,
+      "phase": {
+        "number": 4,
+        "title": "Auto-captions and export",
+        "of": 8
+      },
+      "phasesDone": 3,
+      "phasesTotal": 8,
+      "stepsDone": 21,
+      "stepsTotal": 44,
+      "percent": 48,
+      "nextStep": "4.3 Burn captions into the vertical cut",
+      "decisionsWaiting": 2,
+      "handoffDaysOld": 0,
+      "lastCommit": "2026-11-07"
+    },
+    {
+      "name": "Job Applier",
+      "setUp": true,
+      "phase": {
+        "number": 2,
+        "title": "Match listings to the CV",
+        "of": 6
+      },
+      "phasesDone": 1,
+      "phasesTotal": 6,
+      "stepsDone": 9,
+      "stepsTotal": 31,
+      "percent": 29,
+      "nextStep": "2.2 Score a listing against the CV",
+      "decisionsWaiting": 1,
+      "handoffDaysOld": 1,
+      "lastCommit": "2026-11-06"
+    },
+    {
+      "name": "Space Game",
+      "setUp": true,
+      "phase": {
+        "number": 5,
+        "title": "Enemy waves and boss fights",
+        "of": 9
+      },
+      "phasesDone": 4,
+      "phasesTotal": 9,
+      "stepsDone": 38,
+      "stepsTotal": 71,
+      "percent": 54,
+      "nextStep": "5.4 Boss phase two attack pattern",
+      "decisionsWaiting": 0,
+      "handoffDaysOld": 2,
+      "lastCommit": "2026-11-05"
+    },
+    {
+      "name": "Script Maker",
+      "setUp": true,
+      "phase": {
+        "number": 3,
+        "title": "Lesson outlines",
+        "of": 5
+      },
+      "phasesDone": 2,
+      "phasesTotal": 5,
+      "stepsDone": 17,
+      "stepsTotal": 26,
+      "percent": 65,
+      "nextStep": "3.2 Generate the quiz at the end of each lesson",
+      "decisionsWaiting": 0,
+      "handoffDaysOld": 4,
+      "lastCommit": "2026-11-03"
+    },
+    {
+      "name": "Portfolio Site",
+      "setUp": true,
+      "phase": {
+        "number": 2,
+        "title": "Case-study pages",
+        "of": 4
+      },
+      "phasesDone": 1,
+      "phasesTotal": 4,
+      "stepsDone": 6,
+      "stepsTotal": 15,
+      "percent": 40,
+      "nextStep": "2.1 Write the first case study",
+      "decisionsWaiting": 0,
+      "handoffDaysOld": 11,
+      "lastCommit": "2026-10-27"
+    },
+    {
+      "name": "Daily Navigator",
+      "setUp": true,
+      "phase": null,
+      "phasesDone": 5,
+      "phasesTotal": 5,
+      "stepsDone": 22,
+      "stepsTotal": 22,
+      "percent": 100,
+      "nextStep": null,
+      "decisionsWaiting": 0,
+      "handoffDaysOld": 19,
+      "lastCommit": "2026-10-19"
+    },
+    {
+      "name": "Local TTS",
+      "setUp": false,
+      "hasCode": true,
+      "planning": false
+    },
+    {
+      "name": "Idea Parking Lot",
+      "setUp": false,
+      "hasCode": false,
+      "planning": false
+    }
   ],
   "decisions": [
-    { "project": "Clip Studio", "id": "D7", "title": "Which caption style?", "status": "open", "question": "Should captions be word-by-word highlighted, or whole sentences at the bottom of the frame?" },
-    { "project": "Clip Studio", "id": "D9", "title": "Where do finished clips go?", "status": "proposed", "question": "Proposal: a local folder first, upload to the channel only after a spoken or typed yes." },
-    { "project": "Job Applier", "id": "D4", "title": "How strict is the match score?", "status": "open", "question": "Show only listings above 70 percent, or show everything sorted by score?" }
+    {
+      "project": "Clip Studio",
+      "id": "D7",
+      "title": "Which caption style?",
+      "status": "open",
+      "question": "Should captions be word-by-word highlighted, or whole sentences at the bottom of the frame?"
+    },
+    {
+      "project": "Clip Studio",
+      "id": "D9",
+      "title": "Where do finished clips go?",
+      "status": "proposed",
+      "question": "Proposal: a local folder first, upload to the channel only after a spoken or typed yes."
+    },
+    {
+      "project": "Job Applier",
+      "id": "D4",
+      "title": "How strict is the match score?",
+      "status": "open",
+      "question": "Show only listings above 70 percent, or show everything sorted by score?"
+    }
   ],
   "answers": [
-    { "project": "Clip Studio", "agoMinutes": 14, "chat": "Captions step 4.2", "short": "Caption timing now follows the audio waveform; 12 of 12 test clips line up within a tenth of a second. Next I need your pick on caption style (D7).", "long": "Caption timing now follows the audio waveform; 12 of 12 test clips line up within a tenth of a second. Next I need your pick on caption style (D7) before I burn them in." },
-    { "project": "Job Applier", "agoMinutes": 1500, "chat": "Match scoring", "short": "Scoring runs on the 40 saved listings. The top five look right to me; the bottom ten are mostly the wrong city.", "long": "Scoring runs on the 40 saved listings. The top five look right to me; the bottom ten are mostly the wrong city. Waiting on D4 for how strict the cut-off should be." },
-    { "project": "Space Game", "agoMinutes": 3100, "chat": "Boss fight", "short": "Boss phase one is playable and survives 200 restarts without a crash. Phase two attack pattern is next.", "long": "Boss phase one is playable and survives 200 restarts without a crash. Phase two attack pattern is next." },
-    { "project": "Script Maker", "agoMinutes": 5900, "chat": "Lesson outlines", "short": "Outlines for lessons 1 to 6 are written and each ends with three review questions.", "long": "Outlines for lessons 1 to 6 are written and each ends with three review questions." }
+    {
+      "project": "Clip Studio",
+      "agoMinutes": 14,
+      "chat": "Captions step 4.2",
+      "short": "Caption timing now follows the audio waveform; 12 of 12 test clips line up within a tenth of a second. Next I need your pick on caption style (D7).",
+      "long": "Caption timing now follows the audio waveform; 12 of 12 test clips line up within a tenth of a second. Next I need your pick on caption style (D7) before I burn them in."
+    },
+    {
+      "project": "Job Applier",
+      "agoMinutes": 1500,
+      "chat": "Match scoring",
+      "short": "Scoring runs on the 40 saved listings. The top five look right to me; the bottom ten are mostly the wrong city.",
+      "long": "Scoring runs on the 40 saved listings. The top five look right to me; the bottom ten are mostly the wrong city. Waiting on D4 for how strict the cut-off should be."
+    },
+    {
+      "project": "Space Game",
+      "agoMinutes": 3100,
+      "chat": "Boss fight",
+      "short": "Boss phase one is playable and survives 200 restarts without a crash. Phase two attack pattern is next.",
+      "long": "Boss phase one is playable and survives 200 restarts without a crash. Phase two attack pattern is next."
+    },
+    {
+      "project": "Script Maker",
+      "agoMinutes": 5900,
+      "chat": "Lesson outlines",
+      "short": "Outlines for lessons 1 to 6 are written and each ends with three review questions.",
+      "long": "Outlines for lessons 1 to 6 are written and each ends with three review questions."
+    }
   ],
-  "manager": { "running": true, "queueDepth": 2, "goal": "Draft the weekly content plan for all channels", "note": null }
+  "manager": {
+    "running": true,
+    "queueDepth": 2,
+    "goal": "Draft the weekly content plan for all channels",
+    "note": null
+  },
+  "runtime": [
+    {
+      "id": "clip-studio",
+      "name": "Clip Studio",
+      "label": "Clip Studio",
+      "port": 4317,
+      "url": "http://127.0.0.1:4317",
+      "status": "running",
+      "error": "",
+      "startedByHub": true,
+      "startWithPc": true,
+      "warn": "",
+      "note": "",
+      "startSeconds": 60,
+      "canStart": true
+    },
+    {
+      "id": "job-applier",
+      "name": "Job Applier",
+      "label": "Job Applier",
+      "port": 8765,
+      "url": "http://127.0.0.1:8765",
+      "status": "stopped",
+      "error": "",
+      "startedByHub": false,
+      "startWithPc": false,
+      "warn": "",
+      "note": "",
+      "startSeconds": 60,
+      "canStart": true
+    },
+    {
+      "id": "space-game",
+      "name": "Space Game",
+      "label": "Space Game",
+      "port": 8766,
+      "url": "http://127.0.0.1:8766",
+      "status": "stopped",
+      "error": "",
+      "startedByHub": false,
+      "startWithPc": false,
+      "warn": "",
+      "note": "",
+      "startSeconds": 60,
+      "canStart": true
+    },
+    {
+      "id": "script-maker",
+      "name": "Script Maker",
+      "label": "Script Maker",
+      "port": 8767,
+      "url": "http://127.0.0.1:8767",
+      "status": "running",
+      "error": "",
+      "startedByHub": false,
+      "startWithPc": false,
+      "warn": "",
+      "note": "",
+      "startSeconds": 60,
+      "canStart": true
+    },
+    {
+      "id": "manager",
+      "name": "AI_Orcestration",
+      "label": "AI_Orcestration Manager",
+      "port": 8000,
+      "url": "http://127.0.0.1:8000",
+      "status": "running",
+      "error": "",
+      "startedByHub": true,
+      "startWithPc": true,
+      "warn": "",
+      "note": "",
+      "startSeconds": 60,
+      "canStart": true
+    }
+  ]
 }

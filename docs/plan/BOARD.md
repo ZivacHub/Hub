@@ -23,12 +23,12 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 3.7 Light / dark switch (light by default, remembered) — first visit light; after switching to dark and reloading it stayed dark; screenshots of both (2026-11-07)
   - [ ] 3.8 Milestone: Ivan opens the page and says whether one glance tells him enough
   - [-] 3.4 "Pull out the dashboard" by voice — moved to the optional voice track on 2026-11-07 (D19); comes back as a new step if the voice lives
-- [ ] Phase 11 — Start and stop projects from the dashboard (Ivan's request 2026-11-07)
-  - [ ] 11.1 Project start list: config/projects.json with its own port per project
-  - [ ] 11.2 Start / stop engine with the safety rules (token, same origin, picked list only, log)
-  - [ ] 11.3 Start / Stop buttons on the cards with a "Start X?" question
-  - [ ] 11.4 "Open in Claude Code" button
-  - [ ] 11.5 Start with the PC: one Hub entry (Ivan runs the install file) and a switch per project
+- [~] Phase 11 — Start and stop projects from the dashboard (Ivan's request 2026-11-07)
+  - [x] 11.1 Project start list: config/projects.json with its own port per project — 5 entries (ClipForge 4317, Learning Script Maker 18767, Job Application 18765, Student Job Assistant 18766, Manager 8000); /api/runtime on the real PC says canStart true for all five (folder and program found); ports moved to 1xxxx after the real check found another chat's dev server on 8765 (2026-11-07)
+  - [x] 11.2 Start / stop engine with the safety rules (token, same origin, picked list only, log) — `node tools/dashboard/lib/control.mjs --selftest` 11/11 (a fake project started, seen running, second start refused, stopped, port closed) and `node tools/dashboard/server.mjs --selftest` 16/16 (no token, wrong token, other website, no Origin, wrong content type, no confirm, unlisted action, unlisted id, folder outside the projects, oversized body); refusals appear in logs/hub_actions.log (2026-11-07)
+  - [x] 11.3 Start / Stop buttons on the cards with a "Start X?" question — screenshots of Running, Stopped, the question row (docs/screenshots/dashboard-start-question.png); Yes in sample mode answers "Sample data mode: the buttons are switched off."; Escape/Cancel closes the question; no console errors. A real start on a real project waits for 11.6 (2026-11-07)
+  - [~] 11.4 "Open in Claude Code" button — button and server route built, folder checked against real directories (outside folders refused in the self-test); not yet pressed for real (it opens a terminal on Ivan's screen)
+  - [~] 11.5 Start with the PC: one Hub entry (Ivan runs the install file) and a switch per project — Install / Remove Hub Autostart.bat tested into a TEMP folder (shortcut target and vbs correct, removal works), hidden boot launcher brought the server up with no window, real Startup folder untouched; WAITS for Ivan to run Install Hub Autostart.bat and restart
   - [ ] 11.6 Milestone: Ivan starts ClipForge from the page and ticks one project for start-up
 - [~] Phase 6 — Claude's latest answers and "needs you" alerts (stage 2: 6.1, 6.2, 6.4 first, 6.3 last)
   - [~] 6.1 Find the latest Claude answer per project (read-only) — reads the saved chat files (last 1.5 MB of the newest file per project); real data returns 6 projects; still to compare with the app for two projects

@@ -1,5 +1,5 @@
 {
-  "_note": "The ONLY programs the dashboard may start. Each entry runs the project's own start command in its folder; the page can never send a command. Ports are all different so the projects can run together. Edit this file to add a project.",
+  "_note": "The ONLY programs the dashboard may start. Each entry runs the project's own start command in its folder; the page can never send a command. Ports are all different and unusual (1xxxx) so they cannot be mistaken for another dev server, e.g. 8765. Edit this file to add a project.",
   "projects": [
     {
       "id": "clipforge", "name": "Socials Automatisation", "label": "ClipForge",
@@ -10,17 +10,17 @@
     {
       "id": "script-maker", "name": "Learning_Script_Maker", "label": "Learning Script Maker",
       "command": ["uv", "run", "python", "-m", "scriptmaker"],
-      "env": { "SM_PORT": "8767" }, "port": 8767
+      "env": { "SM_PORT": "18767" }, "port": 18767
     },
     {
       "id": "job-app", "name": "Automatic_Job_Application", "label": "Job Application",
       "command": ["cmd.exe", "/c", "start.bat"],
-      "env": { "JOBS_PORT": "8765", "NO_BROWSER": "1" }, "port": 8765, "startSeconds": 300
+      "env": { "JOBS_PORT": "18765", "NO_BROWSER": "1" }, "port": 18765, "startSeconds": 300
     },
     {
       "id": "student-jobs", "name": "Student_Job_Assistant", "label": "Student Job Assistant",
       "command": ["cmd.exe", "/c", "start.bat"],
-      "env": { "JOBS_PORT": "8766", "NO_BROWSER": "1" }, "port": 8766, "startSeconds": 600,
+      "env": { "JOBS_PORT": "18766", "NO_BROWSER": "1" }, "port": 18766, "startSeconds": 600,
       "note": "The first start installs its Python environment, which takes a few minutes."
     },
     {

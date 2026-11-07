@@ -10,8 +10,8 @@ Each project card on the dashboard can start and stop that project's program, op
 
 ## Projects hooked up first (Ivan, D23) and how each starts
 - ClipForge (Socials Automatisation): node server/index.js, port 4317 (PORT). Warning: it runs its own scheduled publishing while open.
-- Learning Script Maker: uv run python -m scriptmaker, port 8767 (SM_PORT; the file opens a browser itself).
-- Automatic_Job_Application and Student_Job_Assistant (identical start.bat): run with NO_BROWSER=1, ports 8765 and 8766 (JOBS_PORT).
+- Learning Script Maker: uv run python -m scriptmaker, port 18767 (SM_PORT; the file opens a browser itself).
+- Automatic_Job_Application and Student_Job_Assistant (identical start.bat): run with NO_BROWSER=1, ports 18765 and 18766 (JOBS_PORT).
 - AI_Orcestration Manager: ai_company .venv python -m uvicorn server:app --host 127.0.0.1 --port 8000 (its own file would listen on every network interface; the Hub starts it on this PC only).
 Other projects' files are never edited: the Hub only runs their own start commands.
 
