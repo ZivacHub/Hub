@@ -22,7 +22,7 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 
 ## Run it
 
-Developed on Node 24. No dependencies to install.
+Developed on Node 24. No dependencies to install. On Windows, double-click `tools/dashboard/Start Hub Dashboard.bat` (add `demo` after the name for sample data); it starts the server and opens the page.
 
 ```bash
 node tools/dashboard/server.mjs          # real data from your projects -> http://127.0.0.1:4780

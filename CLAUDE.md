@@ -10,7 +10,7 @@ One-line purpose: a Jarvis voice assistant that starts with Windows on Ivan's PC
 
 ## Commands
 - Versions on this PC (checked 2026-11-02): `python` = 3.11.9 (use this one; `py` alone opens 3.14.0, too new for voice libraries, so use `py -3.11`), Node v24.13.1, Ollama 0.22.1 (not running until started), ffmpeg not installed (add only if a part needs it, with Ivan's yes).
-- Dashboard: `node tools/dashboard/server.mjs` (add `--demo` for sample data); test: `node tools/dashboard/server.mjs --selftest`. Voice tools: see tools/hub_status and tools/jarvis_trial.
+- Dashboard: double-click `tools/dashboard/Start Hub Dashboard.bat` (Ivan's launcher), or `node tools/dashboard/server.mjs` (add `--demo` for sample data); test: `node tools/dashboard/server.mjs --selftest`. Voice tools: see tools/hub_status and tools/jarvis_trial.
 
 ## Conventions
 - Voice commands come from the safe list in docs/reference/COMMANDS.md (created in step 2.2). The model only PICKS a command; answers are built by code from fetched data.
