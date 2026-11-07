@@ -170,3 +170,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-07):** chose "Ask 'Start X?' each time (Recommended)".
 **Result:** Start and Stop (and Open in Claude Code) first show "Start X? Yes / Cancel". Only projects on the list in config/projects.json can be started; the page can never send a command line. The server also refuses requests without its per-run token, from another origin, without JSON, or from a foreign Host, and logs every action to logs/hub_actions.log. Stop only ends programs the Hub itself started.
 **Affects:** Phase 11 (11.2, 11.3), docs/reference/SECURITY_CHECKLIST.md
+
+## D26 — The look is approved; the dashboard is done as a showcase   [decided 2026-11-07]
+**Question:** Is the look right (step 3.2) and is the dashboard finished enough to show?
+**The owner said (2026-11-07):** "Nah it looks good upload it to git and thats it for showcase."
+**Result:** Look approved (light default, dark switch, cards with Start / Stop / Open in Claude Code). Everything is on GitHub (public, MIT) for the CV. Open steps stay on the board for real use; no more showcase work is planned.
+**Affects:** step 3.2, README, Phase 3 close
