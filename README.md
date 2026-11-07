@@ -22,10 +22,12 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 
 ## Run it
 
-Developed on Node 24. No dependencies to install. On Windows, double-click `Start Hub Dashboard.bat` in the main folder (add `demo` after the name for sample data); it starts the server and opens the page.
+On Windows there is one file to run: **double-click `Start Hub Dashboard.bat`** in the main folder. It starts the dashboard and opens the page in your browser once it is ready. Close its window to stop it. Run it as `Start Hub Dashboard.bat demo` for made-up sample data instead of your real projects.
+
+Needs Node, no dependencies to install (developed on Node 24). Without the bat file:
 
 ```bash
-node tools/dashboard/server.mjs          # real data from your projects -> http://127.0.0.1:4780
+node tools/dashboard/server.mjs          # real data -> http://127.0.0.1:4780
 node tools/dashboard/server.mjs --demo   # sample data, safe to screenshot or show
 node tools/dashboard/server.mjs --selftest
 ```
