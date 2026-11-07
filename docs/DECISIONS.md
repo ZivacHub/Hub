@@ -140,3 +140,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-05):** shows: "Project cards, All waiting decisions in one list, Claude's latest answer per project, AI_Orcestration Manager card"; acting: "Look only for now (Recommended)"; look: "both modes avaliable to change, but default is light and clean".
 **Result:** First version = those four things, read-only (nothing on the page changes any file). Light theme by default with a switch to dark. Acting from the page (open folder, answer decisions) is a later phase.
 **Affects:** Phase 3, Phase 6 (latest answers pulled forward), docs/reference/DESIGN.md
+
+## D21 — Hub repo goes public for the CV   [decided 2026-11-07]
+**Question:** How should the repo be shown on the CV: a separate clean showcase repo (recommended), or this repo made public?
+**The owner said (2026-11-07):** "Make this one public"
+**Result:** ZivacHub/Hub is PUBLIC (https://github.com/ZivacHub/Hub), with a description and topics. Checked first: all 55 commits scanned, no key-like text in any added line, no emails or phone numbers in files. Known and accepted: commit author email is zivan9899@gmail.com (visible in public commit data); decisions, memory and handoff notes (his own words, project names, the private-use film-voice and personality discussions) are now readable by anyone; isair/jarvis is not included. Everything pushed from now on is public: new notes must not hold keys, client or personal data.
+**Affects:** all future commits and pushes (scan every file list first), README wording

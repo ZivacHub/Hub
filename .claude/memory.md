@@ -194,3 +194,6 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - README rewritten for a CV (honest: voice layer is an optional, experimental trial on isair/jarvis, not included, personal-use licence). Pushed to the PRIVATE repo ZivacHub/Hub (commit 9964304, secret scan clean). NOT made public: waits for Ivan.
 - Lessons: hub_status/status.mjs imports the shared busnus.mjs, so demo mode is the only way the repo runs on a machine without Ivan's setup. The Manager has /health, /goal, /queue (no /progress or /summary as phase 3.5 first said). Playwright CLI writes .playwright-cli/ snapshots with real page text: now git-ignored and deleted.
 - Not done: 3.2 look approval, 3.8, 3.5 against a live Manager, 6.1 comparison with the app for two projects, Phase 10.
+
+## 2026-11-07 (later) - Repo made public (D21)
+- Ivan: "Make this one public". Audited first: 55 commits, no key-like text in any added line, no emails/phones in files, 65 files ever committed, none risky. gh repo edit: PUBLIC, description + 5 topics; anonymous GET of the repo page and a screenshot both 200. Accepted trade-offs listed in D21 (commit email visible, internal notes readable). Handoff updated (repo public; LICENSE question open).
