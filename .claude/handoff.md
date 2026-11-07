@@ -18,10 +18,10 @@ A local dashboard that shows all BUSNUS projects at a glance (cards, one list of
 1. Show Ivan the pictures (docs/screenshots/dashboard-light.png, dashboard-dark.png, dashboard-phone-light.png) and the real page (`node tools/dashboard/server.mjs`, open http://127.0.0.1:4780); done when he says yes or lists changes to the look (3.2), then ask 3.8 ("does one glance tell you enough?"); changes become new steps with the next free numbers.
    Read first: docs/plan/phases/03-dashboard-by-voice.md, docs/reference/DESIGN.md
 2. Close the loose ends of stage 2: start the AI_Orcestration Manager for real (server.py in AI_Orcestration/ai_company, port 8000) and check the card (3.5); compare "Claude last said" with the app for two projects (6.1, 6.2). Then Phase 6 step 6.3 and Phase 10 (start with Windows, security pass).
-3. The repo is PUBLIC since 2026-11-07 (D21). Before every push: list the files, scan for key-like text, keep real project text out of screenshots. Offer, do not do unasked: a LICENSE file (he has not chosen one; without it nobody may reuse the code) and trimming the notes he may not want public.
+3. The repo is PUBLIC since 2026-11-07 (D21). Before every push: list the files, scan for key-like text, keep real project text out of screenshots. MIT LICENSE added (D22). Offer, do not do unasked: trimming the notes he may not want public.
 
 ## Waiting on the owner
-- Nothing about public/private: decided (D21). Open small point: does he want a LICENSE file, and does he want the internal notes (decisions, memory, handoff) to stay public?
+- Nothing about public/private: decided (D21). Open small point: does he want the internal notes (decisions, memory, handoff) to stay public? MIT licence added (D22); the copyright name "Ivan (ZivacHub)" is my choice, he can change it.
 - 3.2: his yes or changes on the look (light default, dark switch).
 - CV wording: how the voice part should be described (README says "optional, experimental, built on isair/jarvis, not included").
 - D15 nicknames (tools/hub_status/aliases.json); step 2.6 demo and the offline backup model (voice track, Jarvis chat).

@@ -146,3 +146,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-07):** "Make this one public"
 **Result:** ZivacHub/Hub is PUBLIC (https://github.com/ZivacHub/Hub), with a description and topics. Checked first: all 55 commits scanned, no key-like text in any added line, no emails or phone numbers in files. Known and accepted: commit author email is zivan9899@gmail.com (visible in public commit data); decisions, memory and handoff notes (his own words, project names, the private-use film-voice and personality discussions) are now readable by anyone; isair/jarvis is not included. Everything pushed from now on is public: new notes must not hold keys, client or personal data.
 **Affects:** all future commits and pushes (scan every file list first), README wording
+
+## D22 — Licence for the public repo   [decided 2026-11-07]
+**Question:** Add a licence file so others may reuse the code?
+**The owner said (2026-11-07):** "Add MIT license"
+**Result:** MIT, copyright line "Ivan (ZivacHub)", year 2026, in LICENSE; README says it covers this repo only (isair/jarvis keeps its own licence). The copyright name is a Claude choice from his first name and account: he can change it.
+**Affects:** LICENSE, README

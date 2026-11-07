@@ -60,3 +60,7 @@ Done: local data feed, project cards, waiting-decisions list, light/dark switch,
 | `tools/jarvis_trial/`, `tools/claude_bridge/` | optional voice layer parts |
 | `docs/` | goal, plan board, decisions, design notes, screenshots |
 | `tests/` | measurement and accuracy scripts from the voice work |
+
+## License
+
+MIT, see `LICENSE`. This covers the code in this repository only; isair/jarvis (optional, not included) has its own licence.
