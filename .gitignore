@@ -21,3 +21,6 @@ tests/_jarvis_prompt.txt
 
 # browser-test snapshots can contain real project data
 .playwright-cli/
+
+# Hub state: Ivan's start-up ticks, running program ids
+data/

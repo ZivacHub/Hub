@@ -1,0 +1,33 @@
+{
+  "_note": "The ONLY programs the dashboard may start. Each entry runs the project's own start command in its folder; the page can never send a command. Ports are all different so the projects can run together. Edit this file to add a project.",
+  "projects": [
+    {
+      "id": "clipforge", "name": "Socials Automatisation", "label": "ClipForge",
+      "command": ["node", "--disable-warning=ExperimentalWarning", "server/index.js"],
+      "env": { "PORT": "4317" }, "port": 4317,
+      "warn": "ClipForge runs its own scheduled publishing while it is open. Only start it with the PC if you want that."
+    },
+    {
+      "id": "script-maker", "name": "Learning_Script_Maker", "label": "Learning Script Maker",
+      "command": ["uv", "run", "python", "-m", "scriptmaker"],
+      "env": { "SM_PORT": "8767" }, "port": 8767
+    },
+    {
+      "id": "job-app", "name": "Automatic_Job_Application", "label": "Job Application",
+      "command": ["cmd.exe", "/c", "start.bat"],
+      "env": { "JOBS_PORT": "8765", "NO_BROWSER": "1" }, "port": 8765, "startSeconds": 300
+    },
+    {
+      "id": "student-jobs", "name": "Student_Job_Assistant", "label": "Student Job Assistant",
+      "command": ["cmd.exe", "/c", "start.bat"],
+      "env": { "JOBS_PORT": "8766", "NO_BROWSER": "1" }, "port": 8766, "startSeconds": 600,
+      "note": "The first start installs its Python environment, which takes a few minutes."
+    },
+    {
+      "id": "manager", "name": "AI_Orcestration", "label": "AI_Orcestration Manager", "cwd": "ai_company",
+      "command": [".venv/Scripts/python.exe", "-m", "uvicorn", "server:app", "--host", "127.0.0.1", "--port", "8000", "--log-level", "warning"],
+      "port": 8000,
+      "note": "Started by the Hub on this PC only (the Manager's own file would listen on every network interface)."
+    }
+  ]
+}

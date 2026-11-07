@@ -12,6 +12,7 @@ Every document with "read when". Keep this list current: new doc => new row, sam
 | docs/plan/phases/02-project-status-by-voice.md | working on Phase 2 |
 | docs/plan/phases/09-continue-claude-chat-by-voice.md | working on Phase 9 (runs right after Phase 2) |
 | docs/plan/phases/03-dashboard-by-voice.md | working on Phase 3 |
+| docs/plan/phases/11-start-stop-projects.md | working on Phase 11 (start/stop projects from the dashboard, start with the PC) |
 | docs/plan/phases/10-dashboard-always-on.md | working on Phase 10 (dashboard starts with Windows, security pass) |
 | docs/plan/phases/04-answer-decisions-by-voice.md | working on Phase 4 |
 | docs/plan/phases/05-always-on-safely.md | working on Phase 5 |

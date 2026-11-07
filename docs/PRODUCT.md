@@ -34,6 +34,7 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 - No Anthropic API key, no paid voice, no other languages, no phone app or sharing, not a replacement for the AI_Orcestration Manager (it uses it).
 
 ## Changed
+- 2026-11-07: the dashboard may also start/stop projects, open them in Claude Code, and (his ticks) start them with the PC (D23, D24, D25); this replaces "look only for now".
 - 2026-11-05: dashboard first, Jarvis optional (Ivan's words above, D19, D20). The MUST list above (voice first) no longer sets the order; the plan is being re-ordered for his OK.
 - 2026-11-01: created from Ivan's answers (D1 to D3 in DECISIONS.md).
 - 2026-11-03: added to "also later": overview of messages and emails, and the loop "ask a project what is going on, answer it, Claude continues with the answer" (Ivan's words, after approving COMMANDS.md).

@@ -152,3 +152,21 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-07):** "Add MIT license"
 **Result:** MIT, copyright line "Ivan (ZivacHub)", year 2026, in LICENSE; README says it covers this repo only (isair/jarvis keeps its own licence). The copyright name is a Claude choice from his first name and account: he can change it.
 **Affects:** LICENSE, README
+
+## D23 — The dashboard can start, stop and open projects   [decided 2026-11-07]
+**Question:** What should "start a project" mean on the dashboard, and which projects first?
+**The owner said (2026-11-07):** "add both options and also any updates update the git asw" (both = run the project's own start file, and also open it in Claude Code). Projects: ClipForge, Learning Script Maker, Job Application (and Student Job Assistant), AI_Orcestration Manager.
+**Result:** Cards get Start / Stop (runs the project's own program in the background, shows Running or Stopped) and an "Open in Claude Code" button. A small list file picks what may be started (config/projects.json); each project gets its own port so they can run together (three of his apps defaulted to port 8765). Standing rule from the same message: every update is committed and pushed to GitHub (the repo is public: list the files and scan for keys before every push). Supersedes the "look only" part of D20.
+**Affects:** Phase 11, tools/dashboard/, config/projects.json
+
+## D24 — Start with the PC: one Hub entry, Ivan ticks projects   [decided 2026-11-07]
+**Question:** How should "start when the PC starts" work?
+**The owner said (2026-11-07):** chose "One Hub entry, you tick projects (Recommended)".
+**Result:** One Windows start-up entry starts the Hub; each card has a "start with PC" switch and the Hub starts whatever is switched on a few seconds after boot. Claude does NOT change Windows start-up itself: it writes `Install Hub Autostart.bat` and `Remove Hub Autostart.bat` and Ivan double-clicks the one he wants. Everything is off until he ticks it. ClipForge runs its own scheduled publishing while open, and he once said "no autostart for now" for it: its switch shows that warning and stays off until he ticks it himself.
+**Affects:** Phase 11 (11.5), replaces step 10.1
+
+## D25 — Safety of the Start / Stop buttons   [decided 2026-11-07]
+**Question:** How careful should buttons be, since a page that can start programs is riskier than one that only shows things?
+**The owner said (2026-11-07):** chose "Ask 'Start X?' each time (Recommended)".
+**Result:** Start and Stop (and Open in Claude Code) first show "Start X? Yes / Cancel". Only projects on the list in config/projects.json can be started; the page can never send a command line. The server also refuses requests without its per-run token, from another origin, without JSON, or from a foreign Host, and logs every action to logs/hub_actions.log. Stop only ends programs the Hub itself started.
+**Affects:** Phase 11 (11.2, 11.3), docs/reference/SECURITY_CHECKLIST.md

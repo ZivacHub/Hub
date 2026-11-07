@@ -23,13 +23,20 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 3.7 Light / dark switch (light by default, remembered) — first visit light; after switching to dark and reloading it stayed dark; screenshots of both (2026-11-07)
   - [ ] 3.8 Milestone: Ivan opens the page and says whether one glance tells him enough
   - [-] 3.4 "Pull out the dashboard" by voice — moved to the optional voice track on 2026-11-07 (D19); comes back as a new step if the voice lives
+- [ ] Phase 11 — Start and stop projects from the dashboard (Ivan's request 2026-11-07)
+  - [ ] 11.1 Project start list: config/projects.json with its own port per project
+  - [ ] 11.2 Start / stop engine with the safety rules (token, same origin, picked list only, log)
+  - [ ] 11.3 Start / Stop buttons on the cards with a "Start X?" question
+  - [ ] 11.4 "Open in Claude Code" button
+  - [ ] 11.5 Start with the PC: one Hub entry (Ivan runs the install file) and a switch per project
+  - [ ] 11.6 Milestone: Ivan starts ClipForge from the page and ticks one project for start-up
 - [~] Phase 6 — Claude's latest answers and "needs you" alerts (stage 2: 6.1, 6.2, 6.4 first, 6.3 last)
   - [~] 6.1 Find the latest Claude answer per project (read-only) — reads the saved chat files (last 1.5 MB of the newest file per project); real data returns 6 projects; still to compare with the app for two projects
   - [~] 6.2 Show them on the dashboard — each card shows Claude's last words and time, click for more; waits for the 6.1 comparison
   - [x] 6.4 Never show or speak anything that looks like a secret — redact() in tools/dashboard/lib/data.mjs: fake sk-, AIza, token= and long random strings all became [hidden] (tested 2026-11-07); covers what the page shows, the spoken side stays with the voice track
   - [ ] 6.3 Detect "a chat needs you" and say so
 - [ ] Phase 10 — Dashboard always on and safe (stage 3, no voice needed)
-  - [ ] 10.1 Starts with Windows and opens with one click or one short command
+  - [-] 10.1 Starts with Windows and opens with one click or one short command — merged into 11.5 on 2026-11-07 (D24)
   - [ ] 10.2 Security pass on the page (this PC only, nothing editable, no keys shown)
   - [ ] 10.3 Milestone: Ivan uses it for a day and says what to change
 - [ ] Phase 4 — Answer decisions (by click or by voice, later)
@@ -85,6 +92,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-07 (Ivan: "add both options and also any updates update the git asw", D23, D24, D25): NEW Phase 11 "Start and stop projects from the dashboard" (6 steps, detail in docs/plan/phases/11-start-stop-projects.md), placed right after Phase 3. Step 10.1 merged into 11.5 (marked dropped, reason on its line). Look-only (D20) no longer holds for these buttons. Standing rule: every update is pushed to GitHub after a file list and key scan.
 - 2026-11-07 (Ivan: "lets focus on dashboard itself, so we can menage all projects from there, jarvis is an optional thing and probaly will not live up", then "Yes, dashboard first (Recommended)", D19, D20): plan re-ordered. Dashboard track first: Phase 3 (widened: data feed, design, cards, waiting-decisions list 3.6, Manager card, light/dark switch 3.7, milestone 3.8), then Phase 6 (6.1, 6.2, 6.4 first, 6.3 last), then NEW Phase 10 (always on and safe, no voice), then Phase 4. Voice phases 1, 2, 9, 5, 7, 8 move to an optional voice track at the bottom, kept by the Jarvis chat; nothing deleted, no step renumbered. 3.4 (voice opens the dashboard) marked dropped from this track with the reason on its line. The Jarvis chat last pointed at 2.6 as next: it should now read this board as the dashboard first, voice on the side. Phase 5 steps 5.1 and 5.6 stay in the voice track; Phase 10 covers the same for the page.
 - 2026-11-04 (Ivan: "ok so it will be only gemeni with a new personality", D16): personality work started early, as a relay-only change (answer exactly, only now and then one short dry remark, a dry comment when he repeats a question). Step 8.1 (the off / mild / spicy switch) stays open in Phase 8. Also fixes for Jarvis cutting him off while he thinks and for old answers coming back (Jarvis settings + relay), done beside step 2.6, which is still the next step on the board. AirLLM and an uncensored local model were looked at and not used (D16).
 - 2026-11-03 (Ivan: "Yes, move it up"): NEW Phase 9 "Continue a project's Claude chat by voice" (5 steps, detail in docs/plan/phases/09-continue-claude-chat-by-voice.md), placed right after Phase 2 in the list on purpose (numbers are never changed, so it keeps number 9). It is the narrow first version of Ivan's wish "ask a project what's going on, answer, Claude continues"; Phase 7's 7.3 and 7.4 may shrink later. Its phase gate (preview, search, decisions) still runs before it starts. Messages and email overview are still only recorded as ideas.
