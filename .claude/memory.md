@@ -221,3 +221,8 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-08 (end) - Phase 3 closed (D27)
 - Ivan: "Yes, enough" to the one-glance question (3.8). Phase 3 ticked: 3.1, 3.2, 3.3, 3.5, 3.6, 3.7, 3.8 done, 3.4 dropped to the voice track. Next in board order: Phase 11 (11.5 install + restart and 11.6 try-out need Ivan); an unblocked option meanwhile is the 6.1/6.2 comparison (Claude's latest words vs the app), which needs his OK to run ahead of Phase 11.
+
+## 2026-11-08 (later still) - 6.1 and 6.2 checked against the saved chats; bug found and fixed
+- Ivan said "Yes, do that" to running 6.1/6.2 ahead of Phase 11 (11.5 waits on his install + restart).
+- Independent check (tests/latest_words_check.mjs, whole files, no sub-agent messages): first version of the check (newest file by modified time) matched 6/6, but a stricter one (newest by last-message time across all chats) showed Socials Automatisation wrong: the page had an 8 Oct message, the truth was 8 Nov 14:20. Cause: file modified time moves on renames and similar bookkeeping. Fix in lib/data.mjs answers(): look at every chat file newest-modified first, take the best last-message time, stop once a file is older than that (a file is never modified before its last message); sub-agent (isSidechain) messages skipped; bigger tail (12 MB) when the first 1.5 MB holds no text. Result: 6/6 match.
+- Limit: "compared with the app" means compared with the saved chat files the app writes; the app window itself cannot be read.

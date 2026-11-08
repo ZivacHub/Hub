@@ -111,15 +111,19 @@ function tailLines(file, bytes = 1_500_000) {
   } finally { closeSync(fd); }
 }
 function lastAssistant(file) {
-  const lines = tailLines(file);
-  let title = null;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    let j; try { j = JSON.parse(lines[i]); } catch { continue; }
-    if (!title && j.type === "custom-title") title = j.customTitle || j.title || null;
-    if (j.type === "assistant" && Array.isArray(j.message?.content)) {
-      const text = j.message.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
-      if (text) return { text, at: j.timestamp || null, title };
+  // most chats end with tool calls, so the last text can be further back than the tail: try a small tail, then a bigger one
+  for (const bytes of [1_500_000, 12_000_000]) {
+    const lines = tailLines(file, bytes);
+    let title = null;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let j; try { j = JSON.parse(lines[i]); } catch { continue; }
+      if (!title && j.type === "custom-title") title = j.customTitle || j.title || null;
+      if (j.type === "assistant" && !j.isSidechain && Array.isArray(j.message?.content)) {
+        const text = j.message.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+        if (text) return { text, at: j.timestamp || null, title };
+      }
     }
+    if (statSync(file).size <= bytes) break;
   }
   return null;
 }
@@ -130,21 +134,24 @@ export function answers() {
     for (const r of rows()) {
       if (!r.hasClaudeMd) continue;
       const enc = encode(r.root);
-      let best = null;
+      // a file's modified time is never earlier than its last message, so once a file is older than the best message found,
+      // no older file can beat it; a rename or other bookkeeping can touch a file without any new message, hence we compare message times
+      const files = [];
       for (const f of folders.filter((f) => f === enc || f.startsWith(enc + "-"))) {
         const dir = join(CHATS, f);
-        let files = []; try { files = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch {}
-        for (const n of files) {
-          const m = statSync(join(dir, n)).mtimeMs;
-          if (!best || m > best.m) best = { m, file: join(dir, n) };
-        }
+        let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch {}
+        for (const n of names) files.push({ file: join(dir, n), m: statSync(join(dir, n)).mtimeMs });
       }
-      if (!best) continue;
-      try {
-        const a = lastAssistant(best.file);
-        if (a) out.push({ project: r.name, at: a.at || new Date(best.m).toISOString(), chat: a.title ? redact(clip(a.title, 80)) : null,
-          short: redact(clip(plain(a.text), 220)), long: redact(clip(plain(a.text), 1400)) });
-      } catch { out.push({ project: r.name, at: new Date(best.m).toISOString(), chat: null, short: "Can't read this chat.", long: "" }); }
+      files.sort((x, y) => y.m - x.m);
+      let best = null;
+      for (const f of files) {
+        if (best && f.m < Date.parse(best.at)) break;
+        let a = null; try { a = lastAssistant(f.file); } catch { /* unreadable chat: skip it */ }
+        if (a && a.at && (!best || a.at > best.at)) best = a;
+      }
+      if (!best) { if (files.length) out.push({ project: r.name, at: new Date(files[0].m).toISOString(), chat: null, short: "No answer found in this project's chats.", long: "" }); continue; }
+      out.push({ project: r.name, at: best.at, chat: best.title ? redact(clip(best.title, 80)) : null,
+        short: redact(clip(plain(best.text), 220)), long: redact(clip(plain(best.text), 1400)) });
     }
     return { generatedAt: new Date().toISOString(), answers: out };
   });
