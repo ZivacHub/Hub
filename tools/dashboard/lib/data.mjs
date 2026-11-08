@@ -10,7 +10,8 @@ const lib = await import(pathToFileURL(join(homedir(), ".claude", "hooks", "lib"
 const { summarize } = await import(pathToFileURL(join(HERE, "..", "..", "hub_status", "status.mjs")).href);
 
 const CHATS = join(homedir(), ".claude", "projects");
-const MANAGER = process.env.HUB_MANAGER_URL || "http://127.0.0.1:8000";
+// the Hub starts the Manager on 18000; 8000 is its old default (and ClipForge's openshorts container uses 8000, so identity is checked below)
+const MANAGER_URLS = process.env.HUB_MANAGER_URL ? [process.env.HUB_MANAGER_URL] : ["http://127.0.0.1:18000", "http://127.0.0.1:8000"];
 
 // ---------- 6.4: nothing that looks like a secret is ever sent to the page ----------
 const SECRET_PATTERNS = [
@@ -150,21 +151,27 @@ export function answers() {
 }
 
 // ---------- 3.5 the AI_Orcestration Manager (GET only, 1.5 s timeout) ----------
-async function get(path) {
-  const res = await fetch(MANAGER + path, { signal: AbortSignal.timeout(1500) });
+async function get(path, base) {
+  const res = await fetch(base + path, { signal: AbortSignal.timeout(1500) });
   return { status: res.status, body: res.ok ? await res.json().catch(() => null) : null };
 }
 export function manager() {
   return cachedAsync("manager", 5000, async () => {
-    try {
-      const h = await get("/health");
-      if (h.status === 401 || h.status === 403) return { running: true, note: "Running, but it asks for its key, so the Hub can't read it." };
-      if (!h.body) return { running: false, note: "Manager not running." };
-      const [g, q] = await Promise.all([get("/goal").catch(() => ({})), get("/queue").catch(() => ({}))]);
-      const goal = g.body && (g.body.goal?.title || g.body.goal?.text || g.body.title || (typeof g.body.goal === "string" ? g.body.goal : null));
-      return { running: true, queueDepth: h.body.queue_depth ?? null, goal: goal ? redact(clip(plain(goal), 160)) : null,
-        note: goal ? null : "Running, no active goal." };
-    } catch { return { running: false, note: "Manager not running." }; }
+    for (const base of MANAGER_URLS) {
+      try {
+        const h = await get("/health", base);
+        if (h.status === 401 || h.status === 403) return { running: true, url: base, note: "Running, but it asks for its key, so the Hub can't read it." };
+        // only the real Manager reports a queue depth; anything else on this port is some other program
+        if (!h.body || !("queue_depth" in h.body)) continue;
+        // /health also counts finished and dead tasks in queue_depth; /status has the real breakdown
+        const st = (await get("/status", base).catch(() => ({}))).body;
+        const pending = st && st.queue ? Number(st.queue.PENDING || 0) : null;
+        const goalText = st && st.goal && st.goal.description ? st.goal.description : null;
+        return { running: true, url: base, queueDepth: pending ?? h.body.queue_depth ?? null, busy: !!(st && st.run_active),
+          goal: goalText ? redact(clip(plain(goalText), 160)) : null, note: goalText ? null : "Running, no active goal." };
+      } catch { /* try the next address */ }
+    }
+    return { running: false, note: "Manager not running." };
   });
 }
 

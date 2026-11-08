@@ -182,8 +182,9 @@ function render(data) {
   const running = mrt ? mrt.status === "running" : manager.running;
   $("manager").replaceChildren(h("div", { class: "mgr" },
     h("div", { class: "mgr-line" }, h("span", { class: "dot" + (running ? " on" : mrt && mrt.status === "starting" ? " busy" : ""), "aria-hidden": "true" }), running ? "Running" : mrt && mrt.status === "starting" ? "Starting…" : "Not running"),
-    manager.goal ? h("p", {}, manager.goal) : null,
-    manager.running && manager.queueDepth !== null && manager.queueDepth !== undefined ? h("p", {}, `${manager.queueDepth} task${manager.queueDepth === 1 ? "" : "s"} in the queue`) : null,
+    running && manager.goal ? h("p", {}, manager.goal) : null,
+    running && manager.busy ? h("p", {}, "Working on a task now.") : null,
+    running && manager.queueDepth !== null && manager.queueDepth !== undefined ? h("p", {}, `${manager.queueDepth} task${manager.queueDepth === 1 ? "" : "s"} waiting in the queue`) : null,
     manager.note && !mrt ? h("p", {}, manager.note) : null,
     controls("AI_Orcestration", { claude: false })));
 }

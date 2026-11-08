@@ -25,9 +25,9 @@
     },
     {
       "id": "manager", "name": "AI_Orcestration", "label": "AI_Orcestration Manager", "cwd": "ai_company",
-      "command": [".venv/Scripts/python.exe", "-m", "uvicorn", "server:app", "--host", "127.0.0.1", "--port", "8000", "--log-level", "warning"],
-      "port": 8000,
-      "note": "Started by the Hub on this PC only (the Manager's own file would listen on every network interface)."
+      "command": [".venv/Scripts/python.exe", "-m", "uvicorn", "server:app", "--host", "127.0.0.1", "--port", "18000", "--log-level", "warning"],
+      "port": 18000,
+      "note": "Started by the Hub on this PC only, on port 18000 (port 8000 is used by ClipForge's openshorts container, and the Manager's own file would listen on every network interface)."
     }
   ]
 }
