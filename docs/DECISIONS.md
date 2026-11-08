@@ -176,3 +176,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-07):** "Nah it looks good upload it to git and thats it for showcase."
 **Result:** Look approved (light default, dark switch, cards with Start / Stop / Open in Claude Code). Everything is on GitHub (public, MIT) for the CV. Open steps stay on the board for real use; no more showcase work is planned.
 **Affects:** step 3.2, README, Phase 3 close
+
+## D27 — One glance tells enough: Phase 3 is done   [decided 2026-11-08]
+**Question:** Does one glance at the dashboard tell you enough (step 3.8)?
+**The owner said (2026-11-08):** "Yes, enough" (after seeing the page with the Start / Stop buttons and the real Start and Stop tests of Learning Script Maker and the Manager).
+**Result:** Phase 3 is closed. Any later wishes for the page become new steps with the next free numbers.
+**Affects:** Phase 3 (3.8), plan order
