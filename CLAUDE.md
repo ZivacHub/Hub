@@ -41,7 +41,7 @@ No new skills were installed (search found nothing worth adding; paid voice skil
 - UI work: Design stack above · DB: none · Docs/versions: context7
 
 ## Current state
-- Plan v2, re-ordered 2026-11-07 (D19): dashboard first, voice optional (Jarvis chat). Dashboard runs: `node tools/dashboard/server.mjs` (real data, http://127.0.0.1:4780) or `--demo` (sample data). Steps 3.1, 3.3, 3.6, 3.7, 6.4, 11.1-11.3 done; 3.2 waits for Ivan's look approval; Phase 11 (start/stop projects, open in Claude Code, start with PC; D23-D25) waits on 11.4-11.6 (real tests with Ivan). Standing rule (Ivan 2026-11-07): every update is committed and pushed to GitHub; the repo is PUBLIC, so list the files and scan for keys first. This chat owns tools/dashboard/; the Jarvis chat owns tools/jarvis_trial/.
+- Plan v2, re-ordered 2026-11-07 (D19): dashboard first, voice optional (Jarvis chat). Dashboard runs: `node tools/dashboard/server.mjs` (real data, http://127.0.0.1:4780) or `--demo` (sample data). Phase 3 and Phase 6 done (3.8 and the look approved by Ivan, D26/D27; 6.3 chat-needs-you alerts from the saved chat files); Phase 11 steps 11.1-11.4 done; Phase 11 (start/stop projects, open in Claude Code, start with PC; D23-D25) waits on 11.4-11.6 (real tests with Ivan). Standing rule (Ivan 2026-11-07): every update is committed and pushed to GitHub; the repo is PUBLIC, so list the files and scan for keys first. This chat owns tools/dashboard/; the Jarvis chat owns tools/jarvis_trial/.
 
 ## How we work here (BUSNUS workflow v3, details in ~/.claude/CLAUDE.md)
 - docs/PRODUCT.md = the goal in the owner's words (compass). docs/plan/BOARD.md = progress, in order. docs/DECISIONS.md = what the owner decided.

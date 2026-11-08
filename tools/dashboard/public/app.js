@@ -35,6 +35,9 @@ let runtime = [];                   // one entry per startable project
 let lastData = null;                // last render input, so the question row survives the 30 s refresh
 let asking = null;                  // { kind, name, id, label, text } while a "...?" row is open
 let note = "";
+let needs = [];                     // chats that are waiting for Ivan (from /api/needs-you)
+const needsFor = (name) => needs.filter((n) => n.project === name);
+const waited = (iso) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : (d => d === 1 ? "1 day" : `${d} days`)(Math.round(m / 1440)); };
 const rtFor = (name) => runtime.find((r) => r.name === name);
 
 function setNote(text, bad = false) { note = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
@@ -81,6 +84,10 @@ async function send(body, retry = true) {
   const r = await fetch("/api/action", { method: "POST", headers: { "Content-Type": "application/json", "X-Hub-Token": session.token }, body: JSON.stringify({ ...body, confirm: true }) });
   if (r.status === 403 && retry) { session = null; return send(body, false); } // the server was restarted: fetch the new token once
   return r.json().catch(() => ({ ok: false, error: "The Hub answered something unexpected." }));
+}
+
+async function loadNeeds() {
+  try { needs = (await (await fetch("/api/needs-you", { cache: "no-store" })).json()).items || []; } catch { /* keep the last list */ }
 }
 
 async function loadRuntime() {
@@ -141,6 +148,9 @@ function card(p, answer) {
     h("div", { class: "meta" },
       needs ? h("span", { class: "pill" }, `${p.decisionsWaiting} waiting on you`) : h("span", { class: "pill quiet" }, "nothing waiting"),
       h("span", { class: stale ? "stale" : "" }, saved(p.handoffDaysOld))),
+    needsFor(p.name).slice(0, 1).map((n) => h("div", { class: "asking" },
+      h("div", { class: "asking-top" }, h("span", { class: "pill" }, n.state === "permission" ? "Maybe waiting for permission" : "Claude is asking you"), h("span", {}, `waiting ${waited(n.since)}`)),
+      h("p", { class: "asking-q" }, n.snippet))),
     controls(p.name),
     answer ? h("details", { class: "said" },
       h("summary", {}, h("span", { class: "when" }, `Claude last said · ${ago(answer.at)}${answer.chat ? " · " + answer.chat : ""}`), h("span", { class: "short" }, answer.short)),
@@ -161,6 +171,7 @@ function render(data) {
     h("b", {}, `${ready.length} projects`), ` with a plan · `,
     h("b", {}, waiting === 0 ? "nothing" : `${waiting} decision${waiting > 1 ? "s" : ""}`), " waiting on you",
     unset.length ? ` · ${unset.length} not set up` : "",
+    needs.length ? ` · ${needs.length} chat${needs.length > 1 ? "s" : ""} waiting for you` : "",
     runtime.some((r) => r.status === "running") ? ` · ${runtime.filter((r) => r.status === "running").length} running` : "");
 
   $("active-count").textContent = active.length;
@@ -171,6 +182,13 @@ function render(data) {
   $("unset-section").hidden = unset.length === 0;
   $("unset-count").textContent = unset.length;
   $("unset").replaceChildren(...unset.map((p) => h("li", {}, p.name)));
+
+  $("needs-panel").hidden = needs.length === 0;
+  $("needs-count").textContent = needs.length || "";
+  $("needs").replaceChildren(...needs.map((n) => h("li", {},
+    h("div", { class: "w-top" }, h("b", {}, n.project), h("span", {}, `waiting ${waited(n.since)}${n.state === "permission" ? " · maybe permission" : ""}`)),
+    n.chat ? h("div", { class: "w-title" }, n.chat) : null,
+    h("div", { class: "w-q" }, n.snippet))));
 
   $("wait-count").textContent = waiting ? waiting : "";
   $("waitlist").replaceChildren(...(waiting ? decisions.map((d) => h("li", {},
@@ -191,7 +209,7 @@ function render(data) {
 
 async function load() {
   const get = async (path) => { const r = await fetch(path, { cache: "no-store" }); if (!r.ok) throw new Error(path); return r.json(); };
-  const [p, d, a, m] = await Promise.allSettled([get("/api/projects"), get("/api/decisions"), get("/api/answers"), get("/api/manager"), loadRuntime()]);
+  const [p, d, a, m] = await Promise.allSettled([get("/api/projects"), get("/api/decisions"), get("/api/answers"), get("/api/manager"), loadRuntime(), loadNeeds()]);
   if (p.status !== "fulfilled") { $("banner").hidden = false; return; }
   $("banner").hidden = true;
   $("demo-tag").hidden = !p.value.demo;

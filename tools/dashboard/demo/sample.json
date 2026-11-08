@@ -254,5 +254,25 @@
       "startSeconds": 60,
       "canStart": true
     }
+  ],
+  "needsYou": [
+    {
+      "project": "Clip Studio",
+      "chat": "Captions step 4.2",
+      "state": "question",
+      "why": "next-step-box",
+      "urgent": true,
+      "agoMinutes": 95,
+      "snippet": "Which caption style should I burn in: word-by-word highlight or whole sentences?"
+    },
+    {
+      "project": "Job Applier",
+      "chat": "Match scoring",
+      "state": "question",
+      "why": "ends-with-question",
+      "urgent": false,
+      "agoMinutes": 1500,
+      "snippet": "Should the cut-off be 70 percent, or show everything sorted by score?"
+    }
   ]
 }

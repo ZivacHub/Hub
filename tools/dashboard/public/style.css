@@ -187,3 +187,9 @@ a.run.on:hover { text-decoration: underline; }
 .note { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); z-index: 20;
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 0.875rem; box-shadow: var(--shadow); }
 .note.bad { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
+
+/* chat waiting for Ivan (step 6.3) */
+.asking { display: grid; gap: 4px; background: var(--warn-bg); border-radius: 10px; padding: 8px 10px; font-size: 0.8125rem; }
+.asking-top { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--warn); }
+.asking .pill { background: transparent; padding: 0; font-weight: 700; }
+.asking-q { color: var(--ink); font-size: 0.875rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

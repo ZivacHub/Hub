@@ -29,6 +29,10 @@
 
 <main class="layout">
   <aside class="side" aria-label="Waiting on you and the Manager">
+    <section class="panel" id="needs-panel" aria-labelledby="h-needs" hidden>
+      <h2 id="h-needs">Chats waiting for you <span class="count" id="needs-count"></span></h2>
+      <ul class="waitlist" id="needs"></ul>
+    </section>
     <section class="panel" aria-labelledby="h-wait">
       <h2 id="h-wait">Waiting on you <span class="count" id="wait-count"></span></h2>
       <ul class="waitlist" id="waitlist"></ul>

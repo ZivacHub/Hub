@@ -9,6 +9,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const lib = await import(pathToFileURL(join(homedir(), ".claude", "hooks", "lib", "busnus.mjs")).href);
 const { summarize } = await import(pathToFileURL(join(HERE, "..", "..", "hub_status", "status.mjs")).href);
 
+import { chatsNeedingYou } from "./attention.mjs";
 const CHATS = join(homedir(), ".claude", "projects");
 // the Hub starts the Manager on 18000; 8000 is its old default (and ClipForge's openshorts container uses 8000, so identity is checked below)
 const MANAGER_URLS = process.env.HUB_MANAGER_URL ? [process.env.HUB_MANAGER_URL] : ["http://127.0.0.1:18000", "http://127.0.0.1:8000"];
@@ -154,6 +155,22 @@ export function answers() {
         short: redact(clip(plain(best.text), 220)), long: redact(clip(plain(best.text), 1400)) });
     }
     return { generatedAt: new Date().toISOString(), answers: out };
+  });
+}
+
+// ---------- 6.3 chats that need Ivan (decided from the saved chat files, see attention.mjs) ----------
+export function needsYou() {
+  return cached("needsYou", 15000, () => {
+    let folders = []; try { folders = readdirSync(CHATS); } catch {}
+    const items = [];
+    for (const r of rows()) {
+      if (!r.hasClaudeMd) continue;
+      const enc = encode(r.root);
+      const dirs = folders.filter((f) => f === enc || f.startsWith(enc + "-")).map((f) => join(CHATS, f));
+      for (const c of chatsNeedingYou(dirs)) items.push({ project: r.name, chat: c.title ? redact(clip(c.title, 80)) : null, state: c.state, why: c.why || null, urgent: !!c.urgent, since: c.at, snippet: redact(clip(plain(c.snippet), 220)) });
+    }
+    items.sort((a, b) => b.urgent - a.urgent || String(b.since).localeCompare(String(a.since)));
+    return { generatedAt: new Date().toISOString(), items };
   });
 }
 
