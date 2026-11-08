@@ -35,6 +35,19 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 6.2 Show them on the dashboard — each card shows "Claude last said", its time and chat title, click for the longer text (screenshots in docs/screenshots/, sample data); the text on the real page equals what 6.1 verified (2026-11-08)
   - [x] 6.4 Never show or speak anything that looks like a secret — redact() in tools/dashboard/lib/data.mjs: fake sk-, AIza, token= and long random strings all became [hidden] (tested 2026-11-07); covers what the page shows, the spoken side stays with the voice track
   - [x] 6.3 Detect "a chat needs you" and say so — no hooks and no change to Claude's settings: tools/dashboard/lib/attention.mjs decides from the saved chat files (turn ended + the next-step box asked something or the last paragraph ends with "?"; an open question tool; a tool call open for over 3 minutes = "maybe waiting for permission"). `node tools/dashboard/lib/attention.mjs --selftest` 15/15 on made-up chats, including "answering clears the alert". On the real chats (2026-11-08): Job Application and Family_WiFi flagged with their real questions, a pending question in the ClipForge chat flagged as urgent within a minute, the four quiet chats not flagged; 236 ms. The dashboard marks the card (amber "Claude is asking you", how long, the question), lists them in "Chats waiting for you" and counts them in the top line; /api/needs-you is ready for the voice track ("Game is waiting for you"), which stays in the Jarvis chat
+- [ ] Phase 12 — Running now and done (Ivan's wish 2026-11-09)
+  - [ ] 12.1 List what is running: programs the Hub started, Claude chats that are working, the Manager's queue
+  - [ ] 12.2 "Running now" panel on the dashboard
+  - [ ] 12.3 "Everything is done" notice (D28: only tell, never shut down)
+  - [ ] 12.4 Keep the Hub quiet: measure its cost, slow its refresh when nobody is looking
+  - [ ] 12.5 Milestone: Ivan sees the overview while real work runs and says what to change
+- [ ] Phase 13 — Game mode (Ivan's wish 2026-11-09)
+  - [ ] 13.1 Detect a game: his game list, fullscreen app with a busy graphics card, an ignore list
+  - [ ] 13.2 Slow-down engine: lowest priority, fewer processor cores and a memory ceiling for programs the Hub started; restore afterwards
+  - [ ] 13.3 Pause graphics-heavy programs the Hub started while a game runs
+  - [ ] 13.4 Game-mode indicator and manual override on the dashboard
+  - [ ] 13.5 Smoothness test with a fake game load: numbers with and without the slow-down
+  - [ ] 13.6 Milestone: Ivan plays his game with a background task running and says whether it was smooth
 - [ ] Phase 10 — Dashboard always on and safe (stage 3, no voice needed)
   - [-] 10.1 Starts with Windows and opens with one click or one short command — merged into 11.5 on 2026-11-07 (D24)
   - [ ] 10.2 Security pass on the page (this PC only, nothing editable, no keys shown)
@@ -92,6 +105,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-09 (Ivan: "Add both", after his wishes of the same day and D28 to D31): NEW Phase 12 "Running now and done" (5 steps) and Phase 13 "Game mode" (6 steps), placed after Phase 6 and before Phase 10 so the security pass covers the new routes; details in docs/plan/phases/12-running-now-and-done.md and 13-game-mode.md. Their phase gates (preview, search, decisions: game list and ceilings) still run before each starts. No step dropped or renumbered.
 - 2026-11-08 (no plan change): Phase 3 closed. Step 3.8 ticked on Ivan's "Yes, enough" (D27); 3.5 ticked after the real Manager start/stop test; 3.4 stays dropped (moved to the voice track, D19). Next unfinished phase in board order: Phase 11 (11.5 and 11.6 need Ivan).
 - 2026-11-07 (Ivan: "Nah it looks good upload it to git and thats it for showcase."): step 3.2 ticked (look approved); the dashboard is declared done as a showcase. Remaining steps (3.5 live Manager, 3.8, 6.1/6.2 comparison, 11.4 to 11.6, Phase 10) stay open on the board for real use, nothing dropped.
 - 2026-11-07 (Ivan: "add both options and also any updates update the git asw", D23, D24, D25): NEW Phase 11 "Start and stop projects from the dashboard" (6 steps, detail in docs/plan/phases/11-start-stop-projects.md), placed right after Phase 3. Step 10.1 merged into 11.5 (marked dropped, reason on its line). Look-only (D20) no longer holds for these buttons. Standing rule: every update is pushed to GitHub after a file list and key scan.
