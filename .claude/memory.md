@@ -206,3 +206,9 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-07 (end) - Look approved, showcase done (D26)
 - Ivan: "Nah it looks good upload it to git and thats it for showcase." Step 3.2 ticked, D26 logged, everything pushed (repo public, MIT). Open steps stay for real use: 3.5, 3.8, 6.1/6.2 comparison, 11.4 to 11.6, Phase 10.
+
+## 2026-11-08 - Pickup, Manager start-up finding, first real Start/Stop test (11.3, 11.4)
+- Pickup: next by the board was 3.5 (Manager running for real). Read the Manager's start-up code first: on EVERY start it runs prune_ephemeral_projects() and deletes leftover throwaway "run-*" projects (one exists now: AI_Orcestration/ai_company/projects/run-2f1ed04a); it starts no task and spends nothing. Ivan chose "Learning Script Maker first (Recommended)" over backup-then-Manager or Manager-as-is (card on 2026-11-08, no decision id: a how-to-test choice). The Manager test is still open and still needs his choice (backup first, or as is).
+- Ivan: "Cant you test it?" So Claude pressed Start / Yes / Stop / Yes on the Learning Script Maker card of the real page (playwright-cli): Running in about 6 s, 200 on 127.0.0.1:18767, listening only on 127.0.0.1, Stop closed the port and left no process; logs/script-maker.log shows a normal uvicorn start; Hub action log has start and stop lines. Also pressed Open in Claude Code on Hub: log ok, a Windows Terminal window "Claude Code - Hub - claude" opened.
+- Blocked: killing the process tree of that terminal window was denied by the permission classifier; not worked around. The window stays open until Ivan closes it. Lesson: do not open terminal windows as a test unless the plan has a way to close them without killing process trees.
+- Remote Control was switched on and the chat renamed by the pickup.
