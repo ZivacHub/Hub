@@ -182,3 +182,27 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-08):** "Yes, enough" (after seeing the page with the Start / Stop buttons and the real Start and Stop tests of Learning Script Maker and the Manager).
 **Result:** Phase 3 is closed. Any later wishes for the page become new steps with the next free numbers.
 **Affects:** Phase 3 (3.8), plan order
+
+## D28 — When everything is done: only tell me   [decided 2026-11-09]
+**Question:** When all background work is finished, what should the PC do (shut down, sleep, or only tell)?
+**The owner said (2026-11-09):** chose "Only tell me". (He had first wished: "I dont realy turn off my pc so it would be good if it could do its work, and when everything is done, basically turn off".)
+**Result:** No automatic shutdown or sleep. The dashboard shows an "everything is done" notice (the voice can say it later, voice track). Turning the PC off stays his. Can be reopened any time.
+**Affects:** Phase 12 (the "everything is done" notice)
+
+## D29 — Game detection: automatic plus his game list   [decided 2026-11-09]
+**Question:** How should the Hub know he is playing a game?
+**The owner said (2026-11-09):** chose "Automatic + my game list (Recommended)".
+**Result:** A game is on when a program from his list of games runs, or any fullscreen app runs while the graphics card is busy; he can tell the Hub to ignore an app (e.g. a video player). Windows can report the app in front (checked 2026-11-09). The list of games and the ignore list are his to give at the phase gate.
+**Affects:** Phase 13
+
+## D30 — Background work during a game: slow down, never stop   [decided 2026-11-09]
+**Question:** While a game runs, how should the background work behave?
+**The owner said (2026-11-09):** chose "Slow down, never stop (Recommended)". His wish: "lower all other tasks, so I can play my game normally, but still tasks are running ... maintain the CPU and graphics card and memory. Percentage level".
+**Result:** Background programs get the lowest priority and a ceiling he picks (proposed: at most 25 percent of the processor and 2 GB of memory); graphics-heavy tasks pause, because Windows has no per-program graphics limit (to be confirmed on his PC in the first test); light tasks keep going; everything returns to normal when the game ends. Not chosen: one task at a time, pause everything.
+**Affects:** Phase 13
+
+## D31 — Which programs the Hub may slow down or pause: only what it started   [decided 2026-11-09]
+**Question:** Which programs may the Hub slow down or pause?
+**The owner said (2026-11-09):** chose "Only what the Hub started (Recommended)".
+**Result:** Only programs started from the dashboard (config/projects.json: ClipForge, Learning Script Maker, Job Application, Student Job Assistant, the Manager). Claude chats and programs he started himself are shown in the "running now" overview but never slowed or paused.
+**Affects:** Phase 13, Phase 12

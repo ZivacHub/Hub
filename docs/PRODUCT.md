@@ -30,6 +30,8 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 - REORDERED (Ivan, 2026-11-05): "lets focus on dashboard itself, so we can menage all projects from there, jarvis is an optional thing and probaly will not live up". The dashboard is now the main product; Jarvis/voice is optional and runs in its own chat. First page shows: project cards, all waiting decisions in one list, Claude's latest answer per project, the Manager card. Look only at first. Light and clean by default, with a dark mode switch.
 - ALSO LATER (Ivan, 2026-11-03): "have overview of my messages, emails and such"; "the ability to boot up certain projects ... ask him, hey, what's going on there? And he will tell me, and then I can answer him. And then the Claude will continue working on the project with what I said." (Fits phases 4 and 7; messages/emails are new and not yet in the plan. Instagram has no official route for personal accounts; see docs/reference/PRIOR_ART.md.)
 
+- NEW WISHES (Ivan, 2026-11-09; phases proposed, not yet approved): "I dont realy turn off my pc so it would be good if it could do its work, and when everything is done, basically turn off"; "a silent mode, so it doesn't waste our resources"; "an ability to overview all the tasks that is basically running by the Claude or the other projects"; if I'm in a game "lower all other tasks, so I can play my game normally, but still tasks are running, maybe one by one" with CPU, graphics card and memory percentage limits.
+
 ## Not doing (on purpose)
 - No Anthropic API key, no paid voice, no other languages, no phone app or sharing, not a replacement for the AI_Orcestration Manager (it uses it).
 
