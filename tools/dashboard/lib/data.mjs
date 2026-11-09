@@ -52,7 +52,21 @@ async function cachedAsync(key, ms, fn) {
 }
 
 // one scan of all project folders, shared by every endpoint
-const rows = () => cached("rows", 15000, () => lib.collectProjects());
+// The scan runs git in every project, so it is redone only when one of the files the cards are built from changed (a stat-only check), or after 5 minutes (new commits).
+const BUSNUS_ROOT = join(HERE, "..", "..", "..", "..");
+const WATCH = ["CLAUDE.md", "PLAN.md", "DECISIONS.md", join("docs", "plan", "BOARD.md"), join("docs", "DECISIONS.md"), join(".claude", "handoff.md")];
+function docFingerprint() {
+  let sig = ""; let names = []; try { names = readdirSync(BUSNUS_ROOT); } catch { return sig; }
+  for (const n of names) { if (n.startsWith(".") || n.startsWith("_")) continue; for (const w of WATCH) { try { sig += statSync(join(BUSNUS_ROOT, n, w)).mtimeMs + ","; } catch { sig += "-,"; } } sig += "|"; }
+  return sig;
+}
+let rowsCache = null;
+const rows = () => {
+  const sig = docFingerprint();
+  if (rowsCache && rowsCache.sig === sig && Date.now() - rowsCache.at < 5 * 60_000) return rowsCache.value;
+  rowsCache = { sig, at: Date.now(), value: lib.collectProjects() };
+  return rowsCache.value;
+};
 
 // ---------- 3.1 projects ----------
 export function projects() {

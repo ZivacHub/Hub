@@ -197,3 +197,6 @@ a.run.on:hover { text-decoration: underline; }
 /* running now (step 12.2) */
 .runlist .w-top { align-items: center; }
 .runlist .dot { margin-right: 2px; }
+
+.done { color: var(--ok); font-size: 0.9375rem; margin-bottom: 8px; }
+.done b { font-weight: 650; }

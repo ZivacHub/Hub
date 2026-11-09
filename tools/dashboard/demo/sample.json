@@ -294,7 +294,8 @@
       "project": "Clip Studio",
       "label": "Clip Studio",
       "agoMinutes": 140,
-      "detail": "port 4317"
+      "detail": "port 4317",
+      "busy": true
     },
     {
       "kind": "outside",

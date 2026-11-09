@@ -132,8 +132,11 @@ export function makeControl(opts = {}) {
     for (const id of Object.keys(st.autostart)) { const r = await start(id); log("boot-start", id, r.ok ? "ok" : r.error); await new Promise((d) => setTimeout(d, 2000)); }
   }
 
+  /** { id: pid } of the programs this engine started that are still alive. */
+  function startedPids() { const st = readState(); const out = {}; for (const [id, rec] of Object.entries(st.started)) if (rec && alive(rec.pid)) out[id] = rec.pid; return out; }
+
   function fail(action, id, error) { log(action, id, "refused: " + error); return { ok: false, error }; }
-  return { config, runtime, start, stop, setAutostart, openClaude, bootStart, readState };
+  return { config, runtime, start, stop, setAutostart, openClaude, bootStart, readState, startedPids };
 }
 
 // ---------- self-test: a fake project started and stopped through the real engine ----------

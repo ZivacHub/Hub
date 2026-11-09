@@ -26,7 +26,9 @@ const HEADERS = {
   "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store",
 };
 
-import { buildRunning } from "./lib/running.mjs";
+import { buildRunning, workCount } from "./lib/running.mjs";
+import { makeBusyMeter } from "./lib/cpu.mjs";
+import { makeDoneTracker } from "./lib/done.mjs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
@@ -34,6 +36,8 @@ const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
 const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true, projects: sample.projects });
 
 // a fresh secret per run: only the page this server serves can read it (no CORS headers are ever sent), so other websites cannot use the POST route
+const meter = makeBusyMeter();          // processor use of the programs the Hub started (only measured while there are any)
+const doneTracker = makeDoneTracker();  // "everything is done" (D28: only tells, never shuts down)
 const TOKEN = randomBytes(24).toString("hex");
 let allowedOrigins = [];
 
@@ -42,9 +46,13 @@ const api = {
   "/api/decisions": () => (DEMO ? { generatedAt: new Date().toISOString(), decisions: sample.decisions } : real.decisions()),
   "/api/answers": () => (DEMO ? { generatedAt: new Date().toISOString(), answers: sample.answers.map((a) => ({ ...a, at: ago(a.agoMinutes) })) } : real.answers()),
   "/api/running": async () => {
-    if (DEMO) return { generatedAt: new Date().toISOString(), items: sample.running.map((x) => ({ ...x, since: x.agoMinutes === undefined ? null : ago(x.agoMinutes) })) };
+    if (DEMO) return { generatedAt: new Date().toISOString(), items: sample.running.map((x) => ({ ...x, since: x.agoMinutes === undefined ? null : ago(x.agoMinutes) })), done: sample.done || { allDone: false, finishedAt: null } };
     const [runtime, manager] = await Promise.all([control.runtime(), real.manager()]);
-    return { generatedAt: new Date().toISOString(), items: buildRunning({ runtime, chats: real.workingChats(), manager }) };
+    const pids = control.startedPids();
+    const byPid = await meter.read(Object.values(pids));
+    const busy = Object.fromEntries(Object.entries(pids).map(([id, pid]) => [id, byPid[pid] ?? null]));
+    const items = buildRunning({ runtime, chats: real.workingChats(), manager, busy });
+    return { generatedAt: new Date().toISOString(), items, done: doneTracker.update(workCount(items)) };
   },
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),

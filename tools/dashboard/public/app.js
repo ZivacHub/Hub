@@ -35,7 +35,8 @@ let runtime = [];                   // one entry per startable project
 let lastData = null;                // last render input, so the question row survives the 30 s refresh
 let asking = null;                  // { kind, name, id, label, text } while a "...?" row is open
 let note = "";
-let runningNow = [];                   // what is working right now (from /api/running)
+let runningNow = [];
+let doneInfo = { allDone: false, finishedAt: null };   // "everything is done" (from /api/running)                   // what is working right now (from /api/running)
 let needs = [];                     // chats that are waiting for Ivan (from /api/needs-you)
 const needsFor = (name) => needs.filter((n) => n.project === name);
 const waited = (iso) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : (d => d === 1 ? "1 day" : `${d} days`)(Math.round(m / 1440)); };
@@ -88,7 +89,7 @@ async function send(body, retry = true) {
 }
 
 async function loadRunning() {
-  try { runningNow = (await (await fetch("/api/running", { cache: "no-store" })).json()).items || []; } catch { /* keep the last list */ }
+  try { const j = await (await fetch("/api/running", { cache: "no-store" })).json(); runningNow = j.items || []; doneInfo = j.done || { allDone: false, finishedAt: null }; } catch { /* keep the last list */ }
 }
 
 async function loadNeeds() {
@@ -194,6 +195,9 @@ function render(data) {
     h("div", { class: "w-top" }, h("span", { class: "dot " + (r.kind === "program" ? "on" : r.kind === "outside" ? "" : "busy"), "aria-hidden": "true" }), h("b", {}, r.project), h("span", {}, KIND[r.kind] || r.kind)),
     r.kind === "chat" && r.label ? h("div", { class: "w-title" }, r.label) : h("div", { class: "w-title" }, r.label),
     (parts => parts ? h("div", { class: "w-q" }, parts) : null)([r.kind === "outside" ? null : r.detail, r.since ? `for ${waited(r.since)}` : null].filter(Boolean).join(" · ")))) : [h("li", {}, h("p", { class: "empty" }, "Nothing is running."))]));
+  $("done-note").hidden = !doneInfo.allDone;
+  if (doneInfo.allDone) $("done-note").replaceChildren(h("b", {}, "Everything is done"), ` · finished ${new Date(doneInfo.finishedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+  document.title = doneInfo.allDone ? "Hub · everything is done" : "Hub";
 
   $("needs-panel").hidden = needs.length === 0;
   $("needs-count").textContent = needs.length || "";

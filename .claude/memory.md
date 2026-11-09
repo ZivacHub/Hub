@@ -250,3 +250,8 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-09 (later) - Step 12.2: Running now panel
 - Panel in the side column fed by /api/running; refresh 10 s in front, 2 min hidden, 30 s for the rest; top line "N running now". Bug while building: a module variable named running was shadowed by a local const in render() (temporal dead zone: the page stuck on "Loading"): renamed runningNow. Lesson: check the console after every UI edit.
+
+## 2026-11-09 (later) - Steps 12.3 (built, live check pending) and 12.4 (quiet Hub)
+- 12.3: done.mjs (tracker with injected clock), cpu.mjs (PowerShell sums the processor time of a started program's whole process tree; busy = at least 3 percent of a core between two readings 20 s apart; unknown counts as work so "done" is never said too early), running.mjs workCount, server wiring (meter + tracker), page: green line in Running now and tab title. An app that is up but idle (Learning Script Maker) is not work. Startup CPU makes a fresh program read busy for its first ~30 s: correct.
+- 12.4 numbers (above): the big costs were collectProjects (git in 19 folders) every 15 s and re-parsing 3 MB chat tails every poll. Fixes: docFingerprint() stat check in data.mjs (rescan only when a document changed or after 5 min), attention.mjs summarize()/decide() split with a per-file cache (path + modified time + size), 400 KB tail first. Lesson: measure the cost of polling before saying it is quiet: the first version was 8x too expensive.
+- Open: confirm the real "Everything is done" notice after the turn ends (background logger), then 12.5 milestone with Ivan.

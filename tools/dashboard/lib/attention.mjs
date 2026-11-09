@@ -26,41 +26,50 @@ function runStart(rows) {
   return rows[i].timestamp || null;
 }
 
-/** rows = the main-chain user and assistant rows of one chat, oldest first. Returns { state, at, snippet, urgent } or null. */
-export function classify(rows, nowMs = Date.now()) {
+/** The part of a chat's state that only changes when the file changes (so it can be remembered per file). rows = the main-chain user and
+ *  assistant rows, oldest first. */
+export function summarize(rows) {
   if (!rows.length) return null;
   const last = rows[rows.length - 1];
-  const at = last.timestamp || null;
-  const age = at ? nowMs - Date.parse(at) : 0;
-  const since = runStart(rows);
-  if (last.type === "user") return { state: age < STOPPED_AFTER_MS ? "working" : "stopped", at, since };
-
-  const lastBlocks = blocksOf(last);
-  const tools = lastBlocks.filter((b) => b.type === "tool_use");
-  if (tools.length) {
-    const q = tools.find((t) => t.name === "AskUserQuestion");
-    if (q) return { state: "question", why: "question-tool", urgent: true, at, snippet: String(q.input?.questions?.[0]?.question || "A question is open") };
-    if (age > PERMISSION_AFTER_MS) return { state: "permission", at, snippet: `Maybe waiting for your permission to run ${tools[0].name.replace(/^mcp__/, "").slice(0, 40)}` };
-    return { state: "working", at, since };
+  const tools = blocksOf(last).filter((b) => b.type === "tool_use");
+  const out = { lastType: last.type, at: last.timestamp || null, since: runStart(rows), toolNames: tools.map((t) => String(t.name || "")), questionTool: null, boxAsk: null, boxBlocked: false, lastPara: "" };
+  const q = tools.find((t) => t.name === "AskUserQuestion");
+  if (q) out.questionTool = String(q.input?.questions?.[0]?.question || "A question is open");
+  if (last.type === "assistant" && !tools.length) {
+    // the assistant ended its turn: look at what that turn said to Ivan
+    let i = rows.length - 1; while (i >= 0 && !isUserText(rows[i])) i--;
+    let box = null;
+    for (const r of rows.slice(i + 1)) for (const b of blocksOf(r)) if (b.type === "tool_use" && /wrap_up$/.test(b.name || "")) box = b.input || null;
+    const text = blocksOf(last).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+    out.lastPara = (text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).pop() || "").slice(-400);
+    if (box && String(box.ask || "").trim()) { out.boxAsk = String(box.ask); out.boxBlocked = box.blocked === true; }
   }
+  return out;
+}
 
-  // the assistant ended its turn: look at what that turn said to Ivan
-  let i = rows.length - 1; while (i >= 0 && !isUserText(rows[i])) i--;
-  const turn = rows.slice(i + 1);
-  let box = null;
-  for (const r of turn) for (const b of blocksOf(r)) if (b.type === "tool_use" && /wrap_up$/.test(b.name || "")) box = b.input || null;
-  const text = lastBlocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-  const lastPara = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).pop() || "";
-  if (box && String(box.ask || "").trim()) return { state: "question", why: "next-step-box", urgent: box.blocked === true, at, snippet: String(box.ask) };
-  if (/\?["')\]]*\s*$/.test(lastPara)) return { state: "question", why: "ends-with-question", urgent: false, at, snippet: lastPara };
+/** The part that depends on the clock: working, waiting for a question, maybe waiting for permission, stopped, idle. Returns { state, at, ... } or null. */
+export function decide(sm, nowMs = Date.now()) {
+  if (!sm) return null;
+  const at = sm.at; const age = at ? nowMs - Date.parse(at) : 0;
+  if (sm.lastType === "user") return { state: age < STOPPED_AFTER_MS ? "working" : "stopped", at, since: sm.since };
+  if (sm.toolNames.length) {
+    if (sm.questionTool) return { state: "question", why: "question-tool", urgent: true, at, snippet: sm.questionTool };
+    if (age > PERMISSION_AFTER_MS) return { state: "permission", at, snippet: `Maybe waiting for your permission to run ${sm.toolNames[0].replace(/^mcp__/, "").slice(0, 40)}` };
+    return { state: "working", at, since: sm.since };
+  }
+  if (sm.boxAsk) return { state: "question", why: "next-step-box", urgent: sm.boxBlocked, at, snippet: sm.boxAsk };
+  if (/\?["')\]]*\s*$/.test(sm.lastPara)) return { state: "question", why: "ends-with-question", urgent: false, at, snippet: sm.lastPara };
   return { state: "idle", at };
 }
+
+/** rows = the main-chain user and assistant rows of one chat, oldest first. Returns { state, at, snippet, urgent } or null. */
+export const classify = (rows, nowMs = Date.now()) => decide(summarize(rows), nowMs);
 
 // ---------- real chat files ----------
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
 
-function tailRows(file, bytes = 3_000_000) {
+function tailRows(file, bytes) {
   const size = statSync(file).size; const fd = openSync(file, "r");
   let lines;
   try { const len = Math.min(size, bytes); const buf = Buffer.alloc(len); readSync(fd, buf, 0, len, size - len); lines = buf.toString("utf8").split("\n"); if (size > len) lines.shift(); } finally { closeSync(fd); }
@@ -71,18 +80,31 @@ function tailRows(file, bytes = 3_000_000) {
     if (j.type === "custom-title") title = j.customTitle || j.title || title;
     else if ((j.type === "user" || j.type === "assistant") && !j.isSidechain) rows.push(j);
   }
-  return { rows, title };
+  return { rows, title, complete: size <= bytes };
+}
+
+// A chat file is only read again when it changed (same path, modified time and size = same summary). Most chats are idle most of the time.
+const fileCache = new Map();
+function summaryOfFile(p, m, size) {
+  const hit = fileCache.get(p);
+  if (hit && hit.m === m && hit.size === size) return hit;
+  let r = tailRows(p, 400_000);
+  if (!r.complete && !r.rows.some(isUserText)) r = tailRows(p, 3_000_000); // a very long turn: look further back
+  const entry = { m, size, summary: summarize(r.rows), title: r.title };
+  fileCache.set(p, entry);
+  if (fileCache.size > 200) fileCache.delete(fileCache.keys().next().value);
+  return entry;
 }
 
 /** For one project: every recent chat (last message within maxDays) that needs Ivan, newest first. */
 export function chatsNeedingYou(chatDirs, { maxDays = 7, nowMs = Date.now(), max = 6 } = {}) {
   const files = [];
-  for (const dir of chatDirs) { let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { continue; } for (const n of names) { const p = join(dir, n); try { files.push({ p, m: statSync(p).mtimeMs }); } catch { /* skip */ } } }
+  for (const dir of chatDirs) { let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { continue; } for (const n of names) { const p = join(dir, n); try { const st = statSync(p); files.push({ p, m: st.mtimeMs, size: st.size }); } catch { /* skip */ } } }
   files.sort((a, b) => b.m - a.m);
   const out = [];
   for (const f of files) {
     if (nowMs - f.m > maxDays * 86_400_000) break; // older than the window (and so is every file after it)
-    let c; try { const { rows, title } = tailRows(f.p); c = classify(rows, nowMs); if (c) c.title = title; } catch { continue; }
+    let c; try { const e = summaryOfFile(f.p, f.m, f.size); c = decide(e.summary, nowMs); if (c) c.title = e.title; } catch { continue; }
     if (c && (c.state === "question" || c.state === "permission") && c.at && nowMs - Date.parse(c.at) <= maxDays * 86_400_000) out.push(c);
     if (out.length >= max) break;
   }
@@ -92,12 +114,12 @@ export function chatsNeedingYou(chatDirs, { maxDays = 7, nowMs = Date.now(), max
 /** For one project: the chats that are working right now (last row mid-turn, under 30 minutes old), newest first. */
 export function chatsWorking(chatDirs, { nowMs = Date.now() } = {}) {
   const files = [];
-  for (const dir of chatDirs) { let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { continue; } for (const n of names) { const p = join(dir, n); try { files.push({ p, m: statSync(p).mtimeMs }); } catch { /* skip */ } } }
+  for (const dir of chatDirs) { let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { continue; } for (const n of names) { const p = join(dir, n); try { const st = statSync(p); files.push({ p, m: st.mtimeMs, size: st.size }); } catch { /* skip */ } } }
   files.sort((a, b) => b.m - a.m);
   const out = [];
   for (const f of files) {
     if (nowMs - f.m > STOPPED_AFTER_MS) break; // a chat that is working touches its file at least every few minutes
-    try { const { rows, title } = tailRows(f.p); const c = classify(rows, nowMs); if (c && c.state === "working") out.push({ ...c, title }); } catch { /* skip */ }
+    try { const e = summaryOfFile(f.p, f.m, f.size); const c = decide(e.summary, nowMs); if (c && c.state === "working") out.push({ ...c, title: e.title }); } catch { /* skip */ }
   }
   return out;
 }
@@ -132,6 +154,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   ok("tool result last and recent: working", s([user(10), call(2, "Bash"), result(1)]) === "working");
   ok("answering clears the alert", s([user(10), say(9, "Which one?")]) === "question" && s([user(10), say(9, "Which one?"), user(2, "A")]) === "working");
   ok("empty chat: nothing", classify([], NOW) === null);
+  ok("the remembered summary gives the same answer as classify, now and later", (() => { const rows = [user(10), say(9, "Which one?")]; const sm = summarize(rows); return decide(sm, NOW).state === "question" && decide(sm, NOW + 600_000).state === "question" && JSON.stringify(decide(sm, NOW)) === JSON.stringify(classify(rows, NOW)); })());
   ok("a working chat knows when its work began", classify([user(40, "old"), say(39, "ok"), user(7, "now do this"), call(1, "Bash")], NOW).since === t(7));
   ok("work after a long pause counts from the end of the pause", classify([user(900, "start"), say(899, "Which one?"), result(2.5), call(1, "Bash")], NOW).since === t(2.5));
   process.exit(bad ? 1 : 0);
