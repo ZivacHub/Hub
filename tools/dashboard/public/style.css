@@ -193,3 +193,7 @@ a.run.on:hover { text-decoration: underline; }
 .asking-top { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; color: var(--warn); }
 .asking .pill { background: transparent; padding: 0; font-weight: 700; }
 .asking-q { color: var(--ink); font-size: 0.875rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* running now (step 12.2) */
+.runlist .w-top { align-items: center; }
+.runlist .dot { margin-right: 2px; }

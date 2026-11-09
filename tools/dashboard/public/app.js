@@ -35,6 +35,7 @@ let runtime = [];                   // one entry per startable project
 let lastData = null;                // last render input, so the question row survives the 30 s refresh
 let asking = null;                  // { kind, name, id, label, text } while a "...?" row is open
 let note = "";
+let runningNow = [];                   // what is working right now (from /api/running)
 let needs = [];                     // chats that are waiting for Ivan (from /api/needs-you)
 const needsFor = (name) => needs.filter((n) => n.project === name);
 const waited = (iso) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : (d => d === 1 ? "1 day" : `${d} days`)(Math.round(m / 1440)); };
@@ -86,6 +87,10 @@ async function send(body, retry = true) {
   return r.json().catch(() => ({ ok: false, error: "The Hub answered something unexpected." }));
 }
 
+async function loadRunning() {
+  try { runningNow = (await (await fetch("/api/running", { cache: "no-store" })).json()).items || []; } catch { /* keep the last list */ }
+}
+
 async function loadNeeds() {
   try { needs = (await (await fetch("/api/needs-you", { cache: "no-store" })).json()).items || []; } catch { /* keep the last list */ }
 }
@@ -100,7 +105,7 @@ async function pollWhileStarting() {
   const until = Date.now() + 5 * 60_000;
   while (Date.now() < until) {
     await new Promise((d) => setTimeout(d, 2000));
-    await loadRuntime(); if (lastData) render(lastData);
+    await Promise.all([loadRuntime(), loadRunning()]); if (lastData) render(lastData);
     if (!runtime.some((r) => r.status === "starting")) break;
   }
   polling = false;
@@ -114,7 +119,7 @@ async function perform(a) {
   setNote("Working on it…");
   const r = await send(body);
   setNote(r.ok ? r.message : r.error || "That did not work.", !r.ok);
-  await loadRuntime(); if (lastData) render(lastData);
+  await Promise.all([loadRuntime(), loadRunning()]); if (lastData) render(lastData);
   if (r.ok && a.kind === "start") pollWhileStarting();
 }
 
@@ -172,7 +177,7 @@ function render(data) {
     h("b", {}, waiting === 0 ? "nothing" : `${waiting} decision${waiting > 1 ? "s" : ""}`), " waiting on you",
     unset.length ? ` · ${unset.length} not set up` : "",
     needs.length ? ` · ${needs.length} chat${needs.length > 1 ? "s" : ""} waiting for you` : "",
-    runtime.some((r) => r.status === "running") ? ` · ${runtime.filter((r) => r.status === "running").length} running` : "");
+    runningNow.length ? ` · ${runningNow.length} running now` : "");
 
   $("active-count").textContent = active.length;
   $("active").replaceChildren(...active.map((p) => card(p, byName.get(p.name))));
@@ -182,6 +187,13 @@ function render(data) {
   $("unset-section").hidden = unset.length === 0;
   $("unset-count").textContent = unset.length;
   $("unset").replaceChildren(...unset.map((p) => h("li", {}, p.name)));
+
+  const KIND = { chat: "Claude chat", manager: "Manager", program: "Started by the Hub", outside: "Started outside the Hub" };
+  $("running-count").textContent = runningNow.length || "";
+  $("running").replaceChildren(...(runningNow.length ? runningNow.map((r) => h("li", {},
+    h("div", { class: "w-top" }, h("span", { class: "dot " + (r.kind === "program" ? "on" : r.kind === "outside" ? "" : "busy"), "aria-hidden": "true" }), h("b", {}, r.project), h("span", {}, KIND[r.kind] || r.kind)),
+    r.kind === "chat" && r.label ? h("div", { class: "w-title" }, r.label) : h("div", { class: "w-title" }, r.label),
+    (parts => parts ? h("div", { class: "w-q" }, parts) : null)([r.kind === "outside" ? null : r.detail, r.since ? `for ${waited(r.since)}` : null].filter(Boolean).join(" · ")))) : [h("li", {}, h("p", { class: "empty" }, "Nothing is running."))]));
 
   $("needs-panel").hidden = needs.length === 0;
   $("needs-count").textContent = needs.length || "";
@@ -209,7 +221,7 @@ function render(data) {
 
 async function load() {
   const get = async (path) => { const r = await fetch(path, { cache: "no-store" }); if (!r.ok) throw new Error(path); return r.json(); };
-  const [p, d, a, m] = await Promise.allSettled([get("/api/projects"), get("/api/decisions"), get("/api/answers"), get("/api/manager"), loadRuntime(), loadNeeds()]);
+  const [p, d, a, m] = await Promise.allSettled([get("/api/projects"), get("/api/decisions"), get("/api/answers"), get("/api/manager"), loadRuntime(), loadNeeds(), loadRunning()]);
   if (p.status !== "fulfilled") { $("banner").hidden = false; return; }
   $("banner").hidden = true;
   $("demo-tag").hidden = !p.value.demo;
@@ -239,4 +251,14 @@ paintToggle();
 
 $("active").replaceChildren(...[0, 1, 2].map(() => h("div", { class: "skeleton" })));
 load();
-setInterval(() => { if (!asking) load(); }, REFRESH_MS); // a refresh never closes a question that is open
+// refresh rhythm (D32): the running panel every 10 s and the rest every 30 s while the page is in front; once every 2 minutes while the tab is hidden.
+// A refresh never closes a question that is open.
+let ticks = 0;
+setInterval(async () => {
+  ticks++;
+  if (document.hidden) { if (ticks % 12 === 0 && !asking) load(); return; }
+  if (asking) return;
+  if (ticks % 3 === 0) load();
+  else { await loadRunning(); if (lastData) render(lastData); }
+}, 10_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !asking) load(); });

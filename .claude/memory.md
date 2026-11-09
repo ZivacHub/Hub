@@ -247,3 +247,6 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - 12.1 built: lib/running.mjs buildRunning (program, outside, chat, manager), attention.mjs chatsWorking + a start time = first row after the last 10-minute pause, control.mjs runtime gets startedAt, data.mjs workingChats, GET /api/running (+ sample data).
 - Lesson: in the saved chats Ivan's answers to the app's question boxes (AskUserQuestion) arrive as tool_result rows, not typed user rows; only typed messages are user text rows. A chat that waited overnight for an answer is "working" from the answer, so the start time uses pauses, not the last typed message. (The waiting-for-you detector only needs the typed rows inside one turn, which is unaffected.)
 - Windows does not tell which project folder a program belongs to, so "outside the Hub" covers only the Hub's own list (D32 note).
+
+## 2026-11-09 (later) - Step 12.2: Running now panel
+- Panel in the side column fed by /api/running; refresh 10 s in front, 2 min hidden, 30 s for the rest; top line "N running now". Bug while building: a module variable named running was shadowed by a local const in render() (temporal dead zone: the page stuck on "Loading"): renamed runningNow. Lesson: check the console after every UI edit.
