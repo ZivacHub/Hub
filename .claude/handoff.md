@@ -2,7 +2,7 @@
 Git: main @ a71224c "Step 12.2: Running now panel on the dashboard" · pushed: yes (repo ZivacHub/Hub is PUBLIC, D21) · uncommitted: steps 12.3 and 12.4 and this handoff (committed and pushed right after)
 
 ## Where we are in the plan
-Phase 11 of 14 — Start and stop projects from the dashboard, in progress (11.5 and 11.6 need Ivan). Steps done 27/69. Phases 3 and 6 are CLOSED. Beside it, with Ivan's OK ("Yes, start 12"), Phase 12 "Running now and done" is under way: 12.1, 12.2, 12.4 done, 12.3 built (live confirmation pending), 12.5 is his milestone. Phase 13 (Game mode) is next after that; its gate needs his game names, ceilings and which programs use the graphics card. Plan v2: dashboard first, voice track optional at the bottom (D19).
+Phase 11 of 14 — Start and stop projects from the dashboard, in progress (11.5 and 11.6 need Ivan). Steps done 28/69. Phases 3 and 6 are CLOSED. Beside it, with Ivan's OK ("Yes, start 12"), Phase 12 "Running now and done" is under way: 12.1, 12.2, 12.4 done, 12.3 done (live proof logged), 12.5 is his milestone. Phase 13 (Game mode) is next after that; its gate needs his game names, ceilings and which programs use the graphics card. Plan v2: dashboard first, voice track optional at the bottom (D19).
 (Copied from docs/plan/BOARD.md.)
 
 ## What we're building
@@ -11,10 +11,10 @@ A local dashboard of all BUSNUS projects: cards, one list of waiting decisions, 
 ## Last session
 - Phase 12 gate passed (search shown, five defaults accepted: D32). 12.1: GET /api/running (tools/dashboard/lib/running.mjs; chats working, Hub-started programs, programs started outside the Hub from the Hub's list, Manager busy). 12.2: Running now panel (10 s refresh in front, 2 min hidden). 12.3 built: lib/done.mjs, lib/cpu.mjs (busy = at least 3 percent of a core; idle servers are not work), green "Everything is done · finished HH:MM" line and tab title; self-tests all pass. 12.4: measured and fixed: page open cost 6.6 percent of a core before, 0.83 percent after; 0 percent and 55 MB with no page open.
 - Lessons: Ivan's answers to the app's question boxes arrive as tool results, so "work since" counts from the last 10-minute pause; a module variable named `running` was shadowed in render() and froze the page (check the console after each UI edit); polling cost must be measured (first version 8x too costly).
-- Left unfinished: 12.3 live proof (a background logger polls /api/running every 30 s into the scratchpad file done-log.txt; after this chat's turn ends the line should show allDone true with the time the last work was seen; read it first, then tick 12.3), 12.5 (Ivan watches the panel with real work), 11.5, 11.6, Phase 13, Phase 10.
+- Left unfinished: 12.5 (Ivan watches the panel with real work), 11.5, 11.6, Phase 13, Phase 10.
 
 ## Next steps (strictly in order; step 1 is where the next session starts)
-1. Step 12.3: read the scratchpad file done-log.txt (or call GET /api/running on http://127.0.0.1:4780): when no chat is working and nothing the Hub started is busy for 2 minutes, `done.allDone` must be true with a `finishedAt`; if true, tick 12.3 with that proof (and check that this chat shows as working again while a turn runs). Then 12.5: Ivan watches the Running now panel while real work runs and says what to change.
+1. Step 12.5: Ivan watches the Running now panel while real work runs (he can start Learning Script Maker from its card and keep a chat busy) and says what to change; tick 12.5 with his words, which closes Phase 12. (12.3 was confirmed live: the done notice fired 2 minutes after this chat's turn ended.)
    Read first: docs/plan/phases/12-running-now-and-done.md, docs/DECISIONS.md
 2. Step 11.5: ask Ivan to double-click Install Hub Autostart.bat, switch on "Start with PC" for ONE harmless project (not ClipForge: it publishes on its own schedule while open), restart the PC, and say whether it came up (he rarely turns the PC off: ask when it suits him); then 11.6 (his own try-out).
    Read first: docs/plan/phases/11-start-stop-projects.md, docs/reference/SECURITY_CHECKLIST.md
@@ -39,4 +39,4 @@ A local dashboard of all BUSNUS projects: cards, one list of waiting decisions, 
 - Voice track (Jarvis chat): start with tools/jarvis_trial/start_jarvis_trial.ps1, never Jarvis.exe alone; C:\Users\Ivan\.config\jarvis\config.json holds the Gemini key, never print or commit it.
 
 ## Running / not committed
-- Services running: the real dashboard on http://127.0.0.1:4780 (started by this chat, hidden window; stop node on that port); a background logger writing done-log.txt in the scratchpad (ends by itself after about 8 minutes); the Manager and Learning Script Maker are stopped; the Jarvis chat's services may still run  ·  Not committed: steps 12.3 and 12.4 and this handoff until the push right after this file
+- Services running: the real dashboard on http://127.0.0.1:4780 (started by this chat, hidden window; stop node on that port); the Manager and Learning Script Maker are stopped; the Jarvis chat's services may still run  ·  Not committed: steps 12.3 and 12.4 and this handoff until the push right after this file
