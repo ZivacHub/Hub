@@ -241,3 +241,9 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-09 (later still) - Phases 12 and 13 added to the plan
 - Ivan: "Add both". Phase 12 "Running now and done" (12.1 to 12.5) and Phase 13 "Game mode" (13.1 to 13.6) are on the board after Phase 6 and before Phase 10 (so the security pass covers the new routes); phase files written; Change log line added. Their phase gates (search, his game list and ceilings) still run before each starts. Phase 11 (11.5 install + restart, 11.6) still waits on Ivan.
+
+## 2026-11-09 - Phase 12 gate passed (D32) and step 12.1 done
+- Ivan: "Yes, start 12", then "Accept all and start" for five defaults (D32). Search shown: abtop (MIT, Rust, Windows), Claude-Code-Agent-Monitor (MIT, hooks), sniffly, claude-code-monitor (Mac): ideas only.
+- 12.1 built: lib/running.mjs buildRunning (program, outside, chat, manager), attention.mjs chatsWorking + a start time = first row after the last 10-minute pause, control.mjs runtime gets startedAt, data.mjs workingChats, GET /api/running (+ sample data).
+- Lesson: in the saved chats Ivan's answers to the app's question boxes (AskUserQuestion) arrive as tool_result rows, not typed user rows; only typed messages are user text rows. A chat that waited overnight for an answer is "working" from the answer, so the start time uses pauses, not the last typed message. (The waiting-for-you detector only needs the typed rows inside one turn, which is unaffected.)
+- Windows does not tell which project folder a program belongs to, so "outside the Hub" covers only the Hub's own list (D32 note).

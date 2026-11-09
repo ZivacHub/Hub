@@ -66,7 +66,7 @@ export function makeControl(opts = {}) {
       if (!open && !ownAlive && rec) { error = lastLogLine(e.id) || "It stopped right after starting."; delete st.started[e.id]; writeState(st); }
       out.push({
         id: e.id, name: e.name, label: e.label, port: e.port, url: `http://127.0.0.1:${e.port}`, status, error,
-        startedByHub: ownAlive, startWithPc: !!st.autostart[e.id], warn: e.warn || "", note: e.note || "",
+        startedByHub: ownAlive, startedAt: ownAlive ? rec.at : null, startWithPc: !!st.autostart[e.id], warn: e.warn || "", note: e.note || "",
         startSeconds: e.startSeconds || 60, canStart: existsSync(dirOf(e)) && programFound(e),
       });
     }

@@ -274,5 +274,33 @@
       "agoMinutes": 1500,
       "snippet": "Should the cut-off be 70 percent, or show everything sorted by score?"
     }
+  ],
+  "running": [
+    {
+      "kind": "chat",
+      "project": "Clip Studio",
+      "label": "Captions step 4.3",
+      "agoMinutes": 6,
+      "detail": "Claude is working"
+    },
+    {
+      "kind": "manager",
+      "project": "AI_Orcestration",
+      "label": "AI_Orcestration Manager",
+      "detail": "running a task"
+    },
+    {
+      "kind": "program",
+      "project": "Clip Studio",
+      "label": "Clip Studio",
+      "agoMinutes": 140,
+      "detail": "port 4317"
+    },
+    {
+      "kind": "outside",
+      "project": "Script Maker",
+      "label": "Script Maker",
+      "detail": "started outside the Hub"
+    }
   ]
 }

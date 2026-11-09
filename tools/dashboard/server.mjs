@@ -26,6 +26,7 @@ const HEADERS = {
   "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store",
 };
 
+import { buildRunning } from "./lib/running.mjs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
@@ -40,6 +41,11 @@ const api = {
   "/api/projects": () => (DEMO ? demoProjects() : real.projects()),
   "/api/decisions": () => (DEMO ? { generatedAt: new Date().toISOString(), decisions: sample.decisions } : real.decisions()),
   "/api/answers": () => (DEMO ? { generatedAt: new Date().toISOString(), answers: sample.answers.map((a) => ({ ...a, at: ago(a.agoMinutes) })) } : real.answers()),
+  "/api/running": async () => {
+    if (DEMO) return { generatedAt: new Date().toISOString(), items: sample.running.map((x) => ({ ...x, since: x.agoMinutes === undefined ? null : ago(x.agoMinutes) })) };
+    const [runtime, manager] = await Promise.all([control.runtime(), real.manager()]);
+    return { generatedAt: new Date().toISOString(), items: buildRunning({ runtime, chats: real.workingChats(), manager }) };
+  },
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),
   "/api/runtime": () => (DEMO ? { demo: true, items: sample.runtime } : control.runtime().then((items) => ({ demo: false, items }))),

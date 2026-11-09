@@ -14,13 +14,26 @@ const STOPPED_AFTER_MS = 30 * MIN;     // the last row is Ivan's or a tool resul
 const blocksOf = (r) => (Array.isArray(r.message?.content) ? r.message.content : typeof r.message?.content === "string" ? [{ type: "text", text: r.message.content }] : []);
 const isUserText = (r) => r.type === "user" && !r.isMeta && blocksOf(r).some((b) => b.type === "text" && String(b.text || "").trim()) && !blocksOf(r).some((b) => b.type === "tool_result");
 
+/** When this stretch of work began: the first row after the last pause of 10 minutes or more. (A chat that waited overnight for an
+ *  answer and then carried on is "working since the answer", not "since last night": answers to question boxes arrive as tool results.) */
+function runStart(rows) {
+  let i = rows.length - 1;
+  while (i > 0) {
+    const gap = Date.parse(rows[i].timestamp) - Date.parse(rows[i - 1].timestamp);
+    if (!(gap < 10 * MIN)) break;
+    i--;
+  }
+  return rows[i].timestamp || null;
+}
+
 /** rows = the main-chain user and assistant rows of one chat, oldest first. Returns { state, at, snippet, urgent } or null. */
 export function classify(rows, nowMs = Date.now()) {
   if (!rows.length) return null;
   const last = rows[rows.length - 1];
   const at = last.timestamp || null;
   const age = at ? nowMs - Date.parse(at) : 0;
-  if (last.type === "user") return { state: age < STOPPED_AFTER_MS ? "working" : "stopped", at };
+  const since = runStart(rows);
+  if (last.type === "user") return { state: age < STOPPED_AFTER_MS ? "working" : "stopped", at, since };
 
   const lastBlocks = blocksOf(last);
   const tools = lastBlocks.filter((b) => b.type === "tool_use");
@@ -28,7 +41,7 @@ export function classify(rows, nowMs = Date.now()) {
     const q = tools.find((t) => t.name === "AskUserQuestion");
     if (q) return { state: "question", why: "question-tool", urgent: true, at, snippet: String(q.input?.questions?.[0]?.question || "A question is open") };
     if (age > PERMISSION_AFTER_MS) return { state: "permission", at, snippet: `Maybe waiting for your permission to run ${tools[0].name.replace(/^mcp__/, "").slice(0, 40)}` };
-    return { state: "working", at };
+    return { state: "working", at, since };
   }
 
   // the assistant ended its turn: look at what that turn said to Ivan
@@ -76,6 +89,19 @@ export function chatsNeedingYou(chatDirs, { maxDays = 7, nowMs = Date.now(), max
   return out.sort((a, b) => (b.urgent === true) - (a.urgent === true) || String(b.at).localeCompare(String(a.at)));
 }
 
+/** For one project: the chats that are working right now (last row mid-turn, under 30 minutes old), newest first. */
+export function chatsWorking(chatDirs, { nowMs = Date.now() } = {}) {
+  const files = [];
+  for (const dir of chatDirs) { let names = []; try { names = readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch { continue; } for (const n of names) { const p = join(dir, n); try { files.push({ p, m: statSync(p).mtimeMs }); } catch { /* skip */ } } }
+  files.sort((a, b) => b.m - a.m);
+  const out = [];
+  for (const f of files) {
+    if (nowMs - f.m > STOPPED_AFTER_MS) break; // a chat that is working touches its file at least every few minutes
+    try { const { rows, title } = tailRows(f.p); const c = classify(rows, nowMs); if (c && c.state === "working") out.push({ ...c, title }); } catch { /* skip */ }
+  }
+  return out;
+}
+
 // ---------- self-test on made-up chats (no real files) ----------
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -106,5 +132,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   ok("tool result last and recent: working", s([user(10), call(2, "Bash"), result(1)]) === "working");
   ok("answering clears the alert", s([user(10), say(9, "Which one?")]) === "question" && s([user(10), say(9, "Which one?"), user(2, "A")]) === "working");
   ok("empty chat: nothing", classify([], NOW) === null);
+  ok("a working chat knows when its work began", classify([user(40, "old"), say(39, "ok"), user(7, "now do this"), call(1, "Bash")], NOW).since === t(7));
+  ok("work after a long pause counts from the end of the pause", classify([user(900, "start"), say(899, "Which one?"), result(2.5), call(1, "Bash")], NOW).since === t(2.5));
   process.exit(bad ? 1 : 0);
 }

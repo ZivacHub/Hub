@@ -20,4 +20,4 @@ One panel on the dashboard says what is working right now: the programs the Hub 
 - D31: programs that are not the Hub's are shown, never touched.
 
 ## Phase gate record
-- Plain-words preview shown 2026-11-09 (the wishes and the questions). Skills/repos search: (to show before the first build step). Decisions asked: D28, D31. The owner's go: plan approved 2026-11-09 ("Add both"); the phase gate itself still runs when it starts.
+- Plain-words preview shown 2026-11-09. Skills/repos search shown 2026-11-09: GitHub (Claude-session monitors, process dashboards) and the skills catalog (process monitor): closest are graykode/abtop (MIT, Rust, Windows, terminal tool that finds Claude sessions from process and file state), hoangsonww/Claude-Code-Agent-Monitor (MIT, needs hooks), chiphuyen/sniffly (MIT, reads chat logs), claude-code-monitor (MIT, Mac only); nothing worth adopting as code, ideas only, no code copied. Decisions asked: D28, D31, D32 (five defaults, accepted). The owner's go: 2026-11-09 ("Yes, start 12", "Accept all and start").
