@@ -1,8 +1,8 @@
-# Handoff: Hub   (updated 2026-11-09)
-Git: main @ a71224c "Step 12.2: Running now panel on the dashboard" · pushed: yes (repo ZivacHub/Hub is PUBLIC, D21) · uncommitted: steps 12.3 and 12.4 and this handoff (committed and pushed right after)
+# Handoff: Hub   (updated 2026-11-11)
+Git: main @ 803931e "Step 12.3 confirmed live: everything-is-done fired two minutes after the last work" · pushed: yes (repo ZivacHub/Hub is PUBLIC, D21) · uncommitted: the Phase 12 close (12.5, D33) and this handoff (committed and pushed right after)
 
 ## Where we are in the plan
-Phase 11 of 14 — Start and stop projects from the dashboard, in progress (11.5 and 11.6 need Ivan). Steps done 28/69. Phases 3 and 6 are CLOSED. Beside it, with Ivan's OK ("Yes, start 12"), Phase 12 "Running now and done" is under way: 12.1, 12.2, 12.4 done, 12.3 done (live proof logged), 12.5 is his milestone. Phase 13 (Game mode) is next after that; its gate needs his game names, ceilings and which programs use the graphics card. Plan v2: dashboard first, voice track optional at the bottom (D19).
+Phase 11 of 14 — Start and stop projects from the dashboard, in progress (11.5 and 11.6 need Ivan). Steps done 29/69. Phases 3 and 6 are CLOSED. Beside it, with Ivan's OK ("Yes, start 12"), Phase 12 "Running now and done" is CLOSED (12.5: Ivan, 2026-11-11, "Looks good", D33). Phase 13 (Game mode) is next after that; its gate needs his game names, ceilings and which programs use the graphics card. Plan v2: dashboard first, voice track optional at the bottom (D19).
 (Copied from docs/plan/BOARD.md.)
 
 ## What we're building
@@ -14,15 +14,14 @@ A local dashboard of all BUSNUS projects: cards, one list of waiting decisions, 
 - Left unfinished: 12.5 (Ivan watches the panel with real work), 11.5, 11.6, Phase 13, Phase 10.
 
 ## Next steps (strictly in order; step 1 is where the next session starts)
-1. Step 12.5: Ivan watches the Running now panel while real work runs (he can start Learning Script Maker from its card and keep a chat busy) and says what to change; tick 12.5 with his words, which closes Phase 12. (12.3 was confirmed live: the done notice fired 2 minutes after this chat's turn ended.)
-   Read first: docs/plan/phases/12-running-now-and-done.md, docs/DECISIONS.md
-2. Step 11.5: ask Ivan to double-click Install Hub Autostart.bat, switch on "Start with PC" for ONE harmless project (not ClipForge: it publishes on its own schedule while open), restart the PC, and say whether it came up (he rarely turns the PC off: ask when it suits him); then 11.6 (his own try-out).
+1. Step 11.5: ask Ivan to double-click Install Hub Autostart.bat, switch on "Start with PC" for ONE harmless project (not ClipForge: it publishes on its own schedule while open), restart the PC, and say whether it came up (he rarely turns the PC off: ask when it suits him); then 11.6 (his own try-out). If he does not want to restart yet, offer the Phase 13 gate meanwhile (it needs his OK to run ahead of Phase 11).
    Read first: docs/plan/phases/11-start-stop-projects.md, docs/reference/SECURITY_CHECKLIST.md
-3. Phase 13 gate: plain preview, a visible search (Windows Game Mode, Process Lasso ideas), his game names and ignore list, his ceilings (proposed 25 percent processor, 2 GB), which of his programs use the graphics card; then 13.1 Detect a game. Then Phase 10 (security pass over all routes) and Phase 4.
+2. Phase 13 gate: plain preview, a visible search (Windows Game Mode, Process Lasso ideas), his game names and ignore list, his ceilings (proposed 25 percent processor, 2 GB), which of his programs use the graphics card; then 13.1 Detect a game. 
    Read first: docs/plan/phases/13-game-mode.md, docs/DECISIONS.md
+3. Then Phase 10 (security pass over all routes, including /api/running, /api/needs-you and the POST route) and Phase 4.
 
 ## Waiting on the owner
-- 12.5: his look at the Running now panel with real work; 11.5/11.6: his install + restart + own try-out; closing the leftover "Claude Code - Hub" terminal window (if still open).
+- 11.5/11.6: his install + restart + own try-out; closing the leftover "Claude Code - Hub" terminal window (if still open).
 - For Phase 13: his game names, ceilings, which programs use the graphics card.
 - Small: the LICENSE copyright line "Ivan (ZivacHub)" is my guess (D22); whether the internal notes (decisions, memory, handoff) should stay public (D21); whether chats older than 7 days should ever count as "waiting".
 - D15 nicknames (tools/hub_status/aliases.json); step 2.6 demo and the offline backup model (voice track, Jarvis chat).

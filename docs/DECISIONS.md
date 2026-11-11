@@ -212,3 +212,9 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-09):** chose "Accept all and start (Recommended)".
 **Result:** (1) a chat counts as working when its last message is mid-task and under 30 minutes old; (2) the "Everything is done" notice appears after nothing has run for 2 minutes and clears when new work starts; (3) the panel shows only project name, kind of work and how long, never command lines or chat text; (4) it refreshes every 10 seconds while the page is open and every 2 minutes while the tab is hidden; (5) programs of his that run outside the Hub are listed read-only. Limit found while building (2026-11-09): Windows does not say which project folder a program belongs to, so (5) covers the programs on the Hub's list (config/projects.json) wherever they were started, not arbitrary other programs.
 **Affects:** Phase 12
+
+## D33 — The Running now panel looks good: Phase 12 is done   [decided 2026-11-11]
+**Question:** How does the Running now panel look (step 12.5)?
+**The owner said (2026-11-11):** "Looks good"
+**Result:** Phase 12 closed. Later wishes for the panel become new steps with the next free numbers.
+**Affects:** Phase 12 (12.5)

@@ -258,3 +258,6 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-09 (later still) - 12.3 confirmed live
 - Background logger result: chat:Hub in the Running list at 15:18:43, gone at 15:19:18 when the turn ended, done.allDone true from 15:20:50 (2 minutes of quiet) with finishedAt 14:18:48Z, stable afterwards; ClipForge outside the Hub never counted. 12.3 ticked. Note: the logger's end-of-job message arrived as an automatic notification, not as an answer from Ivan; the 12.5 question to him is still open.
+
+## 2026-11-11 - Phase 12 closed (D33)
+- Ivan: "Looks good" on the Running now panel (12.5). Phase 12 ticked (12.1 to 12.5). Next in board order: Phase 11 (11.5 install + restart, 11.6 try-out: both need him); Phase 13 gate is ready to start with his OK (game names, ceilings, which programs use the graphics card). The session-start check also asks for a first-run audit (no AUDIT.md) and says the project is on template v3, current v4: both only offered to Ivan, nothing applied.
