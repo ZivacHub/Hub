@@ -28,14 +28,15 @@ public static class HubProbe {
   }
 }
 "@
-$watch = @(); if ($Watch) { $watch = $Watch.ToLower().Split(",") | Where-Object { $_ } }
+# (PowerShell variable names are not case-sensitive: $watch and $Watch would be the SAME variable, so the list gets its own name)
+$names = @(); if ($Watch) { $names = @($Watch.ToLower().Split(",") | Where-Object { $_ }) }
 do {
   if ($ParentPid -gt 0 -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }  # the Hub's server is gone: stop
   $fgPid = 0; $full = $false; $cls = ""
   [HubProbe]::Front([ref]$fgPid, [ref]$full, [ref]$cls)
   $fg = $null; if ($fgPid -gt 0) { $p = Get-Process -Id $fgPid -ErrorAction SilentlyContinue; if ($p) { $fg = $p.ProcessName.ToLower() } }
   $hits = @()
-  if ($watch.Count -gt 0) { $hits = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName.ToLower() } | Where-Object { $watch -contains $_ } | Sort-Object -Unique) }
+  if ($names.Count -gt 0) { $hits = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessName.ToLower() } | Where-Object { $names -contains $_ } | Sort-Object -Unique) }
   [pscustomobject]@{ at = (Get-Date).ToString("o"); fg = $fg; full = $full; cls = $cls; running = $hits } | ConvertTo-Json -Compress
   if (-not $Once) { Start-Sleep -Seconds $Seconds }
 } while (-not $Once)

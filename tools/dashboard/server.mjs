@@ -30,6 +30,8 @@ import { buildRunning, workCount } from "./lib/running.mjs";
 import { makeBusyMeter } from "./lib/cpu.mjs";
 import { makeDoneTracker } from "./lib/done.mjs";
 import { loadGamesConfig, makeGameDetector, startProbe } from "./lib/game.mjs";
+import { loadThrottleConfig, makeThrottle } from "./lib/throttle.mjs";
+import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
@@ -40,6 +42,21 @@ const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true,
 const gameCfg = DEMO ? null : loadGamesConfig();
 const gameDetector = DEMO ? null : makeGameDetector({ cfg: gameCfg });   // game mode (Phase 13): is Ivan in a game right now?
 let lastGameSample = null;
+// game mode: when a game starts, slow down what the Hub started; when it ends (or the server finds a finished game), put everything back
+const throttleCfg = DEMO ? null : loadThrottleConfig();
+const throttle = DEMO ? null : makeThrottle({
+  hubPids: () => control.startedPids(), statePath: join(HERE, "..", "..", "data", "game_state.json"), cfg: throttleCfg,
+  log: (action, id, result) => { try { mkdirSync(join(HERE, "..", "..", "logs"), { recursive: true }); appendFileSync(join(HERE, "..", "..", "logs", "hub_actions.log"), `${new Date().toISOString()} ${action} ${id} ${result}\n`); } catch { /* logging never breaks game mode */ } },
+});
+let gameSamples = 0;
+function onGameSample(s) {
+  lastGameSample = { at: s.at, fg: s.fg, full: s.full, gpu: s.gpu };
+  const before = gameDetector.state().on; const after = gameDetector.update(s);
+  gameSamples++;
+  if (!before && after.on) throttle.engage().catch(() => {});
+  else if (before && !after.on) throttle.release().catch(() => {});
+  if (gameSamples === 3) throttle.recover(after.on).catch(() => {}); // a game that was on when the server stopped: decided once the state is stable (3 samples)
+}
 const meter = makeBusyMeter();          // processor use of the programs the Hub started (only measured while there are any)
 const doneTracker = makeDoneTracker();  // "everything is done" (D28: only tells, never shuts down)
 const TOKEN = randomBytes(24).toString("hex");
@@ -58,7 +75,7 @@ const api = {
     const items = buildRunning({ runtime, chats: real.workingChats(), manager, busy });
     return { generatedAt: new Date().toISOString(), items, done: doneTracker.update(workCount(items)) };
   },
-  "/api/game": () => (DEMO ? (sample.game || { on: false, reason: "No game", game: null, since: null, notes: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample }),
+  "/api/game": () => (DEMO ? (sample.game || { on: false, reason: "No game", game: null, since: null, notes: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample, slowdown: throttle.status() }),
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),
   "/api/runtime": () => (DEMO ? { demo: true, items: sample.runtime } : control.runtime().then((items) => ({ demo: false, items }))),
@@ -119,7 +136,8 @@ server.listen(PORT, HOST, async () => {
     // read every project once now so the first page load is quick, then (with --open) open the browser: it never opens to a dead page
     try { if (!DEMO) { console.log("Reading your projects..."); await Promise.all([real.projects(), real.decisions(), real.answers(), real.manager()]); } } catch { /* the page shows its own error */ }
     if (args.includes("--open") && process.platform === "win32") spawn("cmd", ["/c", "start", "", `http://${HOST}:${port}`], { stdio: "ignore", detached: true }).unref();
-    if (!DEMO) startProbe({ cfg: gameCfg, onSample: (s) => { lastGameSample = { at: s.at, fg: s.fg, full: s.full, gpu: s.gpu }; gameDetector.update(s); } });
+    if (!DEMO) startProbe({ cfg: gameCfg, onSample: onGameSample });
+    if (!DEMO) setInterval(() => { if (gameDetector.state().on) throttle.tick().catch(() => {}); }, throttleCfg.reapplySeconds * 1000).unref();
     if (args.includes("--boot") && control) setTimeout(() => control.bootStart().catch(() => {}), 20000);
     console.log("Ready.");
     return;

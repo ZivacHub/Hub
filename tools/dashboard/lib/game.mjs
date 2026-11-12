@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const normName = (s) => String(s || "").toLowerCase().replace(/\.exe$/, "");
 
-export function loadGamesConfig(path = join(HERE, "..", "..", "..", "config", "games.json")) {
+export function loadGamesConfig(path = process.env.HUB_GAMES_CONFIG || join(HERE, "..", "..", "..", "config", "games.json")) {
   const j = JSON.parse(readFileSync(path, "utf8"));
   return { games: j.games || [], clients: j.clients || [], ignore: (j.ignore || []).map(normName), gpuBusyPercent: j.gpuBusyPercent ?? 30, sampleSeconds: j.sampleSeconds ?? 10 };
 }
@@ -126,6 +126,26 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.ar
     } });
     setTimeout(() => { ok("the real probe answered within 15 s", false); p.stop(); resolve(); }, 15_000);
   });
+  // the probe must really SEE a watched program that runs (a renamed copy of node.exe stands in for a game)
+  {
+    const { copyFileSync, mkdirSync, rmSync } = await import("node:fs"); const { tmpdir } = await import("node:os");
+    const dir = join(tmpdir(), "hub-game-test-" + process.pid); mkdirSync(dir, { recursive: true });
+    copyFileSync(process.execPath, join(dir, "hubfakegame.exe"));
+    const fake = spawn(join(dir, "hubfakegame.exe"), ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore", windowsHide: true });
+    await new Promise((d) => setTimeout(d, 1500));
+    const cfg2 = { ...cfg, games: [{ name: "Fake game", exe: ["hubfakegame.exe"] }, ...cfg.games] };
+    await new Promise((resolve) => {
+      const p = startProbe({ cfg: cfg2, once: true, onSample: (s) => {
+        ok("the probe sees a watched program that is really running", s.running.includes("hubfakegame"));
+        ok("...and the rule turns that into a game", decideGame(s, cfg2).game === "Fake game");
+        p.stop(); resolve();
+      } });
+      setTimeout(() => { ok("the probe answered within 15 s", false); p.stop(); resolve(); }, 15_000);
+    });
+    try { fake.kill(); } catch { /* done */ }
+    await new Promise((d) => setTimeout(d, 800));
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* the temp folder is cleaned up by Windows later */ }
+  }
   const g = await gpuPercent();
   g === null ? skip("graphics card load", "nvidia-smi not available") : ok(`graphics card load is readable (${g} percent now)`, g >= 0 && g <= 100);
 
