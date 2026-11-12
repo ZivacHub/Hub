@@ -1,0 +1,19 @@
+{
+  "_note": "Ivan's games (D35) and the rules for noticing a game (D29). 'exe' = the program name of the GAME itself, never the launcher. A game with an empty list is not installed on this PC (checked 2026-11-12: only League of Legends, Roblox and Asphalt Legends are): add its program name when it is installed. The fullscreen rule below also catches games that are not listed.",
+  "games": [
+    { "name": "League of Legends", "exe": ["League of Legends.exe"], "verified": true, "note": "Teamfight Tactics uses the same game program. The Riot client (LeagueClient.exe, RiotClientServices.exe) is NOT the game: while only the client is open, background work runs normally." },
+    { "name": "Roblox", "exe": ["RobloxPlayerBeta.exe"], "verified": true },
+    { "name": "Asphalt Legends", "exe": ["Asphalt9_gdk_x64_rtl.exe"], "verified": true },
+    { "name": "Counter-Strike", "exe": ["cs2.exe"], "verified": false, "note": "not installed on this PC; name from general knowledge" },
+    { "name": "PUBG", "exe": ["TslGame.exe"], "verified": false, "note": "not installed on this PC; name from general knowledge" },
+    { "name": "ARK", "exe": ["ShooterGame.exe"], "verified": false, "note": "not installed on this PC; name from general knowledge" },
+    { "name": "Mortal Kombat 1", "exe": ["MK12.exe"], "verified": false, "note": "not installed on this PC; name from general knowledge" },
+    { "name": "Once Human", "exe": [], "verified": false, "note": "not installed on this PC: add its program name when installed" },
+    { "name": "Cyber Hunter", "exe": [], "verified": false, "note": "not installed on this PC: add its program name when installed" },
+    { "name": "Off The Grid", "exe": [], "verified": false, "note": "not installed on this PC: add its program name when installed" }
+  ],
+  "clients": ["LeagueClient.exe", "LeagueClientUx.exe", "RiotClientServices.exe"],
+  "ignore": ["opera.exe", "chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "vlc.exe", "mpc-hc64.exe", "mpc-hc.exe", "potplayermini64.exe", "wmplayer.exe", "spotify.exe", "explorer.exe", "powerpnt.exe"],
+  "gpuBusyPercent": 30,
+  "sampleSeconds": 10
+}

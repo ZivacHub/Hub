@@ -29,6 +29,7 @@ const HEADERS = {
 import { buildRunning, workCount } from "./lib/running.mjs";
 import { makeBusyMeter } from "./lib/cpu.mjs";
 import { makeDoneTracker } from "./lib/done.mjs";
+import { loadGamesConfig, makeGameDetector, startProbe } from "./lib/game.mjs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
@@ -36,6 +37,9 @@ const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
 const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true, projects: sample.projects });
 
 // a fresh secret per run: only the page this server serves can read it (no CORS headers are ever sent), so other websites cannot use the POST route
+const gameCfg = DEMO ? null : loadGamesConfig();
+const gameDetector = DEMO ? null : makeGameDetector({ cfg: gameCfg });   // game mode (Phase 13): is Ivan in a game right now?
+let lastGameSample = null;
 const meter = makeBusyMeter();          // processor use of the programs the Hub started (only measured while there are any)
 const doneTracker = makeDoneTracker();  // "everything is done" (D28: only tells, never shuts down)
 const TOKEN = randomBytes(24).toString("hex");
@@ -54,6 +58,7 @@ const api = {
     const items = buildRunning({ runtime, chats: real.workingChats(), manager, busy });
     return { generatedAt: new Date().toISOString(), items, done: doneTracker.update(workCount(items)) };
   },
+  "/api/game": () => (DEMO ? (sample.game || { on: false, reason: "No game", game: null, since: null, notes: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample }),
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),
   "/api/runtime": () => (DEMO ? { demo: true, items: sample.runtime } : control.runtime().then((items) => ({ demo: false, items }))),
@@ -114,6 +119,7 @@ server.listen(PORT, HOST, async () => {
     // read every project once now so the first page load is quick, then (with --open) open the browser: it never opens to a dead page
     try { if (!DEMO) { console.log("Reading your projects..."); await Promise.all([real.projects(), real.decisions(), real.answers(), real.manager()]); } } catch { /* the page shows its own error */ }
     if (args.includes("--open") && process.platform === "win32") spawn("cmd", ["/c", "start", "", `http://${HOST}:${port}`], { stdio: "ignore", detached: true }).unref();
+    if (!DEMO) startProbe({ cfg: gameCfg, onSample: (s) => { lastGameSample = { at: s.at, fg: s.fg, full: s.full, gpu: s.gpu }; gameDetector.update(s); } });
     if (args.includes("--boot") && control) setTimeout(() => control.bootStart().catch(() => {}), 20000);
     console.log("Ready.");
     return;
