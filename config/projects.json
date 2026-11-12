@@ -1,5 +1,5 @@
 {
-  "_note": "The ONLY programs the dashboard may start. Each entry runs the project's own start command in its folder; the page can never send a command. Ports are all different and unusual (1xxxx) so they cannot be mistaken for another dev server, e.g. 8765. Edit this file to add a project.",
+  "_note": "The ONLY programs the dashboard may start. Each entry runs the project's own start command in its folder; the page can never send a command. Ports are all different and unusual (1xxxx) so they cannot be mistaken for another dev server, e.g. 8765. Edit this file to add a project. Optional \"usesGpu\": true on a project = game mode FREEZES it completely while a game runs (and un-freezes it afterwards) instead of only slowing it; nothing is flagged yet.",
   "projects": [
     {
       "id": "clipforge", "name": "Socials Automatisation", "label": "ClipForge",

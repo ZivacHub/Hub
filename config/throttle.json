@@ -2,5 +2,10 @@
   "_note": "Ivan's ceilings for background work while a game runs (D36). cpuPercent = the share of the processor the Hub's programs may use (they are confined to that many of the LAST logical processors, which are the efficiency cores on this Intel chip). memoryMB = the memory the Hub's programs may keep in RAM together (each gets an equal share, at least 256 MB, the rest is paged to disk: slower, never a crash). Change the numbers here.",
   "cpuPercent": 25,
   "memoryMB": 2048,
-  "reapplySeconds": 30
+  "reapplySeconds": 30,
+  "pauses": {
+    "_note": "D37, Ivan's exception: while a game runs these two things OUTSIDE the Hub are paused, and nothing else ever: the Docker containers listed here (docker pause / unpause, plain container names only) and every model Ollama has loaded (unloaded; Ollama loads it again by itself on the next request). Nothing happens if they are not running.",
+    "dockerContainers": ["openshorts-backend"],
+    "ollamaUrl": "http://127.0.0.1:11434"
+  }
 }

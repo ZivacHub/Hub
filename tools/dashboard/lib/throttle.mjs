@@ -13,9 +13,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const HUB = join(HERE, "..", "..", "..");
 const SCRIPT = join(HERE, "throttle.ps1");
 
-export function loadThrottleConfig(path = join(HUB, "config", "throttle.json")) {
+export function loadThrottleConfig(path = process.env.HUB_THROTTLE_CONFIG || join(HUB, "config", "throttle.json")) {   // the environment variable is for tests only
   const j = JSON.parse(readFileSync(path, "utf8"));
-  return { cpuPercent: j.cpuPercent ?? 25, memoryMB: j.memoryMB ?? 2048, reapplySeconds: j.reapplySeconds ?? 30 };
+  return { cpuPercent: j.cpuPercent ?? 25, memoryMB: j.memoryMB ?? 2048, reapplySeconds: j.reapplySeconds ?? 30, pauses: j.pauses || {} };
 }
 
 /** Runs the PowerShell helper and returns its JSON answer (or null). Only integers and our own file path are ever passed. */
@@ -34,7 +34,7 @@ export function runHelper(action, { pids = [], cores = 0, workingSetMB = 0, stat
   });
 }
 
-export function makeThrottle({ hubPids, statePath, cfg, run = runHelper, log = () => {}, totalCpus = cpus().length }) {
+export function makeThrottle({ hubPids, gpuPids = () => ({}), statePath, cfg, run = runHelper, log = () => {}, totalCpus = cpus().length }) {
   const readState = () => { try { return JSON.parse(readFileSync(statePath, "utf8")); } catch { return null; } };
   const writeState = (s) => { mkdirSync(dirname(statePath), { recursive: true }); const tmp = statePath + ".tmp"; writeFileSync(tmp, JSON.stringify(s, null, 2)); renameSync(tmp, statePath); };
   const coresFor = () => Math.max(1, Math.round((totalCpus * cfg.cpuPercent) / 100));
@@ -55,15 +55,33 @@ export function makeThrottle({ hubPids, statePath, cfg, run = runHelper, log = (
     return r.entries.length;
   }
 
+  // 13.3: the Hub's own programs that Ivan flagged as graphics users (config/projects.json "usesGpu": true) are frozen as a whole while the game runs
+  async function suspendNew(state) {
+    const flagged = Object.values(gpuPids()).filter((p) => Number.isInteger(p));
+    if (!flagged.length) return 0;
+    const tree = (await run("tree", { pids: flagged })) || [];
+    state.paused = state.paused || [];
+    const have = new Set(state.paused.map((e) => e.pid));
+    const fresh = tree.filter((p) => !have.has(p));
+    if (!fresh.length) return 0;
+    const r = await run("suspend", { pids: fresh });
+    if (!r) return 0;
+    state.paused.push(...r.entries);
+    writeState(state);
+    log("game-mode", "pause", `${r.entries.length} process(es) frozen, ${(r.failed || []).length} failed`);
+    return r.entries.length;
+  }
+
   return {
-    /** The game started: slow down everything the Hub started. */
+    /** The game started: slow down everything the Hub started, and freeze the ones flagged as graphics users. */
     async engage() {
       if (readState()?.engaged) return this.status();
       const n = roots().length;
-      const state = { engaged: true, at: new Date().toISOString(), cores: coresFor(), perProgramMB: perProgramMB(n), entries: [] };
+      const state = { engaged: true, at: new Date().toISOString(), cores: coresFor(), perProgramMB: perProgramMB(n), entries: [], paused: [] };
       writeState(state);
       await applyNew(state);
-      log("game-mode", "on", `${state.entries.length} process(es), ${state.cores} cores, ${state.perProgramMB} MB each`);
+      await suspendNew(state);
+      log("game-mode", "on", `${state.entries.length} process(es), ${state.cores} cores, ${state.perProgramMB} MB each, ${state.paused.length} frozen`);
       return this.status();
     },
     /** Called every few seconds while the game is on: slow down programs that started or spawned children in the meantime. */
@@ -71,16 +89,20 @@ export function makeThrottle({ hubPids, statePath, cfg, run = runHelper, log = (
       const state = readState();
       if (!state?.engaged) return 0;
       state.perProgramMB = perProgramMB(roots().length) || state.perProgramMB;
-      return applyNew(state);
+      const n = await applyNew(state);
+      return n + (await suspendNew(state));
     },
-    /** The game ended: put every saved original back and forget the state. */
+    /** The game ended: un-freeze, then put every saved original back and forget the state. */
     async release() {
       const state = readState();
-      if (!state) return { restored: 0, skipped: 0 };
+      if (!state) return { restored: 0, skipped: 0, resumed: 0 };
+      let resumed = 0;
+      // un-freezing comes first: a frozen program must never be left behind
+      if (state.paused?.length) { const rr = (await run("resume", { stateFile: statePath })) || { resumed: 0, skipped: state.paused.length }; resumed = rr.resumed; }
       const r = state.entries.length ? (await run("restore", { stateFile: statePath })) || { restored: 0, skipped: state.entries.length } : { restored: 0, skipped: 0 };
       try { unlinkSync(statePath); } catch { /* already gone */ }
-      log("game-mode", "off", `restored ${r.restored}, skipped ${r.skipped} (gone or reused)`);
-      return r;
+      log("game-mode", "off", `restored ${r.restored}, skipped ${r.skipped} (gone or reused), resumed ${resumed}`);
+      return { ...r, resumed };
     },
     /** At server start: if a game was on when the server stopped and no game is on now, put things back. */
     async recover(gameOnNow) {
@@ -88,7 +110,7 @@ export function makeThrottle({ hubPids, statePath, cfg, run = runHelper, log = (
       if (state?.engaged && !gameOnNow) return this.release();
       return null;
     },
-    status() { const s = readState(); return { engaged: !!s?.engaged, since: s?.at || null, processes: s ? s.entries.length : 0, cores: s?.cores ?? coresFor(), perProgramMB: s?.perProgramMB ?? null }; },
+    status() { const s = readState(); return { engaged: !!s?.engaged, since: s?.at || null, processes: s ? s.entries.length : 0, frozen: s?.paused ? s.paused.length : 0, cores: s?.cores ?? coresFor(), perProgramMB: s?.perProgramMB ?? null }; },
   };
 }
 
@@ -121,7 +143,8 @@ if (process.argv[1] && toPath(import.meta.url) === resolvePath(process.argv[1]) 
   const control = makeControl({ configPath: join(base, "projects.json"), dataDir: join(base, "data"), logDir: join(base, "logs"), busnusRoot: join(base, "projects") });
   const statePath = join(base, "data", "game_state.json");
   const cfg = { cpuPercent: 25, memoryMB: 300, reapplySeconds: 30 };
-  const mk = () => makeThrottle({ hubPids: () => control.startedPids(), statePath, cfg });
+  const gpuIds = () => { const s = control.startedPids(); return s.gpuprog ? { gpuprog: s.gpuprog } : {}; };  // like the server: only programs flagged "usesGpu"
+  const mk = () => makeThrottle({ hubPids: () => control.startedPids(), gpuPids: gpuIds, statePath, cfg });
   const th = mk();
   const rate = async (pid, secs) => { const a = (await cpuSeconds([pid]))[pid]; const t0 = Date.now(); await sleep(secs * 1000); const b = (await cpuSeconds([pid]))[pid]; return (b - a) / ((Date.now() - t0) / 1000); };
   const info = async (pids) => (await runHelper("get", { pids })) || [];
@@ -170,6 +193,32 @@ if (process.argv[1] && toPath(import.meta.url) === resolvePath(process.argv[1]) 
   const rateBack = await rate(pid, 4);
   console.log(`     fake program after release: ${rateBack.toFixed(1)} cores busy`);
   ok("full speed is back", rateBack >= 6);
+
+  // 13.3: a program flagged as a graphics user is FROZEN while the game runs and runs again afterwards
+  const port3 = port + 25;
+  mkdirSync(join(base, "projects", "Gpu"), { recursive: true });
+  writeFileSync(join(base, "projects", "Gpu", "gpu.js"), `require("http").createServer((q,r)=>r.end("alive")).listen(${port3},"127.0.0.1");new (require("worker_threads").Worker)("while(true){}",{eval:true});`);
+  const cfgFile = JSON.parse(readFileSync(join(base, "projects.json"), "utf8"));
+  cfgFile.projects.push({ id: "gpuprog", name: "Gpu", label: "Gpu", command: ["node", "gpu.js"], port: port3, usesGpu: true });
+  writeFileSync(join(base, "projects.json"), JSON.stringify(cfgFile));
+  const answers = async () => { try { return (await (await fetch(`http://127.0.0.1:${port3}/`, { signal: AbortSignal.timeout(1500) })).text()) === "alive"; } catch { return false; } };
+  ok("the flagged program starts through the Hub's engine", (await control.start("gpuprog")).ok === true);
+  for (let i = 0; i < 40 && !(await answers()); i++) await sleep(300);
+  const gpid = control.startedPids().gpuprog;
+  ok("before the game it answers", await answers());
+  const busyBefore = await rate(gpid, 2);
+  ok("...and uses the processor", busyBefore > 0.5);
+  const e2 = await th.engage();
+  ok("engage freezes it (and nothing else of the other programs)", e2.frozen >= 1);
+  ok("while frozen it does not answer", !(await answers()));
+  const busyFrozen = await rate(gpid, 3);
+  console.log(`     flagged program: ${busyBefore.toFixed(2)} cores before, ${busyFrozen.toFixed(2)} while frozen`);
+  ok("while frozen it uses no processor at all", busyFrozen < 0.05);
+  ok("the program NOT flagged keeps running (slowed, not frozen)", (await rate(pid, 3)) > 0.5);
+  const rel2 = await th.release();
+  ok("game over: it answers again", rel2.resumed >= 1 && (await answers()));
+  ok("...and uses the processor again", (await rate(gpid, 2)) > 0.5);
+  await control.stop("gpuprog");
 
   // the server stopped during a game: the next start puts things back
   await th.engage();

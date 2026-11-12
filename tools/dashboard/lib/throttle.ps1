@@ -3,7 +3,9 @@
 #   -Action apply   -Pids a,b -Cores N -WorkingSetMB M  lowest priority, only the LAST N logical processors, a working-set cap per process;
 #                                                      prints the original values as JSON so they can be put back exactly
 #   -Action restore -StateFile file.json              puts every saved original back (only if the process is still the same one)
-#   -Action get     -Pids a,b                         priority, cores and working-set cap of those processes (for tests and the dashboard)
+#   -Action suspend -Pids a,b                         (13.3) freezes those processes; prints pid + start time of each
+#   -Action resume  -StateFile file.json              (13.3) un-freezes every process in the state's "paused" list (only if still the same one)
+#   -Action get     -Pids a,b                        priority, cores and working-set cap of those processes (for tests and the dashboard)
 # The working-set cap keeps at most M MB of a process in RAM and pages the rest out: nothing crashes, it just gets slower.
 param([string]$Action, [string]$Pids = "", [int]$Cores = 0, [int]$WorkingSetMB = 0, [string]$StateFile = "")
 Add-Type -TypeDefinition @"
@@ -12,6 +14,8 @@ using System.Runtime.InteropServices;
 public static class HubThrottle {
   [DllImport("kernel32.dll", SetLastError = true)] public static extern bool GetProcessWorkingSetSizeEx(IntPtr h, out UIntPtr min, out UIntPtr max, out uint flags);
   [DllImport("kernel32.dll", SetLastError = true)] public static extern bool SetProcessWorkingSetSizeEx(IntPtr h, UIntPtr min, UIntPtr max, uint flags);
+  [DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h);
+  [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);
 }
 "@
 $ids = @(); if ($Pids) { $ids = @($Pids.Split(",") | Where-Object { $_ } | ForEach-Object { [int]$_ }) }
@@ -50,6 +54,29 @@ switch ($Action) {
       } catch { $failed += @{ pid = $id; error = $_.Exception.Message } }
     }
     ConvertTo-Json -Compress -Depth 4 -InputObject @{ entries = @($entries); failed = @($failed); mask = [string]$mask; cores = $n }
+  }
+  "suspend" {
+    # plan step 13.3: freeze whole programs (all their threads). Only the Hub's own graphics-heavy programs get here.
+    $entries = @(); $failed = @()
+    foreach ($id in $ids) {
+      $p = Get-Process -Id $id -ErrorAction SilentlyContinue
+      if (-not $p) { continue }
+      try {
+        $start = $p.StartTime.ToString("o")
+        if ([HubThrottle]::NtSuspendProcess($p.Handle) -eq 0) { $entries += @{ pid = $id; start = $start } } else { $failed += @{ pid = $id; error = "NtSuspendProcess refused" } }
+      } catch { $failed += @{ pid = $id; error = $_.Exception.Message } }
+    }
+    ConvertTo-Json -Compress -Depth 4 -InputObject @{ entries = @($entries); failed = @($failed) }
+  }
+  "resume" {
+    $state = Get-Content $StateFile -Raw | ConvertFrom-Json
+    $done = 0; $skipped = 0
+    foreach ($e in @($state.paused | Where-Object { $_ })) {
+      $p = Get-Process -Id ([int]$e.pid) -ErrorAction SilentlyContinue
+      if (-not $p -or $p.StartTime.ToString("o") -ne $e.start) { $skipped++; continue }
+      try { if ([HubThrottle]::NtResumeProcess($p.Handle) -eq 0) { $done++ } else { $skipped++ } } catch { $skipped++ }
+    }
+    ConvertTo-Json -Compress -InputObject @{ resumed = $done; skipped = $skipped }
   }
   "restore" {
     $state = Get-Content $StateFile -Raw | ConvertFrom-Json
