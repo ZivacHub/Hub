@@ -303,5 +303,83 @@
       "label": "Script Maker",
       "detail": "started outside the Hub"
     }
-  ]
+  ],
+  "gameStates": {
+    "on": {
+      "on": true,
+      "since": "2026-11-12T20:14:00",
+      "game": "League of Legends",
+      "app": "league of legends",
+      "reason": "Game list: League of Legends",
+      "by": "list",
+      "notes": [],
+      "overridden": false,
+      "overriddenGame": null,
+      "slowdown": {
+        "engaged": true,
+        "since": "2026-11-12T20:14:00",
+        "processes": 6,
+        "frozen": 1,
+        "cores": 5,
+        "perProgramMB": 512
+      },
+      "pauses": {
+        "active": true,
+        "docker": [
+          "openshorts-backend"
+        ],
+        "ollamaUnloaded": [
+          "qwen3:8b"
+        ]
+      },
+      "ignored": []
+    },
+    "overridden": {
+      "on": false,
+      "since": "2026-11-12T20:14:00",
+      "game": null,
+      "app": null,
+      "reason": "Game mode is off for now",
+      "by": null,
+      "notes": [],
+      "overridden": true,
+      "overriddenGame": "League of Legends",
+      "slowdown": {
+        "engaged": false,
+        "processes": 0,
+        "frozen": 0
+      },
+      "pauses": {
+        "active": false,
+        "docker": [],
+        "ollamaUnloaded": []
+      },
+      "ignored": []
+    },
+    "ignored": {
+      "on": false,
+      "since": null,
+      "game": null,
+      "app": null,
+      "reason": "No game",
+      "by": null,
+      "notes": [],
+      "overridden": false,
+      "overriddenGame": null,
+      "slowdown": {
+        "engaged": false,
+        "processes": 0,
+        "frozen": 0
+      },
+      "pauses": {
+        "active": false,
+        "docker": [],
+        "ollamaUnloaded": []
+      },
+      "ignored": [
+        "blender",
+        "obs64"
+      ]
+    }
+  }
 }

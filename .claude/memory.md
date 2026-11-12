@@ -283,3 +283,8 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Tests: pauses 19/19, throttle 31/31, server/control/attention/running/done/game self-tests all exit 0, end-to-end on the real server with a pretend Ollama and the real docker tool passed.
 - Found today: Docker Desktop's engine does not start on this PC ("Docker Desktop is unable to start", WSL bootstrap error 0xc00000fd); so the real openshorts container could not be tested (and ClipForge's video engine probably cannot run either). Not touched, only reported. Ollama was not running.
 - Lesson: when a step would touch real services, check first whether they are running; stand-ins (a real little web server, a pretend Docker) test the logic and the real tool is run with a name that cannot exist.
+
+## 2026-11-12 (night) - Step 13.4 done: game-mode strip and buttons
+- game.mjs: decideGame returns app, detector got suppress / unsuppress / forceOff and state fields app, overridden, overriddenGame; makeIgnoreStore (data/game_ignore.json). server.mjs: four POST actions (game-off, game-on, game-ignore, game-unignore) through gameAction(), /api/game also returns ignored, demo variants via --demo-game=. Page: renderGame() strip, loadGame() inside loadRunning(). README: game-mode bullet, four screenshots.
+- Tests: game 42/42, server 21/21, end-to-end on the real server 14/14, real page driven with Playwright (reload keeps "off for now", console clean), screenshots in sample data only.
+- Lessons: a temporary games file written with PowerShell Set-Content -Encoding utf8 gets a BOM and the server cannot parse it; write test files with node. A long polling loop in one PowerShell call hits the tool timeout: keep loops short.

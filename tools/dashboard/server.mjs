@@ -29,7 +29,7 @@ const HEADERS = {
 import { buildRunning, workCount } from "./lib/running.mjs";
 import { makeBusyMeter } from "./lib/cpu.mjs";
 import { makeDoneTracker } from "./lib/done.mjs";
-import { loadGamesConfig, makeGameDetector, startProbe } from "./lib/game.mjs";
+import { loadGamesConfig, makeGameDetector, makeIgnoreStore, normName, startProbe } from "./lib/game.mjs";
 import { loadThrottleConfig, makeThrottle } from "./lib/throttle.mjs";
 import { makePauses } from "./lib/pauses.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -41,6 +41,7 @@ const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true,
 
 // a fresh secret per run: only the page this server serves can read it (no CORS headers are ever sent), so other websites cannot use the POST route
 const gameCfg = DEMO ? null : loadGamesConfig();
+const gameIgnore = DEMO ? null : makeIgnoreStore({ path: join(HERE, "..", "..", "data", "game_ignore.json"), cfg: gameCfg });   // apps Ivan told the page to ignore
 const gameDetector = DEMO ? null : makeGameDetector({ cfg: gameCfg });   // game mode (Phase 13): is Ivan in a game right now?
 let lastGameSample = null;
 // game mode: when a game starts, slow down what the Hub started; when it ends (or the server finds a finished game), put everything back
@@ -84,7 +85,7 @@ const api = {
     const items = buildRunning({ runtime, chats: real.workingChats(), manager, busy });
     return { generatedAt: new Date().toISOString(), items, done: doneTracker.update(workCount(items)) };
   },
-  "/api/game": () => (DEMO ? (sample.game || { on: false, reason: "No game", game: null, since: null, notes: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample, slowdown: throttle.status(), pauses: pauses.status() }),
+  "/api/game": () => (DEMO ? (sample.gameStates?.[(args.find((a) => a.startsWith("--demo-game=")) || "").slice(12)] || sample.game || { on: false, reason: "No game", game: null, since: null, notes: [], ignored: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample, slowdown: throttle.status(), pauses: pauses.status(), ignored: gameIgnore.list() }),
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),
   "/api/runtime": () => (DEMO ? { demo: true, items: sample.runtime } : control.runtime().then((items) => ({ demo: false, items }))),
@@ -92,8 +93,37 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
+
+// Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
+async function gameAction(body) {
+  const st = gameDetector.state();
+  const release = () => gameJob(async () => { await pauses.release(); await throttle.release(); });
+  if (body.action === "game-off") {
+    if (!st.on) return { ok: false, error: "Game mode is not on right now." };
+    gameDetector.suppress(); await release();
+    gameLog("game-mode", "off-for-now", `turned off by Ivan while ${st.game} runs`);
+    return { ok: true, message: "Game mode is off for now. Everything is back to normal; it switches on again with your next game." };
+  }
+  if (body.action === "game-on") {
+    if (!st.overridden) return { ok: false, error: "Game mode was not turned off by you." };
+    gameDetector.unsuppress();
+    gameLog("game-mode", "back-on", "turned back on by Ivan");
+    return { ok: true, message: "Game mode is back on. It switches on at the next check (about 10 seconds) if a game is running." };
+  }
+  if (body.action === "game-ignore") {
+    if (!st.on || !st.app || st.app !== normName(body.app)) return { ok: false, error: "The game changed. Look at the page again." };
+    if (!gameIgnore.add(st.app)) return { ok: false, error: "That app name can not be ignored." };
+    gameDetector.forceOff(); await release();
+    gameLog("game-mode", "ignore", st.app);
+    return { ok: true, message: `${st.game} is ignored from now on. Everything is back to normal.` };
+  }
+  // game-unignore
+  if (!gameIgnore.remove(String(body.app || ""))) return { ok: false, error: "That app is not on your ignore list." };
+  gameLog("game-mode", "unignore", String(body.app));
+  return { ok: true, message: "Not ignored any more." };
+}
 
 async function handleAction(req, send) {
   const h = req.headers;
@@ -108,7 +138,8 @@ async function handleAction(req, send) {
   if (!ACTIONS.includes(body.action)) return send(400, err("unknown action"));
   if (DEMO) return send(200, err("Sample data mode: the buttons are switched off."));
   let result;
-  if (body.action === "start") result = await control.start(String(body.id));
+  if (body.action.startsWith("game-")) result = await gameAction(body);
+  else if (body.action === "start") result = await control.start(String(body.id));
   else if (body.action === "stop") result = await control.stop(String(body.id));
   else if (body.action === "autostart") result = control.setAutostart(String(body.id), body.value === true);
   else result = control.openClaude(body.name);
@@ -177,6 +208,12 @@ server.listen(PORT, HOST, async () => {
   ok("unlisted action refused", (await raw("/api/action", json, JSON.stringify({ action: "run", cmd: "calc", confirm: true }), "POST")).status === 400);
   const unk = await raw("/api/action", json, act, "POST");
   ok("unlisted project id refused (not started)", unk.status === 200 && JSON.parse(unk.text).ok === false);
+  // game-mode buttons (13.4): with no game running every one of them is refused, and none can be reached without the token
+  for (const a of [{ action: "game-off" }, { action: "game-on" }, { action: "game-ignore", app: "opera" }, { action: "game-unignore", app: "opera" }]) {
+    const r = await raw("/api/action", json, JSON.stringify({ ...a, confirm: true }), "POST");
+    ok(`${a.action} with no game running is refused without changing anything`, r.status === 200 && JSON.parse(r.text).ok === false);
+  }
+  ok("game-off without the token is refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, JSON.stringify({ action: "game-off", confirm: true }), "POST")).status === 403);
   const bad = await raw("/api/action", json, JSON.stringify({ action: "open-claude", name: "..\\..\\Windows", confirm: true }), "POST");
   ok("open-claude outside the projects folder refused", bad.status === 200 && JSON.parse(bad.text).ok === false);
   const big = await raw("/api/action", json, JSON.stringify({ action: "start", id: "x".repeat(5000), confirm: true }), "POST");

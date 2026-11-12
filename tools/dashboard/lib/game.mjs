@@ -7,7 +7,7 @@
 //   node tools/dashboard/lib/game.mjs --selftest
 import { spawn, execFile } from "node:child_process";
 import { createInterface } from "node:readline";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,36 +22,70 @@ export function loadGamesConfig(path = process.env.HUB_GAMES_CONFIG || join(HERE
 /** One sample in, one verdict out. sample = { running: [names], fg, full, cls, gpu }. Pure: no timing, no side effects. */
 export function decideGame(sample, cfg) {
   const running = (sample.running || []).map(normName);
-  for (const g of cfg.games) for (const e of g.exe || []) if (running.includes(normName(e))) return { on: true, by: "list", game: g.name, reason: `Game list: ${g.name}`, notes: [] };
+  // an app Ivan told the page to ignore (cfg.ignore also holds browsers and video players) never counts, not even when it is on the game list
+  for (const g of cfg.games) for (const e of g.exe || []) if (running.includes(normName(e)) && !cfg.ignore.includes(normName(e))) return { on: true, by: "list", game: g.name, app: normName(e), reason: `Game list: ${g.name}`, notes: [] };
   const notes = [];
   if (cfg.clients.some((c) => running.includes(normName(c)))) notes.push("The Riot client is open but no game is running");
   const fg = normName(sample.fg);
   const desktop = ["progman", "workerw"].includes(String(sample.cls || "").toLowerCase());
   if (sample.full && fg && !desktop && !cfg.ignore.includes(fg) && (sample.gpu ?? 0) >= cfg.gpuBusyPercent)
-    return { on: true, by: "fullscreen", game: sample.fg, reason: `Fullscreen app (${sample.fg}) with a busy graphics card`, notes };
+    return { on: true, by: "fullscreen", game: sample.fg, app: fg, reason: `Fullscreen app (${sample.fg}) with a busy graphics card`, notes };
   return { on: false, by: null, game: null, reason: notes[0] || "No game", notes };
 }
 
 /** Remembers recent verdicts so the state does not flicker. update(sample) -> { on, since, game, reason, by, notes, at }. */
 export function makeGameDetector({ cfg, now = Date.now, onStepsList = 1, onStepsFullscreen = 2, offSteps = 3 }) {
-  let state = { on: false, since: null, game: null, reason: "No game", by: null, notes: [], at: null };
+  let state = { on: false, since: null, game: null, app: null, reason: "No game", by: null, notes: [], at: null, overridden: false, overriddenGame: null };
   let onCount = 0, offCount = 0;
+  let suppressed = false;   // Ivan pressed "Turn game mode off for now": stays off until the game has really ended (3 quiet samples)
+  const off = (extra) => { state = { ...state, on: false, game: null, app: null, by: null, ...extra, at: new Date(now()).toISOString() }; onCount = 0; offCount = 0; return { ...state }; };
   return {
     state: () => ({ ...state }),
+    /** "Turn game mode off for now": off at once, and not switched on again by the SAME game. */
+    suppress() { suppressed = true; return off({ since: new Date(now()).toISOString(), reason: "Game mode is off for now", overridden: true, overriddenGame: state.game }); },
+    /** "Turn it back on": the next sample that shows a game switches game mode on again. */
+    unsuppress() { suppressed = false; return off({ reason: "No game", overridden: false, overriddenGame: null }); },
+    /** After "Ignore this app": off at once, without the "off for now" state. */
+    forceOff() { suppressed = false; return off({ since: new Date(now()).toISOString(), reason: "No game", overridden: false, overriddenGame: null }); },
     update(sample) {
       const d = decideGame(sample, cfg);
       const t = new Date(now()).toISOString();
+      if (suppressed) {
+        if (d.on) { offCount = 0; state = { ...state, notes: d.notes, at: t, overriddenGame: d.game }; }
+        else if (++offCount >= offSteps) { suppressed = false; offCount = 0; state = { ...state, reason: d.reason, notes: d.notes, at: t, overridden: false, overriddenGame: null }; }
+        else state = { ...state, at: t };
+        return { ...state };
+      }
       if (d.on) {
         onCount++; offCount = 0;
         const need = d.by === "list" ? onStepsList : onStepsFullscreen;
-        if (!state.on && onCount >= need) state = { on: true, since: t, game: d.game, reason: d.reason, by: d.by, notes: d.notes, at: t };
-        else if (state.on) state = { ...state, game: d.game, reason: d.reason, by: d.by, notes: d.notes, at: t };
+        if (!state.on && onCount >= need) state = { on: true, since: t, game: d.game, app: d.app, reason: d.reason, by: d.by, notes: d.notes, at: t, overridden: false, overriddenGame: null };
+        else if (state.on) state = { ...state, game: d.game, app: d.app, reason: d.reason, by: d.by, notes: d.notes, at: t };
       } else {
         offCount++; onCount = 0;
-        if (state.on && offCount >= offSteps) state = { on: false, since: t, game: null, reason: d.reason, by: null, notes: d.notes, at: t };
+        if (state.on && offCount >= offSteps) state = { on: false, since: t, game: null, app: null, reason: d.reason, by: null, notes: d.notes, at: t, overridden: false, overriddenGame: null };
         else if (!state.on) state = { ...state, reason: d.reason, notes: d.notes, at: t };
       }
       return { ...state };
+    },
+  };
+}
+
+/** The apps Ivan told the page to ignore ("Ignore this app"). Kept in a local file (data/, never committed) and merged into cfg.ignore. */
+export function makeIgnoreStore({ path, cfg }) {
+  const OK = /^[a-z0-9][a-z0-9 ._()-]{0,59}$/;
+  let mine = [];
+  try { mine = (JSON.parse(readFileSync(path, "utf8")).apps || []).map(normName).filter((n) => OK.test(n)); } catch { /* no file yet */ }
+  const save = () => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify({ apps: mine }, null, 2)); };
+  for (const n of mine) if (!cfg.ignore.includes(n)) cfg.ignore.push(n);
+  return {
+    list: () => [...mine],
+    add(name) { const n = normName(name); if (!OK.test(n)) return false; if (!mine.includes(n)) { mine.push(n); save(); } if (!cfg.ignore.includes(n)) cfg.ignore.push(n); return true; },
+    remove(name) {
+      const n = normName(name); if (!mine.includes(n)) return false;   // only apps added here can be removed, never the built-in list
+      mine = mine.filter((x) => x !== n); save();
+      const i = cfg.ignore.indexOf(n); if (i >= 0) cfg.ignore.splice(i, 1);
+      return true;
     },
   };
 }
@@ -115,6 +149,40 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.ar
   ok("fullscreen needs two samples", tick(S({ fg: "x", full: true, gpu: 90 })).on === false && tick(S({ fg: "x", full: true, gpu: 90 })).on === true);
   ok("a game that comes back before the third quiet sample stays on", (() => { tick(S({})); tick(S({})); return tick(S({ fg: "x", full: true, gpu: 90 })).on === true; })());
   ok("it remembers since when", typeof det.state().since === "string");
+
+  // 2b) step 13.4: "turn game mode off for now", "turn it back on", "ignore this app"
+  {
+    const { tmpdir } = await import("node:os"); const { existsSync, rmSync } = await import("node:fs");
+    let t2 = Date.parse("2026-11-12T21:00:00Z"); const d2 = makeGameDetector({ cfg, now: () => t2 });
+    const tk = (s) => { t2 += 10_000; return d2.update(s); };
+    const lol = S({ running: ["league of legends"] });
+    ok("the state names the app that made it a game", tk(lol).app === "league of legends");
+    const sup = d2.suppress();
+    ok("turned off for now: off at once, marked as turned off by Ivan", sup.on === false && sup.overridden === true && sup.overriddenGame === "League of Legends");
+    ok("the same game still running does not switch it on again", tk(lol).on === false && tk(lol).overridden === true);
+    ok("two quiet samples keep the override", tk(S({})).overridden === true && tk(S({})).overridden === true);
+    ok("three quiet samples in a row (the game has ended) clear the override", tk(S({})).overridden === false);
+    ok("the next game switches game mode on again", tk(lol).on === true);
+    d2.suppress(); tk(S({})); tk(lol);
+    ok("a game that comes back during the quiet count restarts the count", tk(S({})).overridden === true && tk(S({})).overridden === true);
+    const back = d2.unsuppress();
+    ok("turn it back on: override gone", back.overridden === false && back.on === false);
+    ok("...and the still-running game switches it on at the next sample", tk(lol).on === true);
+    ok("ignore: forceOff is off at once and not an override", (() => { const s = d2.forceOff(); return s.on === false && s.overridden === false; })());
+    // ignore store
+    const file = join(tmpdir(), "hub-ignore-test-" + process.pid + ".json");
+    const cfg3 = { ...cfg, ignore: [...cfg.ignore] };
+    const store = makeIgnoreStore({ path: file, cfg: cfg3 });
+    ok("a made-up fullscreen app is a game before it is ignored", decideGame(S({ fg: "mygame", full: true, gpu: 80 }), cfg3).on === true);
+    ok("ignoring adds it", store.add("MyGame.exe") === true && store.list().includes("mygame"));
+    ok("an ignored fullscreen app is no game any more", decideGame(S({ fg: "mygame", full: true, gpu: 80 }), cfg3).on === false);
+    ok("an ignored app on the game list is no game either", decideGame(S({ running: ["league of legends"] }), { ...cfg3, ignore: [...cfg3.ignore, "league of legends"] }).on === false);
+    ok("odd names are refused", store.add("a;b") === false && store.add("") === false && store.add("x".repeat(80)) === false);
+    ok("it is remembered in a file and read back", makeIgnoreStore({ path: file, cfg: { ...cfg, ignore: [] } }).list().includes("mygame"));
+    ok("the built-in ignore list (browsers) cannot be removed from here", store.remove("opera") === false && cfg3.ignore.includes("opera"));
+    ok("an app added here can be taken off again", store.remove("mygame") === true && decideGame(S({ fg: "mygame", full: true, gpu: 80 }), cfg3).on === true);
+    try { if (existsSync(file)) rmSync(file); } catch { /* temp */ }
+  }
 
   // 3) the real probe on this PC
   await new Promise((resolve) => {

@@ -37,6 +37,9 @@ let asking = null;                  // { kind, name, id, label, text } while a "
 let note = "";
 let runningNow = [];
 let doneInfo = { allDone: false, finishedAt: null };   // "everything is done" (from /api/running)                   // what is working right now (from /api/running)
+let game = null;                    // game mode state from /api/game
+const GAME_ASK = "__game";           // the name a game-mode question is filed under (never a project name)
+let ignoredOpen = false;
 let needs = [];                     // chats that are waiting for Ivan (from /api/needs-you)
 const needsFor = (name) => needs.filter((n) => n.project === name);
 const waited = (iso) => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : (d => d === 1 ? "1 day" : `${d} days`)(Math.round(m / 1440)); };
@@ -88,7 +91,12 @@ async function send(body, retry = true) {
   return r.json().catch(() => ({ ok: false, error: "The Hub answered something unexpected." }));
 }
 
+async function loadGame() {
+  try { game = await (await fetch("/api/game", { cache: "no-store" })).json(); } catch { /* keep the last state */ }
+}
+
 async function loadRunning() {
+  await loadGame();
   try { const j = await (await fetch("/api/running", { cache: "no-store" })).json(); runningNow = j.items || []; doneInfo = j.done || { allDone: false, finishedAt: null }; } catch { /* keep the last list */ }
 }
 
@@ -116,6 +124,10 @@ async function perform(a) {
   const body = a.kind === "claude" ? { action: "open-claude", name: a.name }
     : a.kind === "start" ? { action: "start", id: a.id }
     : a.kind === "stop" ? { action: "stop", id: a.id }
+    : a.kind === "game-off" ? { action: "game-off" }
+    : a.kind === "game-on" ? { action: "game-on" }
+    : a.kind === "game-ignore" ? { action: "game-ignore", app: a.app }
+    : a.kind === "game-unignore" ? { action: "game-unignore", app: a.app }
     : { action: "autostart", id: a.id, value: a.kind === "autostart-on" };
   setNote("Working on it…");
   const r = await send(body);
@@ -130,6 +142,10 @@ document.addEventListener("click", (e) => {
   const act = b.dataset.act, name = b.dataset.name, rt = rtFor(name);
   if (act === "cancel") { asking = null; setNote(""); }
   else if (act === "yes") { const a = asking; asking = null; if (a) perform(a); return; }
+  else if (act === "ask-game-off") asking = question("game-off", GAME_ASK, null, "Turn game mode off for now?", "Background programs go back to full speed and anything paused starts again. Game mode switches on again with your next game.");
+  else if (act === "ask-game-on") asking = question("game-on", GAME_ASK, null, "Turn game mode back on?", "It switches on at the next check, about 10 seconds, if a game is running.");
+  else if (act === "ask-game-ignore") asking = { ...question("game-ignore", GAME_ASK, null, `Ignore ${game.game}?`, "Game mode will not switch on for this app again, even while it is full screen. You can undo this in the list below."), app: game.app };
+  else if (act === "ask-game-unignore") asking = { ...question("game-unignore", GAME_ASK, null, `Stop ignoring ${b.dataset.app}?`, "Game mode can switch on for it again."), app: b.dataset.app };
   else if (act === "ask-start") asking = question("start", name, rt, `Start ${rt.label}?`, rt.warn || rt.note);
   else if (act === "ask-stop") asking = question("stop", name, rt, `Stop ${rt.label}?`);
   else if (act === "ask-claude") asking = question("claude", name, rt, `Open Claude Code in ${name}?`, "A new terminal window opens in that project's folder.");
@@ -139,6 +155,52 @@ document.addEventListener("click", (e) => {
   const focus = document.querySelector(".actions.ask .btn.primary"); if (focus && asking) focus.focus();
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && asking) { asking = null; if (lastData) render(lastData); } });
+
+// ---------- game mode strip (step 13.4) ----------
+function renderGame() {
+  const el = $("game"), g = game || {}, ignored = g.ignored || [];
+  const main = g.on || g.overridden;
+  el.hidden = !(main || ignored.length);
+  if (el.hidden) { el.replaceChildren(); return; }
+  el.className = "game" + (g.on ? "" : " off");
+  const askHere = asking && asking.name === GAME_ASK;
+  const askRow = askHere ? h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
+    h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
+    h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
+    h("button", { class: "btn", type: "button", "data-act": "cancel" }, "Cancel")) : null;
+  const askMain = askHere && main && asking.kind !== "game-unignore";   // the question for an ignored app sits under the list, the others replace the buttons
+  const kids = [];
+  if (main) {
+    let title, detail, buttons;
+    if (g.on) {
+      const s = g.slowdown || {}, p = g.pauses || {}, bits = [];
+      if (s.processes > 0) bits.push(`${s.processes} background process${s.processes > 1 ? "es" : ""} slowed`);
+      if (s.frozen > 0) bits.push(`${s.frozen} frozen`);
+      if ((p.docker || []).length) bits.push(`${p.docker.join(", ")} paused`);
+      if ((p.ollamaUnloaded || []).length) bits.push(`AI model${p.ollamaUnloaded.length > 1 ? "s" : ""} unloaded`);
+      title = [h("span", { class: "dot on", "aria-hidden": "true" }), "Game mode is on", h("span", { class: "why" }, `${g.reason}${g.since ? " · since " + new Date(g.since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}`)];
+      detail = bits.length ? bits.join(" · ") : "Nothing the Hub started is running, so nothing needed slowing down.";
+      buttons = [h("button", { class: "btn", type: "button", "data-act": "ask-game-off" }, "Turn game mode off for now"),
+        g.app ? h("button", { class: "btn", type: "button", "data-act": "ask-game-ignore" }, "Ignore this app") : null];
+    } else {
+      title = [h("span", { class: "dot", "aria-hidden": "true" }), "Game mode is off for now"];
+      detail = `You turned it off${g.overriddenGame ? " while " + g.overriddenGame + " is running" : ""}. Everything is back to normal. It switches on again with your next game.`;
+      buttons = [h("button", { class: "btn", type: "button", "data-act": "ask-game-on" }, "Turn it back on")];
+    }
+    kids.push(h("div", { class: "game-main" },
+      h("div", { class: "game-text" }, h("div", { class: "game-title" }, title), h("div", { class: "game-detail" }, detail)),
+      askMain ? askRow : h("div", { class: "game-btns" }, buttons)));
+  }
+  if (ignored.length) {
+    const det = h("details", { class: "game-ignored", open: ignoredOpen || (askHere && asking.kind === "game-unignore") },
+      h("summary", {}, `Ignored apps (${ignored.length})`),
+      h("ul", {}, ignored.map((n) => h("li", {}, h("span", {}, n), h("button", { class: "btn", type: "button", "data-act": "ask-game-unignore", "data-app": n }, "Stop ignoring")))));
+    det.addEventListener("toggle", () => { ignoredOpen = det.open; });
+    kids.push(det);
+  }
+  if (askHere && !askMain) kids.push(askRow);
+  el.replaceChildren(...kids);
+}
 
 // ---------- cards ----------
 function card(p, answer) {
@@ -165,6 +227,7 @@ function card(p, answer) {
 
 function render(data) {
   lastData = data;
+  renderGame();
   const { projects, decisions, answers, manager } = data;
   const byName = new Map(answers.map((a) => [a.project, a]));
   const ready = projects.filter((p) => p.setUp);
