@@ -261,3 +261,7 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 
 ## 2026-11-11 - Phase 12 closed (D33)
 - Ivan: "Looks good" on the Running now panel (12.5). Phase 12 ticked (12.1 to 12.5). Next in board order: Phase 11 (11.5 install + restart, 11.6 try-out: both need him); Phase 13 gate is ready to start with his OK (game names, ceilings, which programs use the graphics card). The session-start check also asks for a first-run audit (no AUDIT.md) and says the project is on template v3, current v4: both only offered to Ivan, nothing applied.
+
+## 2026-11-12 - Phase 13 gate passed (D34 to D37)
+- Ivan: "Phase 13 gate now". Search shown (ThreadPilot AGPL, Winderust GPL, quick-fps-optimizer MIT: ideas only). Facts found: Windows Game Mode already on, power plan Ultimate, 10.9 to 13.9 of 15.6 GB memory in use (Opera 3 GB in 22 processes, claude 1.7 GB, memory compression 2.3 GB); installed games: Steam (Counter-Strike, PUBG, Once Human, Mortal Kombat 1, Cyber Hunter), Epic (ARK, Off The Grid), Riot (League of Legends, TFT), Xbox (Roblox, Asphalt Legends). Two gh searches crashed with "cannot allocate memory" under memory pressure, retried one at a time.
+- His answers: build in the Hub (D34); all ten games count, League only when the game program runs, not the Riot client (D35); 25 percent processor and 2 GB (D36); pause openshorts and unload Ollama during a game, run them when not in game (D37, an exception to D31 limited to those two). Next: 13.1 Detect a game.

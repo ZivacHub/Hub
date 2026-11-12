@@ -44,7 +44,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - [ ] Phase 13 — Game mode (Ivan's wish 2026-11-09)
   - [ ] 13.1 Detect a game: his game list, fullscreen app with a busy graphics card, an ignore list
   - [ ] 13.2 Slow-down engine: lowest priority, fewer processor cores and a memory ceiling for programs the Hub started; restore afterwards
-  - [ ] 13.3 Pause graphics-heavy programs the Hub started while a game runs
+  - [ ] 13.3 Pause graphics-heavy programs while a game runs: the Hub's own flagged programs, plus (D37) the openshorts container and Ollama's loaded model
   - [ ] 13.4 Game-mode indicator and manual override on the dashboard
   - [ ] 13.5 Smoothness test with a fake game load: numbers with and without the slow-down
   - [ ] 13.6 Milestone: Ivan plays his game with a background task running and says whether it was smooth
@@ -105,6 +105,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-12 (Ivan's answers at the Phase 13 gate, D34 to D37): Phase 13 gate passed; step 13.3 widened by his exception D37 (also pause the openshorts container and unload Ollama while a game runs); step 13.1 now names his ten games and the rule that the League client alone is not a game. No step added, dropped or renumbered. Phase 13 started ahead of Phase 11 at his word ("Phase 13 gate now").
 - 2026-11-11 (no plan change): Phase 12 closed on Ivan's "Looks good" (D33). Next in board order: Phase 11 (11.5 and 11.6 need Ivan); then Phase 13, whose gate needs his game names, ceilings and which programs use the graphics card.
 - 2026-11-09 (Ivan: "Add both", after his wishes of the same day and D28 to D31): NEW Phase 12 "Running now and done" (5 steps) and Phase 13 "Game mode" (6 steps), placed after Phase 6 and before Phase 10 so the security pass covers the new routes; details in docs/plan/phases/12-running-now-and-done.md and 13-game-mode.md. Their phase gates (preview, search, decisions: game list and ceilings) still run before each starts. No step dropped or renumbered.
 - 2026-11-08 (no plan change): Phase 3 closed. Step 3.8 ticked on Ivan's "Yes, enough" (D27); 3.5 ticked after the real Manager start/stop test; 3.4 stays dropped (moved to the voice track, D19). Next unfinished phase in board order: Phase 11 (11.5 and 11.6 need Ivan).

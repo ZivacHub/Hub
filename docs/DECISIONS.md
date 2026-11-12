@@ -218,3 +218,27 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-11):** "Looks good"
 **Result:** Phase 12 closed. Later wishes for the panel become new steps with the next free numbers.
 **Affects:** Phase 12 (12.5)
+
+## D34 — Game mode is built in the Hub   [decided 2026-11-12]
+**Question:** Build game mode in the Hub, use ThreadPilot instead, or both?
+**The owner said (2026-11-12):** chose "Build it in the Hub (Recommended)".
+**Result:** A small game mode inside the dashboard (indicator, off switch, log). ThreadPilot (AGPL, separate free app) stays an optional extra he can add himself; no code of it is copied.
+**Affects:** Phase 13
+
+## D35 — The games that count, and what "in a game" means for League   [decided 2026-11-12]
+**Question:** Which of the games found on this PC count as games for the Hub?
+**The owner said (2026-11-12):** picked all four groups (Counter-Strike and PUBG; League of Legends / TFT; Once Human, Mortal Kombat 1, Cyber Hunter; ARK, Off The Grid, Roblox, Asphalt), and: "I mostly play league for now so that means when client is running you can run it, but if league seccond program is running the game(riot has client and the game when it runs)".
+**Result:** All ten games are on the list (their program names are looked up in step 13.1). For League the Riot client alone is NOT a game: background work runs normally while only the client is open; game mode switches on when the game itself (the second program, "League of Legends.exe") runs and off when it ends. Plus the automatic rule of D29 (a fullscreen app while the graphics card is busy) with an ignore list for browsers and video players.
+**Affects:** Phase 13 (13.1)
+
+## D36 — Ceilings while a game runs: 25 percent processor, 2 GB memory   [decided 2026-11-12]
+**Question:** How much may the Hub's background work use while he plays?
+**The owner said (2026-11-12):** chose "25% processor, 2 GB memory (Recommended)".
+**Result:** Programs the Hub started get at most about a quarter of the processor and 2 GB of memory during a game (step 13.2); his own numbers in a settings file so he can change them later.
+**Affects:** Phase 13 (13.2)
+
+## D37 — Game mode may also pause the openshorts container and unload Ollama (exception to D31)   [decided 2026-11-12]
+**Question:** ClipForge's heavy graphics work runs in Docker (openshorts) and Ollama, which the Hub did not start. What should game mode do about them?
+**The owner said (2026-11-12):** "pause them, while in game, and detect when not in game to run it, I mostly play league for now so that means when client is running you can run it, but if league seccond program is running the game"
+**Result:** While a game runs, the Hub pauses the openshorts container (docker pause) and unloads Ollama's loaded models from graphics memory, and it resumes both when the game ends; outside a game they run normally. The exception covers only these two (nothing else the Hub did not start, D31 otherwise stays). If either is not running, the step does nothing. Claude chats and the browser are still never touched.
+**Affects:** Phase 13 (13.3), D31 (exception)
