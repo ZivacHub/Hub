@@ -1,5 +1,5 @@
 # Handoff: Hub   (updated 2026-11-14)
-Git: main @ 39199b7 "Handoff: Phase 13 under way, 13.1 to 13.4 done" · pushed: yes (repo ZivacHub/Hub is PUBLIC, D21) · uncommitted: this handoff, memory, board, DECISIONS, INDEX, CLAUDE_CONTROL.md, the Phase 14 file (committed and pushed right after)
+Git: main @ 101ba96 "Phase 14 'Run my chats from the Hub': check with proof (CLAUDE_CONTROL.md), phase on the board, gate questions D38-D41 open, handoff" · pushed: yes (repo ZivacHub/Hub is PUBLIC, D21) · uncommitted: only this Git line (committed and pushed right after)
 
 ## Where we are in the plan
 Phase 11 of 15 is the first unfinished phase on the board (11.5 and 11.6 need Ivan). Phase 13 "Game mode" was started ahead of it at his word: 13.1 to 13.4 done, next 13.5. NEW Phase 14 "Run my chats from the Hub" (Ivan, 2026-11-13, Change log line of that date) goes BEFORE 13.5 at his word ("Before continuing the plan"): its check is done, its gate waits for his answers D38 to D41. Steps done 33/76. Phases 3, 6 and 12 are CLOSED.
@@ -40,4 +40,4 @@ A local dashboard of all BUSNUS projects: cards, waiting decisions, chats waitin
 - In git bash, node -e with apostrophes breaks: write scripts to the scratchpad and run them. Ivan's answers sometimes arrive over Remote Control (phone): a question box may close with no text; then ask again in plain text with lettered options.
 
 ## Running / not committed
-- Services running: unverified (the dashboard on http://127.0.0.1:4780 was started on 2026-11-12; check before relying on it). No background test chats left (`claude agents --json --all` showed only finished ones).   ·   Not committed: the files on the Git line until the push right after this file
+- Services running: unverified (the dashboard on http://127.0.0.1:4780 was started on 2026-11-12; check before relying on it). No background test chats left (`claude agents --json --all` showed only finished ones).   ·   Not committed: nothing (all pushed)
