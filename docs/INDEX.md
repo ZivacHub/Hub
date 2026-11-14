@@ -24,6 +24,7 @@ Every document with "read when". Keep this list current: new doc => new row, sam
 | docs/reference/PRIOR_ART.md | choosing or adopting any outside part (wake phrase, hearing, voice, dashboard ideas) |
 | docs/reference/TASKS.md | starting a phase that could use parallel helpers, or closing a phase |
 | docs/reference/COMMANDS.md | adding or changing what Jarvis may do (draft written 2026-11-03, step 2.2) |
+| docs/reference/CLAUDE_CONTROL.md | anything that starts, shows, answers or steers a Claude chat from the Hub (Phase 14): what works from outside, what splits a chat, with the tests |
 | docs/reference/PC_FIT.md (created in step 0.3) | deciding what loads when, or any memory problem |
 | docs/screenshots/ | the README pictures (made-up sample data only, never real projects) |
 | tools/dashboard/ | working on the dashboard code (server, readers, page, sample data) |

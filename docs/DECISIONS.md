@@ -7,6 +7,26 @@ Layout: the two sections below. When a decision is answered, move its block from
 
 ## Waiting on the owner (open and proposed)
 
+## D38 — Where a chat started from the Hub runs   [open]
+**Question (asked 2026-11-13, Phase 14 gate; his answer did not arrive):** when he presses "New chat" on a project card, where should the chat run?
+**Options:** A) both buttons, "Start here" (windowless, run fully from the Hub page) and "Start in the app" (the app's new-chat page with folder and task filled in, he presses Send); Claude recommends this. B) only in the Hub. C) only in the Claude app (then the Hub can only show and open it).
+**Affects:** Phase 14 (14.1, 14.3)
+
+## D39 — What a windowless chat may do without asking   [open]
+**Question (asked 2026-11-13):** a chat with no window has nobody to click "Allow" (test T11: two commands were refused, not asked).
+**Options:** A) auto mode like now: Claude's safety checker decides, refused actions are listed on the page; Claude recommends this. B) edit files only, every command refused. C) ask on the Hub page "Allow / Deny" (not tested yet; adds a test first).
+**Affects:** Phase 14 (14.1)
+
+## D40 — How far the Hub goes with chats inside the Claude app   [open]
+**Question (asked 2026-11-13):** app chats cannot be answered from outside without splitting them (test T9).
+**Options:** A) see and open them with one click; Claude recommends this. B) also keep a small helper chat inside the app that sends his answers into app chats and flips their Remote Control (worked in a test; uses some allowance; may break with app updates; a last separate step).
+**Affects:** Phase 14 (14.2, 14.6)
+
+## D41 — Small defaults for Phase 14   [open]
+**Question (asked 2026-11-13):** Claude's defaults: a model picker on the New chat form (remembers the last pick); Remote Control off when a Hub chat starts, with a tick to start it on; at most 2 Hub chats working at once; the Hub never writes into a chat open in the app; Claude cleans up its test chats (archive "hub-test-bg" in the app, delete 5 test chat files).
+**Options:** A) accept all and build. B) accept, keep the test chats. C) change some (he names which).
+**Affects:** Phase 14
+
 ## D12 — Build our own voice loop, or try a ready-made local Jarvis (isair/jarvis) as the shell?   [decided 2026-11-02: one-hour trial first; install itself waits for his yes to the download size]
 **The owner said (2026-11-02):** "Yes, try it first"
 **Result:** Do the one-hour trial of isair/jarvis in a separate folder before step 1.5. Facts told to him before install: Windows zip 223 MB (release v2.8.0, 2026-10-19), licence = free for non-commercial/personal use only (fine for Ivan alone), first start downloads its own hearing + voice models on top (size shown by its setup wizard; we pick small ones), 21 GB disk free. Outcome (keep it / not) is logged here after the trial.

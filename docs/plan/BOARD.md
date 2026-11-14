@@ -1,5 +1,5 @@
 # Hub — Plan board
-Status: APPROVED 2026-11-02 (Ivan: "Approve (Recommended)")        Plan version: 2        Last changed: 2026-11-07
+Status: APPROVED 2026-11-02 (Ivan: "Approve (Recommended)")        Plan version: 2        Last changed: 2026-11-13
 Goal and non-negotiables: docs/PRODUCT.md. Every decision: docs/DECISIONS.md. Detail of each phase: docs/plan/phases/ (one file per phase).
 This file stays SMALL on purpose: the tick-list, the rules and the change log. It is read at the start of every session.
 
@@ -48,6 +48,14 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [x] 13.4 Game-mode indicator and manual override on the dashboard — a strip under the header (public/app.js renderGame, style.css, index.html): "Game mode is on · reason · since HH:MM" with "6 background processes slowed · 1 frozen · openshorts-backend paused · AI model unloaded", and two buttons that ask first: Turn game mode off for now / Ignore this app; the off-for-now state has "Turn it back on"; a list of ignored apps with "Stop ignoring". Server: POST actions game-off, game-on, game-ignore, game-unignore (same guards as the other actions; the only name that comes from the page is the app to ignore, and it must be the one the Hub shows), detector suppress/unsuppress/forceOff, ignore list in data/game_ignore.json (git-ignored). Proof 2026-11-12: game self-test 42/42 (turn off for now stays off while the same game runs and clears 3 quiet samples after it ends; ignore store; built-in browser list cannot be removed), server self-test 21/21 incl. the four buttons refused with no game and without token; END-TO-END on the real server with a stand-in game: 14/14 (off for now holds 40 s with the game running, a fresh reader sees it, clears after the game ends, next game switches on again, turn it back on, ignore a wrong app refused, ignore the right app, ignored game keeps running without game mode, file saved, stop ignoring, built-in app cannot be un-ignored); real page through Playwright: strip text, question, Yes, then a reload still shows "off for now", console 0 errors. Screenshots (sample data, --demo-game=on|overridden|ignored): docs/screenshots/game-mode-*.png, phone width checked
   - [ ] 13.5 Smoothness test with a fake game load: numbers with and without the slow-down
   - [ ] 13.6 Milestone: Ivan plays his game with a background task running and says whether it was smooth
+- [ ] Phase 14 — Run my chats from the Hub (Ivan's wish 2026-11-13; gate open, D38 to D41)
+  - [ ] 14.1 Chat engine: start, answer, stop windowless chats; never write into a chat open elsewhere
+  - [ ] 14.2 Live list of all chats (Hub and app), working or idle, needs you, Remote Control
+  - [ ] 14.3 New chat form on the project card
+  - [ ] 14.4 Chat panel with last messages and an answer box
+  - [ ] 14.5 Pick up and Hand off buttons
+  - [ ] 14.6 Remote Control switch and Open in the app
+  - [ ] 14.7 Milestone: Ivan runs a real task from the Hub and says what to change
 - [ ] Phase 10 — Dashboard always on and safe (stage 3, no voice needed)
   - [-] 10.1 Starts with Windows and opens with one click or one short command — merged into 11.5 on 2026-11-07 (D24)
   - [ ] 10.2 Security pass on the page (this PC only, nothing editable, no keys shown)
@@ -105,6 +113,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
 - **Where things go:** step detail -> the phase file. Decisions -> docs/DECISIONS.md (open ones as `[open]`). Skills list -> CLAUDE.md. Quality checklist and work split -> docs/reference/TASKS.md. Risks -> the phase file they belong to, or DECISIONS.md once the owner has to answer.
 
 ## Change log
+- 2026-11-13 (Ivan: "I want a new phase right after the current one: "Run my chats from the Hub" ... Then run the phase gate with choice cards, then build it"): NEW Phase 14 (7 steps, detail in docs/plan/phases/14-run-chats-from-the-hub.md), placed after Phase 13 and before Phase 10 so the security pass covers its routes. At his word ("Before continuing the plan") its gate runs before 13.5. Check with proof done (docs/reference/CLAUDE_CONTROL.md); gate questions D38 to D41 asked, his answers did not arrive. No step dropped or renumbered.
 - 2026-11-12 (Ivan's answers at the Phase 13 gate, D34 to D37): Phase 13 gate passed; step 13.3 widened by his exception D37 (also pause the openshorts container and unload Ollama while a game runs); step 13.1 now names his ten games and the rule that the League client alone is not a game. No step added, dropped or renumbered. Phase 13 started ahead of Phase 11 at his word ("Phase 13 gate now").
 - 2026-11-11 (no plan change): Phase 12 closed on Ivan's "Looks good" (D33). Next in board order: Phase 11 (11.5 and 11.6 need Ivan); then Phase 13, whose gate needs his game names, ceilings and which programs use the graphics card.
 - 2026-11-09 (Ivan: "Add both", after his wishes of the same day and D28 to D31): NEW Phase 12 "Running now and done" (5 steps) and Phase 13 "Game mode" (6 steps), placed after Phase 6 and before Phase 10 so the security pass covers the new routes; details in docs/plan/phases/12-running-now-and-done.md and 13-game-mode.md. Their phase gates (preview, search, decisions: game list and ceilings) still run before each starts. No step dropped or renumbered.
