@@ -297,3 +297,4 @@ Append newest entries at the bottom. Format: `YYYY-MM-DD: what changed / why / p
 - Plan: NEW Phase 14 on the board (7 steps, docs/plan/phases/14-run-chats-from-the-hub.md), Change log line; gate questions D38 to D41 added as [open]. Ivan's answer to the question box did not arrive (it closed as "sent a message" with no text); the same questions were repeated in plain text over Remote Control; still unanswered at this handoff.
 - Left behind by the tests: app chat "hub-test-bg" (Remote Control switched off again) and 5 test chat files in ~/.claude/projects/C--Users-Ivan-Desktop-BUSNUS-Hub (3d2b77b3, 43930e4d, 6b23f342, 15d6c9e2, ba0c897f) plus one in the scratchpad project folder; `claude rm` does not delete chat files. Cleanup waits for D41.
 - Lessons: a background chat needs a trusted folder; after `claude stop` wait until the list shows no pid before resuming; never test "answer from outside" on a real app chat (it splits).
+- Chat rating: 4/5 - (no extra line)
