@@ -1,0 +1,93 @@
+/* Helpers screen (step 15.5). On top of style.css: same tokens, a few extra state colours. */
+:root {
+  --bad: oklch(48% 0.15 25);
+  --bad-bg: oklch(95% 0.035 25);
+  --run: oklch(45% 0.11 155);
+  --run-bg: oklch(95% 0.035 155);
+  --stuck: oklch(45% 0.13 310);
+  --stuck-bg: oklch(95% 0.03 310);
+}
+:root[data-theme="dark"] {
+  --bad: oklch(78% 0.12 25);
+  --bad-bg: oklch(30% 0.06 25);
+  --run: oklch(78% 0.13 155);
+  --run-bg: oklch(28% 0.05 155);
+  --stuck: oklch(80% 0.1 310);
+  --stuck-bg: oklch(30% 0.05 310);
+}
+
+.crumbs { display: flex; align-items: baseline; gap: 12px; font-size: 0.9375rem; }
+.crumbs a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs .here { font-weight: 650; padding-left: 12px; border-left: 1px solid var(--line-strong); }
+.summary { font-size: 0.9375rem; }
+
+.hmain { max-width: 1280px; margin: 0 auto; padding: 20px 24px 40px; display: grid; gap: 16px; }
+.explain { color: var(--muted); max-width: 70ch; }
+#projects { display: grid; gap: 20px; align-content: start; }
+
+.proj { padding: 0; overflow: hidden; }
+.proj-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.proj-head h2 { margin: 0; font-size: 1.125rem; }
+.proj-counts { color: var(--muted); font-size: 0.8125rem; }
+
+.mgr-block + .mgr-block { border-top: 1px solid var(--line-strong); }
+.mgr-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; padding: 10px 16px; background: var(--surface-2); font-size: 0.9375rem; font-weight: 600; }
+.mgr-label { color: var(--muted); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.mgr-name { overflow-wrap: anywhere; }
+.mgr-meta { color: var(--muted); font-weight: 400; font-size: 0.8125rem; }
+
+.tasks { display: grid; }
+.task { display: grid; gap: 4px; padding: 12px 16px 12px 13px; border-left: 3px solid transparent; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.task.st-parked { border-left-color: var(--warn); background: color-mix(in oklab, var(--warn-bg) 45%, var(--surface)); }
+.task.st-failed { border-left-color: var(--bad); }
+.task.st-stuck { border-left-color: var(--stuck); }
+.task.st-review { border-left-color: var(--accent); }
+.task.st-running { border-left-color: var(--run); }
+.task.st-done { border-left-color: transparent; }
+.task.st-done .t-title { color: var(--muted); font-weight: 500; }
+
+.t-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.t-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.t-step { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; margin-right: 8px; }
+.t-meta { display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 0.8125rem; color: var(--muted); }
+.t-meta .who { color: var(--ink); }
+.t-meta .k { color: var(--muted); }
+.t-note { font-size: 0.875rem; max-width: 80ch; overflow-wrap: anywhere; }
+.st-parked .t-note { font-weight: 500; }
+.st-done .t-note { color: var(--muted); }
+.t-retry { font-size: 0.8125rem; color: var(--muted); }
+
+/* state tags: always words; shape and colour differ too */
+.state { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.state::before { content: ""; width: 7px; height: 7px; flex: none; background: currentColor; border-radius: 50%; }
+.state.st-parked { background: var(--warn); color: var(--surface); border-color: var(--warn); font-weight: 700; }
+.state.st-parked::before { background: var(--surface); border-radius: 2px; transform: rotate(45deg); }
+:root[data-theme="dark"] .state.st-parked { color: oklch(20% 0.03 80); }
+:root[data-theme="dark"] .state.st-parked::before { background: oklch(20% 0.03 80); }
+.state.st-failed { background: var(--bad-bg); color: var(--bad); border-color: color-mix(in oklch, var(--bad) 40%, transparent); }
+.state.st-failed::before { border-radius: 0; clip-path: polygon(0 0, 100% 0, 50% 100%); width: 9px; height: 8px; }
+.state.st-stuck { background: var(--stuck-bg); color: var(--stuck); border-color: color-mix(in oklch, var(--stuck) 40%, transparent); }
+.state.st-stuck::before { border-radius: 0; width: 8px; height: 8px; }
+.state.st-review { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
+.state.st-review::before { background: transparent; border: 2px solid currentColor; width: 9px; height: 9px; }
+.state.st-running { background: var(--run-bg); color: var(--run); border-color: color-mix(in oklch, var(--run) 35%, transparent); }
+.state.st-done { background: transparent; color: var(--muted); font-weight: 500; border-color: var(--line); }
+.state.st-done::before { background: var(--off); }
+
+.older { justify-self: start; padding: 7px 16px; font-size: 0.875rem; }
+
+.none { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--r); padding: 28px 20px; color: var(--muted); display: grid; gap: 4px; }
+.none-title { color: var(--ink); font-weight: 650; font-size: 1.0625rem; }
+
+@media (max-width: 720px) {
+  .hmain { padding: 16px 16px 32px; }
+  .top-inner { flex-wrap: wrap; padding: 12px 16px; gap: 8px 16px; }
+  .summary { order: 3; flex-basis: 100%; }
+  .top-tools { margin-left: auto; }
+  .proj-head, .mgr-head { padding-left: 14px; padding-right: 14px; }
+  .task { padding-right: 14px; }
+  .t-head { flex-direction: column; align-items: flex-start; }
+  .state { white-space: normal; }
+}

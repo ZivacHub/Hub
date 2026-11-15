@@ -18,6 +18,12 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 
 *Game mode (sample data): what it slowed or paused, and the buttons that ask first.*
 
+| Helpers screen | Dark theme | Phone width |
+|---|---|---|
+| ![Helpers screen: each project's manager chat and its helper tasks](docs/screenshots/helpers-light.png) | ![Helpers screen, dark theme](docs/screenshots/helpers-dark.png) | ![Helpers screen on a phone-sized screen](docs/screenshots/helpers-phone.png) |
+
+*Helpers screen (sample data): per project, each manager chat and the tasks it handed out, with the model and the state of each.*
+
 | Dark theme | Phone width |
 |---|---|
 | ![Hub dashboard, dark theme](docs/screenshots/dashboard-dark.png) | ![Hub dashboard on a phone-sized screen](docs/screenshots/dashboard-phone-light.png) |
@@ -30,6 +36,7 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 - **Chats waiting for you:** when a project's Claude chat has asked you something and is waiting, its card gets an amber box with the question and how long it has waited, and it is listed at the top of the side column. It reads the saved chat files only, so it needs no hooks and no change to Claude's settings, and it clears by itself when you answer.
 - **Running now, and done:** one panel lists what is working this minute (the programs the Hub started, Claude chats that are busy, the Manager when it runs a task) and shows a calm "Everything is done" line when nothing has worked for two minutes. The Hub only tells you: it never turns the PC off. It costs nothing with no page open (0% of a core) and under 1% of one core with the dashboard in front of you; a hidden tab polls once every two minutes.
 - **Game mode:** when I start a game, the Hub notices (a program on my game list, or a full-screen app with a busy graphics card; launchers, browsers and video players do not count) and calms the background work it started: lowest priority, only a quarter of the processor, a memory ceiling, flagged programs frozen, one Docker container paused and the local AI model unloaded. When the game ends everything is put back exactly as it was. A strip at the top of the page says what is slowed and has two buttons that ask first: *Turn game mode off for now* and *Ignore this app*. It only ever slows programs the Hub itself started, apart from the two things I named (that container and the model).
+- **Helpers:** each project's main Claude chat works as a manager: it hands tasks to helper chats on cheaper models and checks their work. A line in the side column counts those tasks, and a separate Helpers screen (`/helpers.html`) shows, per project, each manager chat and under it every task: which model got it and whether it is running, stuck, waiting for the manager's check, waiting for me, failed or done. It only reads the small record files my Claude Code hooks write in each project (`.claude/helpers/`), so it has no buttons and changes nothing.
 - **Manager card:** status of a separate orchestration service (running or not, queue, current goal), with Start and Stop.
 - **Start / Stop / Open in Claude Code:** each project on my start list gets Running or Stopped, Start and Stop buttons, and a "Start with PC" switch; every project gets an "Open in Claude Code" button. Each one asks "Start X?" first.
 - Light by default, dark by switch (remembered), refreshes itself every 30 seconds.

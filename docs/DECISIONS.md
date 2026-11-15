@@ -262,3 +262,15 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-12):** "pause them, while in game, and detect when not in game to run it, I mostly play league for now so that means when client is running you can run it, but if league seccond program is running the game"
 **Result:** While a game runs, the Hub pauses the openshorts container (docker pause) and unloads Ollama's loaded models from graphics memory, and it resumes both when the game ends; outside a game they run normally. The exception covers only these two (nothing else the Hub did not start, D31 otherwise stays). If either is not running, the step does nothing. Claude chats and the browser are still never touched.
 **Affects:** Phase 13 (13.3), D31 (exception)
+
+## D42 — Where the manager-and-helpers overview lives on the Hub   [decided 2026-11-15]
+**Question:** Own screen with a line on the main page, a section on the main page, or inside each project card?
+**The owner said (2026-11-15):** chose "Own screen + a line (Recommended)".
+**Result:** A separate "Helpers" page shows every project's manager chats and their helper tasks; the main page gets one small line in the side column with the totals that opens it.
+**Affects:** Phase 15 (15.4, 15.5)
+
+## D43 — Small defaults for Phase 15   [decided 2026-11-15]
+**Question:** Five defaults: (1) finished tasks older than 7 days hide behind "Show older"; (2) look only, no buttons; (3) refreshes by itself like the rest of the page; (4) the record files stay off public GitHub and screenshots use made-up data; (5) steps parked for Ivan also count in the main-page line.
+**The owner said (2026-11-15):** chose "Accept all (Recommended)".
+**Result:** All five as written. `.claude/helpers/` is git-ignored.
+**Affects:** Phase 15 (15.2, 15.4, 15.5), .gitignore

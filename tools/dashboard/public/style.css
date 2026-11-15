@@ -217,6 +217,14 @@ a.run.on:hover { text-decoration: underline; }
 .runlist .w-top { align-items: center; }
 .runlist .dot { margin-right: 2px; }
 
+/* helpers panel (step 15.4) */
+.helplist { gap: 6px; }
+.helplist li { padding-bottom: 0; border-bottom: 0; font-size: 0.9375rem; }
+.helplist .hl-urgent { background: var(--warn-bg); color: var(--warn); font-weight: 650; border-radius: 8px; padding: 4px 10px; }
+.helplist .hl-quiet { color: var(--muted); }
+.helplink { display: inline-block; margin-top: 12px; font-size: 0.875rem; font-weight: 600; color: var(--accent); text-decoration: none; }
+.helplink:hover { text-decoration: underline; }
+
 .done { color: var(--ok); font-size: 0.9375rem; margin-bottom: 8px; }
 .done b { font-weight: 650; }
 .game-ignored li { display: grid; grid-template-columns: minmax(6rem, 10rem) auto; justify-content: start; gap: 12px; }

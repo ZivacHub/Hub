@@ -1,0 +1,345 @@
+{
+  "totals": {
+    "running": 3,
+    "stuck": 1,
+    "review": 2,
+    "parked": 2,
+    "failed": 2,
+    "done": 4
+  },
+  "projects": [
+    {
+      "project": "Clip Studio",
+      "counts": {
+        "running": 1,
+        "stuck": 1,
+        "review": 1,
+        "parked": 1,
+        "failed": 1,
+        "done": 2
+      },
+      "managers": [
+        {
+          "id": "a1b2c3d4",
+          "chat": "Clip Studio · 4.3 Burn captions · 15 Nov 14:30",
+          "model": "Opus 5.5",
+          "lastActiveAgoMinutes": 3,
+          "tasks": [
+            {
+              "id": "20261115-101500-4-4",
+              "step": "4.4",
+              "title": "Caption style choice",
+              "grade": "",
+              "model": "",
+              "effort": null,
+              "state": "parked",
+              "sinceAgoMinutes": 95,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [],
+              "note": "You need to pick the caption style (word by word, or whole sentences) before I continue",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-143000-4-3",
+              "step": "4.3",
+              "title": "Burn captions into vertical cut",
+              "grade": "standard",
+              "model": "sonnet",
+              "effort": "medium",
+              "state": "review",
+              "sinceAgoMinutes": 40,
+              "finishedAgoMinutes": 5,
+              "seconds": 210,
+              "tokens": null,
+              "toolCalls": 18,
+              "owns": [
+                "src/export/vertical/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-112000-4-1",
+              "step": "4.1",
+              "title": "Caption file export",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "failed",
+              "sinceAgoMinutes": 260,
+              "finishedAgoMinutes": 250,
+              "seconds": 240,
+              "tokens": 18400,
+              "toolCalls": 14,
+              "owns": [
+                "src/export/captions/"
+              ],
+              "note": "2 of 9 tests fail: empty captions crash the export",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-145500-4-5",
+              "step": "4.5",
+              "title": "Caption preview page",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "running",
+              "sinceAgoMinutes": 12,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [
+                "src/preview/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-130000-4-1-2",
+              "step": "4.1",
+              "title": "Caption file export (retry)",
+              "grade": "standard",
+              "model": "sonnet",
+              "effort": "medium",
+              "state": "done",
+              "sinceAgoMinutes": 200,
+              "finishedAgoMinutes": 60,
+              "seconds": 420,
+              "tokens": 52000,
+              "toolCalls": 26,
+              "owns": [
+                "src/export/captions/"
+              ],
+              "note": "tests 9/9 pass, one clip checked by eye",
+              "retryOf": "20261115-112000-4-1"
+            }
+          ]
+        },
+        {
+          "id": "1a2b3c4d",
+          "chat": "Clip Studio · 4.2 Caption timing · 08 Nov 09:30",
+          "model": "Fable 5.2",
+          "lastActiveAgoMinutes": 200,
+          "tasks": [
+            {
+              "id": "20261108-093000-4-2",
+              "step": "4.2",
+              "title": "Caption timing from audio",
+              "grade": "strong",
+              "model": "opus",
+              "effort": "high",
+              "state": "stuck",
+              "sinceAgoMinutes": 190,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [
+                "src/captions/timing/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261019-100500-2-1",
+              "step": "2.1",
+              "title": "Waveform timing",
+              "grade": "strong",
+              "model": "opus",
+              "effort": "high",
+              "state": "done",
+              "sinceAgoMinutes": 10200,
+              "finishedAgoMinutes": 10110,
+              "seconds": 900,
+              "tokens": 96000,
+              "toolCalls": 41,
+              "owns": [
+                "src/audio/"
+              ],
+              "note": "12 of 12 test clips line up within a tenth of a second",
+              "retryOf": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "project": "Job Applier",
+      "counts": {
+        "running": 1,
+        "stuck": 0,
+        "review": 1,
+        "parked": 0,
+        "failed": 0,
+        "done": 1
+      },
+      "managers": [
+        {
+          "id": "e5f6a7b8",
+          "chat": "Job Applier · 2.2 Score a listing · 15 Nov 09:40",
+          "model": "Opus 5.5",
+          "lastActiveAgoMinutes": 25,
+          "tasks": [
+            {
+              "id": "20261115-094000-2-2",
+              "step": "2.2",
+              "title": "Score a listing against the CV",
+              "grade": "standard",
+              "model": "sonnet",
+              "effort": "medium",
+              "state": "review",
+              "sinceAgoMinutes": 70,
+              "finishedAgoMinutes": 8,
+              "seconds": 330,
+              "tokens": null,
+              "toolCalls": 22,
+              "owns": [
+                "src/match/score/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-143500-2-3",
+              "step": "2.3",
+              "title": "Top matches list",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "running",
+              "sinceAgoMinutes": 15,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [
+                "src/match/list/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261112-110000-1-3",
+              "step": "1.3",
+              "title": "Save 40 sample listings",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "done",
+              "sinceAgoMinutes": 1600,
+              "finishedAgoMinutes": 1550,
+              "seconds": 150,
+              "tokens": 9100,
+              "toolCalls": 9,
+              "owns": [
+                "data/samples/"
+              ],
+              "note": "40 listings saved, file checked by hand",
+              "retryOf": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "project": "Space Game",
+      "counts": {
+        "running": 1,
+        "stuck": 0,
+        "review": 0,
+        "parked": 1,
+        "failed": 1,
+        "done": 1
+      },
+      "managers": [
+        {
+          "id": "c9d8e7f6",
+          "chat": "Space Game · 5.4 Boss phase two · 14 Nov 18:20",
+          "model": "Fable 5.2",
+          "lastActiveAgoMinutes": 180,
+          "tasks": [
+            {
+              "id": "20261114-182000-5-3",
+              "step": "5.3",
+              "title": "Boss fight feel check",
+              "grade": "",
+              "model": "",
+              "effort": null,
+              "state": "parked",
+              "sinceAgoMinutes": 600,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [],
+              "note": "You need to play boss phase one once and tell me if it feels fair",
+              "retryOf": null
+            },
+            {
+              "id": "20261113-100000-5-4",
+              "step": "5.4",
+              "title": "Boss phase two attack pattern",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "failed",
+              "sinceAgoMinutes": 2900,
+              "finishedAgoMinutes": 2880,
+              "seconds": 240,
+              "tokens": 21000,
+              "toolCalls": 14,
+              "owns": [
+                "src/boss/phase2/"
+              ],
+              "note": "1 of 6 tests fail: phase two never ends after a restart",
+              "retryOf": null
+            },
+            {
+              "id": "20261115-144000-5-5",
+              "step": "5.5",
+              "title": "Enemy sprite sheet",
+              "grade": "light",
+              "model": "haiku",
+              "effort": "low",
+              "state": "running",
+              "sinceAgoMinutes": 30,
+              "finishedAgoMinutes": null,
+              "seconds": null,
+              "tokens": null,
+              "toolCalls": null,
+              "owns": [
+                "src/sprites/"
+              ],
+              "note": "",
+              "retryOf": null
+            },
+            {
+              "id": "20261114-190000-5-4-2",
+              "step": "5.4",
+              "title": "Boss phase two attack pattern (retry)",
+              "grade": "standard",
+              "model": "sonnet",
+              "effort": "medium",
+              "state": "done",
+              "sinceAgoMinutes": 1900,
+              "finishedAgoMinutes": 1800,
+              "seconds": 600,
+              "tokens": 61000,
+              "toolCalls": 33,
+              "owns": [
+                "src/boss/phase2/"
+              ],
+              "note": "tests 6/6 pass, phase two played through 20 times",
+              "retryOf": "20261113-100000-5-4"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

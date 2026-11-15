@@ -24,3 +24,6 @@ tests/_jarvis_prompt.txt
 
 # Hub state: Ivan's start-up ticks, running program ids
 data/
+
+# helper-task records (D43): written by the Claude Code hooks, not for the public repo
+.claude/helpers/

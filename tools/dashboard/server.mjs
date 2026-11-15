@@ -38,6 +38,16 @@ const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
 const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
 const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true, projects: sample.projects });
+// Helpers screen (Phase 15): per project the manager chats and their helper tasks. Read-only; real data from the helper records, sample data from demo/helpers.json
+const helpersLib = DEMO ? null : await import("./lib/helpers.mjs");
+const helperSample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "helpers.json"), "utf8")) : null;
+const demoHelpers = () => (args.includes("--demo-helpers=empty") ? { generatedAt: new Date().toISOString(), demo: true, totals: { running: 0, stuck: 0, review: 0, parked: 0, failed: 0, done: 0 }, projects: [] } : {
+  generatedAt: new Date().toISOString(), demo: true, totals: helperSample.totals,
+  projects: helperSample.projects.map((p) => ({ ...p, managers: p.managers.map(({ lastActiveAgoMinutes, tasks, ...m }) => ({
+    ...m, lastActive: lastActiveAgoMinutes == null ? null : ago(lastActiveAgoMinutes),
+    tasks: tasks.map(({ sinceAgoMinutes, finishedAgoMinutes, ...t }) => ({ ...t, since: ago(sinceAgoMinutes), finishedAt: finishedAgoMinutes == null ? null : ago(finishedAgoMinutes) })),
+  })) })),
+});
 
 // a fresh secret per run: only the page this server serves can read it (no CORS headers are ever sent), so other websites cannot use the POST route
 const gameCfg = DEMO ? null : loadGamesConfig();
@@ -87,6 +97,7 @@ const api = {
   },
   "/api/game": () => (DEMO ? (sample.gameStates?.[(args.find((a) => a.startsWith("--demo-game=")) || "").slice(12)] || sample.game || { on: false, reason: "No game", game: null, since: null, notes: [], ignored: [] }) : { ...gameDetector.state(), watching: gameCfg.games.filter((g) => g.exe.length).map((g) => g.name), lastSample: lastGameSample, slowdown: throttle.status(), pauses: pauses.status(), ignored: gameIgnore.list() }),
   "/api/needs-you": () => (DEMO ? { generatedAt: new Date().toISOString(), items: sample.needsYou.map((x) => ({ ...x, since: ago(x.agoMinutes) })) } : real.needsYou()),
+  "/api/helpers": () => (DEMO ? demoHelpers() : helpersLib.readHelpers()),
   "/api/manager": () => (DEMO ? sample.manager : real.manager()),
   "/api/runtime": () => (DEMO ? { demo: true, items: sample.runtime } : control.runtime().then((items) => ({ demo: false, items }))),
   "/api/session": () => ({ token: TOKEN, demo: DEMO }),
@@ -187,6 +198,9 @@ server.listen(PORT, HOST, async () => {
   const r1 = await fetch(base + "/api/projects"); const j = await r1.json();
   ok("GET /api/projects returns projects", r1.status === 200 && Array.isArray(j.projects) && j.projects.length > 0);
   ok("GET / serves the page", (await fetch(base + "/")).status === 200);
+  const rh = await fetch(base + "/api/helpers"); const jh = await rh.json();
+  ok("GET /api/helpers returns totals and projects", rh.status === 200 && Array.isArray(jh.projects) && ["running", "stuck", "review", "parked", "failed", "done"].every((k) => Number.isFinite(jh.totals?.[k])));
+  ok("POST to /api/helpers is refused", (await fetch(base + "/api/helpers", { method: "POST" })).status === 405);
   ok("PUT is refused", (await fetch(base + "/api/projects", { method: "PUT" })).status === 405);
   ok("POST to a data route is refused", (await fetch(base + "/api/projects", { method: "POST" })).status === 405);
   ok("path tricks refused", (await fetch(base + "/..%2f..%2fserver.mjs")).status === 404);

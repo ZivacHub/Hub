@@ -95,8 +95,38 @@ async function loadGame() {
   try { game = await (await fetch("/api/game", { cache: "no-store" })).json(); } catch { /* keep the last state */ }
 }
 
+let helpers = null;                 // totals from /api/helpers; null = never read yet
+let helpersFailed = false;
+async function loadHelpers() {
+  try {
+    const r = await fetch("/api/helpers", { cache: "no-store" });
+    if (!r.ok) throw new Error("helpers");
+    const t = (await r.json()).totals;
+    if (!t || typeof t !== "object") throw new Error("helpers");
+    helpers = t; helpersFailed = false;
+  } catch { if (!helpers) helpersFailed = true; /* later failures: keep the last numbers */ }
+}
+
+function renderHelpers() {
+  const t = helpers || {}, n = (k) => Number(t[k]) || 0;
+  const lines = [
+    ["parked", `${n("parked")} waiting for you`, "hl-urgent"],
+    ["review", `${n("review")} waiting for the manager's check`, ""],
+    ["failed", `${n("failed")} failed the check`, ""],
+    ["stuck", `${n("stuck")} stuck (running over 2 hours)`, ""],
+    ["running", `${n("running")} running`, ""],
+    ["done", `${n("done")} done`, "hl-quiet"],
+  ].filter(([k]) => n(k) > 0);
+  const need = n("parked") + n("review") + n("failed") + n("stuck");
+  $("helpers-count").textContent = need || "";
+  $("helpers").replaceChildren(...(helpers
+    ? (lines.length ? lines.map(([, text, cls]) => h("li", { class: cls }, text)) : [h("li", { class: "hl-quiet" }, "No helper tasks yet.")])
+    : [h("li", { class: "hl-quiet" }, helpersFailed ? "Can't read the helper records." : "Loading…")]));
+}
+
 async function loadRunning() {
   await loadGame();
+  await loadHelpers();
   try { const j = await (await fetch("/api/running", { cache: "no-store" })).json(); runningNow = j.items || []; doneInfo = j.done || { allDone: false, finishedAt: null }; } catch { /* keep the last list */ }
 }
 
@@ -261,6 +291,8 @@ function render(data) {
   $("done-note").hidden = !doneInfo.allDone;
   if (doneInfo.allDone) $("done-note").replaceChildren(h("b", {}, "Everything is done"), ` · finished ${new Date(doneInfo.finishedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
   document.title = doneInfo.allDone ? "Hub · everything is done" : "Hub";
+
+  renderHelpers();
 
   $("needs-panel").hidden = needs.length === 0;
   $("needs-count").textContent = needs.length || "";
