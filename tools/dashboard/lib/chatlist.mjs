@@ -20,6 +20,7 @@ const msOf = (s) => (s ? Date.parse(s) : 0) || 0;
 const norm = (p) => String(p ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 const APP_ID = /^local_[0-9a-f-]{8,64}$/i;
 const SESSION_ID = /^[0-9a-fA-F-]{8,64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Folder name directly under root that contains cwd, or null. */
 function projectOf(cwd, root) {
@@ -49,14 +50,18 @@ export function buildChats({ hubChats = [], open = [], appRecords = [], states =
     if (h.sessionId) hubSessions.add(String(h.sessionId));
     const s = st(h.sessionId);
     const nm = needs(s);
+    const rc = h.remoteControl === true; // 14.6: a background chat reachable from the phone; the Hub never answers it
+    const rest = state === "idle" || state === "failed" || state === "stopped";
     add(String(h.project ?? ""), {
       id: String(h.id ?? ""), kind: "hub", name: red(h.name, 80), state,
       needsYou: nm, why: nm ? s.state : "",
       snippet: nm ? red(s.snippet, 220) : state === "failed" ? red(h.lastError, 220) : "",
-      remoteControl: false, since: iso(h.startedAt), lastActive: iso(h.lastTurnAt) ?? iso(h.startedAt), model: h.model ? String(h.model) : null,
+      remoteControl: rc, since: iso(h.startedAt), lastActive: iso(h.lastTurnAt) ?? iso(h.startedAt), model: h.model ? String(h.model) : null,
       turns: typeof h.turns === "number" ? h.turns : null,
-      canAnswer: state === "idle" || state === "failed" || state === "stopped",
-      openLink: null, lastReply: red(h.lastReply, 1400),
+      canAnswer: rest && !rc,
+      // T7b: moves the chat into the Claude app; only for a resting chat with Remote Control off and a real session id
+      openLink: rest && !rc && typeof h.sessionId === "string" && UUID.test(h.sessionId) ? "claude://resume?session=" + h.sessionId : null,
+      lastReply: red(h.lastReply, 1400),
       refused: (Array.isArray(h.refused) ? h.refused : []).map((x) => red(x, 160)),
     });
   }
@@ -237,6 +242,18 @@ async function selftest() {
   check("lastActive falls back to startedAt", hs("idle", { lastTurnAt: null }).lastActive === ago(60));
   check("refused lines clipped", (() => { const c = hs("idle", { refused: ["R".repeat(300), "short"] }); return c.refused.length === 2 && c.refused[0].length === 160 && c.refused[1] === "short"; })());
   check("lastReply clipped 1400", hs("idle", { lastReply: "L".repeat(2000) }).lastReply.length === 1400);
+
+  // 14.6: Remote Control and "Open in the app" for Hub chats
+  const U = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  check("hub open link: idle / failed / stopped with Remote Control off", ["idle", "failed", "stopped"].every((s) => hs(s, { sessionId: U }).openLink === "claude://resume?session=" + U));
+  check("hub open link: uppercase UUID ok", hs("idle", { sessionId: U.toUpperCase() }).openLink === "claude://resume?session=" + U.toUpperCase());
+  check("hub open link: none while working", hs("working", { sessionId: U }).openLink === null);
+  check("hub open link: none with Remote Control on (any state)", ["working", "idle", "failed", "stopped"].every((s) => hs(s, { sessionId: U, remoteControl: true }).openLink === null));
+  check("hub open link: none without a real UUID", [null, undefined, "", "aaaaaaaa-0000-1111", U + "x", "x" + U, U.replace(/-/g, ""), "../" + U, U + "&evil=1", 42].every((sid) => hs("idle", { sessionId: sid }).openLink === null));
+  check("hub remoteControl passes through; true only for true", hs("idle", { remoteControl: true }).remoteControl === true && hs("idle", { remoteControl: "yes" }).remoteControl === false && hs("idle", { remoteControl: undefined }).remoteControl === false);
+  check("hub with Remote Control on cannot be answered here", ["idle", "failed", "stopped", "working"].every((s) => hs(s, { sessionId: U, remoteControl: true }).canAnswer === false));
+  check("app chat keeps its epitaxy link, hub chat gets the resume link", (() => { const r = all(b({ hubChats: [hub({ sessionId: U })], open: [ent({})], appRecords: [rec({})] })); return r.find((c) => c.kind === "app").openLink === "claude://claude.ai/epitaxy/local_abcdef12-3456" && r.find((c) => c.kind === "hub").openLink === "claude://resume?session=" + U; })());
+  check("hub Remote Control chat also in the open list is listed once, as hub", (() => { const r = all(b({ hubChats: [hub({ sessionId: U, remoteControl: true, state: "working" })], open: [ent({ sessionId: U, kind: "background", status: "busy" })] })); return r.length === 1 && r[0].kind === "hub" && r[0].remoteControl === true && r[0].openLink === null; })());
 
   // redact + clip
   const fake = (s) => String(s).replace(/SECRET/g, "[hidden]");

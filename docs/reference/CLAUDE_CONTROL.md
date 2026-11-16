@@ -55,3 +55,13 @@ Two kinds of chat exist, and they behave differently:
 | stravu/crystal | 3.1k | MIT | Several chats in parallel copies of a project (renamed, last push 2026-02) |
 | sugyan/claude-code-webui | 1.1k | MIT | Web page for the command line (archived) |
 Ideas worth borrowing: one list of all chats with a "needs you" mark (already ours), a task box per project, a chat view that shows only the last messages. All of them start their own chats through the command line, the same route as T1 and T2; none steers chats inside the official desktop app.
+
+## Added 2026-11-16 (step 14.6, real runs by the Opus helper and again by the manager)
+| # | What | Proof |
+|---|---|---|
+| T16 | A chat can be started WITH Remote Control as a background chat: `claude --bg --name N --remote-control N --permission-mode auto [--model m] [--tools ""] -- <task>` | the open list shows it with a pid within about 2 s; `claude logs <id>` says "/remote-control is active" a few seconds after the start. The short id is printed as "backgrounded · <8 hex> · name" and is the first 8 characters of the session id |
+| T17 | `--session-id` is ignored with `--bg` ("--bg manages the session id"); the task cannot go on standard input, it goes on the argument list after `--` | a stdin-only task never arrived in the saved file |
+| T18 | Switching Remote Control off: `claude stop <short id>`, wait until the list shows no pid (about 1.5 s), then `claude -p --resume <session id>` answers in the SAME session | reply in the same session id, twice |
+| T19 | Switching it on again: a chat that ran in the background is woken with ONLY `claude --bg --resume <id>` (it keeps its saved options, Remote Control included); adding any flag there starts a COPY. A chat that only ever ran as `-p` turns continues under the same id with `--bg --name N --remote-control N --permission-mode auto --resume <id>` | same session id, no new file, Remote Control active again; the copy case was seen once and stopped |
+| T20 | A new background chat can be listed as idle before its first turn has run | the engine keeps the first turn "working" until a reply is in the saved file (or 20 s of idle) |
+RE-TEST all of T16 to T20 after a Claude update: `node tools/dashboard/lib/chats.mjs --selftest --real-rc` (starts and stops its own chats only, cheapest model).

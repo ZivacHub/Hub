@@ -115,7 +115,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -153,6 +153,7 @@ async function chatAction(body) {
   if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true });
   if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
   if (body.action === "chat-stop") return chats.stop({ id: body.id });
+  if (body.action === "chat-remote-control") return chats.setRemoteControl({ id: body.id, on: typeof body.on === "boolean" ? body.on : undefined }); // only the Hub id and a true / false
   return chats.appLink({ project: body.project, task: body.task }); // chat-app-link: only builds the link; the page opens it and Ivan presses Send in the app
 }
 
@@ -250,8 +251,11 @@ server.listen(PORT, HOST, async () => {
   ok("chat-start without the token is refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-start", project: "Hub", task: "x" }), "POST")).status === 403);
   ok("chat-answer and chat-stop without the token are refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-answer", id: "h-20260101-000000-abcd", text: "x" }), "POST")).status === 403 && (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-stop", id: "h-20260101-000000-abcd" }), "POST")).status === 403);
   ok("chat-start refuses an unknown project and a path", await refused({ action: "chat-start", project: "NoSuchProject", task: "x" }) && await refused({ action: "chat-start", project: "..\\Windows", task: "x" }) && await refused({ action: "chat-start", project: "../..", task: "x" }));
-  ok("chat-start refuses an empty task, an unknown model and Remote Control", await refused({ action: "chat-start", project: "Hub", task: "  " }) && await refused({ action: "chat-start", project: "Hub", task: "x", model: "gpt-4" }) && await refused({ action: "chat-start", project: "Hub", task: "x", remoteControl: true }));
+  ok("chat-start refuses an empty task, an unknown model, and Remote Control with an empty task", await refused({ action: "chat-start", project: "Hub", task: "  " }) && await refused({ action: "chat-start", project: "Hub", task: "x", model: "gpt-4" }) && await refused({ action: "chat-start", project: "Hub", task: " ", remoteControl: true }));   // never a valid project AND a task here: that would really start a chat
   ok("chat-answer and chat-stop refuse an unknown chat and a Claude session id", await refused({ action: "chat-answer", id: "h-20260101-000000-abcd", text: "x" }) && await refused({ action: "chat-answer", id: "18ec7052-3a6a-46cc-ade3-7ff857195e3d", text: "x" }) && await refused({ action: "chat-stop", id: "h-20260101-000000-abcd" }));
+  ok("chat-remote-control without the token is refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-remote-control", id: "h-20260101-000000-abcd", on: true }), "POST")).status === 403);
+  ok("chat-remote-control refuses an unknown chat, a Claude session id, a missing or non-boolean value", await refused({ action: "chat-remote-control", id: "h-20260101-000000-abcd", on: true }) && await refused({ action: "chat-remote-control", id: "18ec7052-3a6a-46cc-ade3-7ff857195e3d", on: false }) && await refused({ action: "chat-remote-control", id: "h-20260101-000000-abcd" }) && await refused({ action: "chat-remote-control", id: "h-20260101-000000-abcd", on: "yes" }));
+  ok("chat-start with Remote Control on is refused for an unknown project (nothing started)", await refused({ action: "chat-start", project: "NoSuchProject", task: "x", remoteControl: true }));
   ok("a long chat task is not cut off as 'too big' but still refused for its project", await refused({ action: "chat-start", project: "NoSuchProject", task: "x".repeat(3000) }));
   ok("a long body on any other action is still 413", (await raw("/api/action", json, JSON.stringify({ action: "stop", id: "x", pad: "y".repeat(3000), confirm: true }), "POST")).status === 413);
   const lnk = await raw("/api/action", json, cj({ action: "chat-app-link", project: "Hub", task: "Hello there" }), "POST"); const lj = JSON.parse(lnk.text);

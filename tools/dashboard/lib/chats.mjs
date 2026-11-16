@@ -3,13 +3,18 @@
 // answer goes in on standard input (never on a command line, never through a shell). The engine only ever continues
 // session ids it created itself, never sends into a chat that is open anywhere else (docs/reference/CLAUDE_CONTROL.md
 // T9 / T13), and logs every action without the text. Contract: docs/plan/phases/14-run-chats-from-the-hub.md.
-//   node tools/dashboard/lib/chats.mjs --selftest          pretend claude: fast, uses no Claude allowance
-//   node tools/dashboard/lib/chats.mjs --selftest --real   also ONE real round trip (cheapest model, all tools off)
-import { spawn, spawnSync, execFile } from "node:child_process";
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, openSync, closeSync, readdirSync, renameSync, statSync, rmSync } from "node:fs";
+// Step 14.6: a chat started WITH Remote Control is a background chat (`claude --bg --remote-control <name> ... -- <task>`)
+// that stays alive for the phone. `--bg` reads nothing from standard input and ignores `--session-id` (real runs
+// 2026-11-16), so for these chats ONLY the task goes on the argument list, after `--` (still no shell), and the session id
+// is found in `claude agents --json` by the chat's unique name. Off = `claude stop`, then wait until the list shows no pid.
+//   node tools/dashboard/lib/chats.mjs --selftest            pretend claude: fast, uses no Claude allowance
+//   node tools/dashboard/lib/chats.mjs --selftest --real     also ONE real round trip (cheapest model, all tools off)
+//   node tools/dashboard/lib/chats.mjs --selftest --real-rc  also the real Remote Control checks (cheapest model, all tools off)
+import { spawn, spawnSync, execFile, execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, openSync, closeSync, readdirSync, renameSync, statSync, rmSync, existsSync, readSync, fstatSync } from "node:fs";
 import { join, dirname, resolve, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { randomBytes, randomUUID } from "node:crypto";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -24,10 +29,15 @@ const ID_RE = /^h-\d{8}-\d{6}-[a-z0-9]{4}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BAD_PROJECT = /[&|<>^%"`\/\\\x00-\x1f]/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const BG_ID_RE = /^[0-9a-f]{8}$/; // the short id `claude --bg` prints and `claude stop` takes (= the first 8 characters of the session id)
+export const RC_ANSWER_REFUSED = "Remote Control is on for this chat: answer it on your phone, or turn Remote Control off here first.";
+export const RC_ON_REFUSED = "Remote Control can only be switched on when the chat is started."; // kept for the page; not used while switching on is proven to work
 
 const clip = (s, n) => { const t = String(s ?? ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 const pad = (n) => String(n).padStart(2, "0");
 const logSafe = (s, n = 40) => String(s ?? "-").replace(/\s+/g, "_").replace(/[^\w.()\-]/g, "?").slice(0, n) || "-";
+const stripAnsi = (s) => String(s ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
+const encodeCwd = (p) => String(p).replace(/[^A-Za-z0-9]/g, "-"); // how Claude names a folder's chat-file folder (chatlist.mjs does the same)
 
 export function makeChats(opts = {}) {
   const root = opts.root || BUSNUS;
@@ -37,6 +47,9 @@ export function makeChats(opts = {}) {
   const maxWorking = Number.isInteger(opts.maxWorking) && opts.maxWorking > 0 ? opts.maxWorking : 2; // D41
   const redact = typeof opts.redact === "function" ? opts.redact : (s) => s;
   const noTools = opts.noTools === true; // tests only: every turn runs with `--tools ""` (all tools off)
+  const findMs = Number.isInteger(opts.findTimeoutMs) && opts.findTimeoutMs > 0 ? opts.findTimeoutMs : 20000; // wait for a background chat to show / to lose its pid
+  const refreshMs = Number.isInteger(opts.rcRefreshMs) && opts.rcRefreshMs > 0 ? opts.rcRefreshMs : 3000; // how old the open list may be for Remote Control chats
+  const sessionsDir = opts.sessionsDir || join(homedir(), ".claude", "projects"); // the saved chat files (read-only)
   const statePath = join(dataDir, "hub_chats.json");
   const turnDir = join(dataDir, "chats");
   const image = (() => { const b = basename(prog[0]).toLowerCase(); return process.platform === "win32" && !extname(b) ? b + ".exe" : b; })();
@@ -130,14 +143,19 @@ export function makeChats(opts = {}) {
   function settle(st) {
     let changed = false;
     for (const c of Object.values(st.chats)) {
-      if (c.state !== "working" || alive(c.pid)) continue;
+      if (c.remoteControl && !c.sessionId && !acting.has(c.id)) { // a background start that never finished (the Hub was closed meanwhile)
+        Object.assign(c, { remoteControl: false, state: "failed", lastError: "The background chat did not start.", pid: null }); changed = true;
+        log("chat-end", c.id, c.project, "failed: background start never finished"); continue;
+      }
+      if (c.state !== "working" || c.remoteControl || alive(c.pid)) continue; // Remote Control chats follow the open list instead
       applyTurn(c); changed = true;
       log("chat-end", c.id, c.project, c.state);
     }
     if (changed) writeState(st);
     return st;
   }
-  const working = (st) => Object.values(st.chats).filter((c) => c.state === "working" && alive(c.pid)).length;
+  // Busy turns: running -p turns, busy Remote Control chats, and background chats still starting.
+  const working = (st) => Object.values(st.chats).filter((c) => c.state === "working" && (alive(c.pid) || (c.remoteControl && !c.sessionId && acting.has(c.id)))).length;
   const busyMessage = () => `${maxWorking === 2 ? "Two" : maxWorking} chats are already working. Wait for one to finish.`;
 
   // ---------- one turn ----------
@@ -169,6 +187,183 @@ export function makeChats(opts = {}) {
     c.lastTurnAt = new Date().toISOString(); c.lastError = ""; c.refused = [];
   }
 
+  // ---------- background chats with Remote Control (14.6) ----------
+  const acting = new Set(); // Hub ids an action is busy with right now (start, switch, stop): the open-list refresh leaves them alone
+  let snapAt = 0, refreshing = null;
+  const secs = () => Math.round(findMs / 1000);
+  const pause = (ms) => new Promise((d) => setTimeout(d, ms));
+
+  /** The open-chats list (`claude agents --json`), or null when it cannot be read. */
+  async function readOpen() {
+    let timer;
+    try {
+      const v = await Promise.race([Promise.resolve().then(() => listOpen()), new Promise((_, no) => { timer = setTimeout(() => no(new Error("timeout")), 6000); })]);
+      return Array.isArray(v) ? v : null;
+    } catch { return null; } finally { clearTimeout(timer); }
+  }
+  const pidEntry = (open, sid) => (Array.isArray(open) ? open : []).find((e) => e && e.sessionId === sid && e.pid) || null;
+  /** Poll the open list until test(list) returns something truthy; null after findMs. */
+  async function waitOpen(test, ms = findMs) {
+    const t0 = Date.now();
+    for (;;) {
+      const open = await readOpen();
+      if (open) { const r = test(open); if (r) return r; }
+      if (Date.now() - t0 >= ms) return null;
+      await pause(400);
+    }
+  }
+  /** Run one short claude command (argument list, no shell, nothing on standard input) and collect what it printed. */
+  function runCmd(args, cwd, ms = 30000) {
+    return new Promise((done) => {
+      let out = "", err = "", fin = false, child = null, timer = null;
+      const end = (code) => { if (fin) return; fin = true; clearTimeout(timer); setTimeout(() => done({ code, out: stripAnsi(out), err: stripAnsi(err) }), 50); };
+      timer = setTimeout(() => { try { if (child) child.kill(); } catch { /* gone */ } end("timeout"); }, ms);
+      try { child = spawn(prog[0], [...prog.slice(1), ...args], { cwd, env: process.env, windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"] }); }
+      catch { end("spawn"); return; }
+      child.stdout.on("data", (d) => { if (out.length < 65536) out += d; });
+      child.stderr.on("data", (d) => { if (err.length < 65536) err += d; });
+      child.on("error", () => end("spawn"));
+      child.on("exit", (code) => end(code));
+    });
+  }
+  const shortIdOf = (out) => (String(out).match(/backgrounded\s*·\s*([0-9a-f]{8})\b/) || [])[1] || null;
+  const firstLine = (s) => clip(String(s || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean) || "", 200);
+  /** Arguments for a background chat. `bare`: a chat that already ran in the background keeps its saved options (auto mode,
+   *  Remote Control, model, tools, name); passing ANY flag there starts a COPY (real run 2026-11-16), so only --resume goes. */
+  function bgArgs(c, { task, resume, bare } = {}) {
+    if (bare) return ["--bg", "--resume", c.sessionId];
+    const a = ["--bg", "--name", c.name, "--remote-control", c.name, "--permission-mode", PERMISSION_MODE];
+    if (c.model) a.push("--model", c.model);
+    if (resume) a.push("--resume", c.sessionId);
+    if (c.noTools) a.push("--tools", "");
+    if (task !== undefined) a.push("--", task); // `--` ends the options: the task can never be read as a flag
+    return a;
+  }
+  /** The short id `claude stop` may get for this chat: only one that is the start of the chat's own session id. */
+  function stopRef(c, e) {
+    const ref = e && typeof e.id === "string" ? e.id : c.bgId;
+    return typeof ref === "string" && BG_ID_RE.test(ref) && UUID_RE.test(c.sessionId || "") && c.sessionId.startsWith(ref) ? ref : null;
+  }
+  /** After a failed background launch: stop what that launch started (its printed short id, or new entries with the chat's unique name). */
+  async function cleanupLaunch(short, name, before) {
+    const refs = new Set(short ? [short] : []);
+    for (const e of (await readOpen()) || []) {
+      if (e && e.name === name && typeof e.id === "string" && BG_ID_RE.test(e.id) && typeof e.sessionId === "string" && e.sessionId.startsWith(e.id) && !before.has(e.sessionId)) refs.add(e.id);
+    }
+    for (const ref of refs) await runCmd(["stop", ref], root);
+    if (refs.size) await waitOpen((l) => (l.some((e) => e && e.pid && typeof e.sessionId === "string" && [...refs].some((r) => e.sessionId.startsWith(r))) ? null : true));
+  }
+  /** `claude stop` this chat (only this one), then wait until the open list shows no pid for it (T12b: continuing earlier makes a copy). */
+  async function endBg(c) {
+    const open = await readOpen();
+    if (!open) return { error: "Can't read the list of running chats, so nothing was stopped." };
+    const e = pidEntry(open, c.sessionId);
+    if (e) {
+      const ref = stopRef(c, e);
+      if (!ref) return { error: "This chat's background id does not match its session, so nothing was stopped." };
+      const r = await runCmd(["stop", ref], root);
+      if (r.code !== 0) log("chat-rc", c.id, c.project, `claude stop exit ${logSafe(r.code, 12)}`);
+    }
+    const gone = await waitOpen((l) => (pidEntry(l, c.sessionId) ? null : true));
+    return gone ? { ok: true } : { error: `Claude did not close the chat within ${secs()} seconds. Try again in a moment.` };
+  }
+  /** Last reply in the chat's saved file (read-only, the end of the file only), or null. */
+  function lastReplyOf(c) {
+    if (!UUID_RE.test(c.sessionId || "")) return null;
+    try {
+      const fd = openSync(join(sessionsDir, encodeCwd(join(root, c.project)), c.sessionId + ".jsonl"), "r");
+      let text = "";
+      try { const size = fstatSync(fd).size; const n = Math.min(size, 1 << 20); const buf = Buffer.alloc(n); readSync(fd, buf, 0, n, size - n); text = buf.toString("utf8"); } finally { closeSync(fd); }
+      const lines = text.split(/\r?\n/);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i].includes('"assistant"')) continue;
+        let o; try { o = JSON.parse(lines[i]); } catch { continue; }
+        if (!o || o.type !== "assistant" || !o.message || !Array.isArray(o.message.content)) continue;
+        const t = o.message.content.filter((p) => p && p.type === "text" && typeof p.text === "string").map((p) => p.text).join("\n").trim();
+        if (t) return t;
+      }
+    } catch { /* no saved file yet */ }
+    return null;
+  }
+  /** Size and time of the saved chat file ("" when there is none): the reply is read again only when this changes. */
+  function replyStamp(c) {
+    if (!UUID_RE.test(c.sessionId || "")) return "";
+    try { const s = statSync(join(sessionsDir, encodeCwd(join(root, c.project)), c.sessionId + ".jsonl")); return `${s.size}-${s.mtimeMs}`; } catch { return ""; }
+  }
+  /** Change one chat on a FRESH copy of the state (actions wait for Claude, so their earlier copy may be old). */
+  function update(id, fn) {
+    const st = readState(); const c = st.chats[id];
+    if (!c) return null;
+    fn(c, st); writeState(st);
+    return c;
+  }
+  /** Remote Control chats follow the open list: busy = working, idle = idle; missing twice with no live pid = it really ended. */
+  function applyOpen(open) {
+    const st = readState(); let changed = false; const now = new Date().toISOString();
+    for (const c of Object.values(st.chats)) {
+      if (!c.remoteControl || !c.sessionId || acting.has(c.id)) continue;
+      const e = pidEntry(open, c.sessionId);
+      if (e) {
+        let next = e.status === "busy" ? "working" : e.status === "idle" ? "idle" : c.state;
+        if (c.pid !== e.pid || c.misses) { c.pid = e.pid; c.misses = 0; changed = true; }
+        // A new background chat can show "idle" for a moment BEFORE its first turn runs (real run 2026-11-16): the first turn
+        // only counts as done once a reply is saved, or after findMs of idle without one.
+        if (c.firstTurn && next === "idle") {
+          if (!c.idleSince) { c.idleSince = Date.now(); changed = true; }
+          if (lastReplyOf(c) !== null || Date.now() - c.idleSince >= findMs) { c.firstTurn = false; c.idleSince = 0; changed = true; } else next = "working";
+        } else if (c.firstTurn && c.idleSince) { c.idleSince = 0; changed = true; }
+        if (next !== c.state) {
+          if (next === "working") c.turns = (c.turns || 0) + 1; // a new turn (from the phone)
+          c.state = next; c.lastTurnAt = now; changed = true;
+        }
+        if (c.state === "idle") { // keep the reply fresh (a short phone turn can fall between two looks)
+          const m = replyStamp(c);
+          if (m !== c.replyStamp) { const r = lastReplyOf(c); if (r) c.lastReply = clip(r, 1400); c.replyStamp = m; changed = true; }
+        }
+      } else {
+        c.misses = (c.misses || 0) + 1; changed = true;
+        if (c.misses >= 2 && !alive(c.pid)) {
+          const r = lastReplyOf(c); if (r) c.lastReply = clip(r, 1400);
+          c.remoteControl = false; c.state = "stopped"; c.pid = null; c.misses = 0; c.firstTurn = false; c.lastTurnAt = now;
+          log("chat-end", c.id, c.project, "Remote Control chat ended outside the Hub");
+        }
+      }
+    }
+    if (changed) writeState(st);
+  }
+  function refreshOpen() {
+    if (!refreshing) {
+      snapAt = Date.now();
+      refreshing = readOpen().then((open) => { if (open) { try { applyOpen(open); } catch { /* next time */ } } return open; }).finally(() => { refreshing = null; });
+    }
+    return refreshing;
+  }
+  /** list() and workingPids() must answer at once: they use the last known state and ask for a fresh open list in the background. */
+  function kick(st) { if (Date.now() - snapAt >= refreshMs && Object.values(st.chats).some((c) => c.remoteControl && c.sessionId)) refreshOpen().catch(() => { /* next time */ }); }
+
+  async function startBg(st, c, t) {
+    c.name = `${c.name} · ${c.id.slice(-4)}`; // unique: the session id is found by this name
+    Object.assign(c, { remoteControl: true, bg: true, bgId: null, sessionId: null, turns: 1 });
+    const before = new Set(((await readOpen()) || []).filter((e) => e && e.pid).map((e) => e.sessionId));
+    st = readState(); while (st.chats[c.id]) c.id = newId();
+    c.seq = ++st.seq; st.chats[c.id] = c; writeState(st); acting.add(c.id); // listed as working while it starts
+    try {
+      const r = await runCmd(bgArgs(c, { task: t }), join(root, c.project));
+      const short = shortIdOf(r.out);
+      const hit = r.code === 0 ? await waitOpen((l) => l.find((e) => e && e.name === c.name && e.pid && typeof e.sessionId === "string" && UUID_RE.test(e.sessionId) && !before.has(e.sessionId)
+        && (!short || e.sessionId.startsWith(short)) && (typeof e.id !== "string" || e.sessionId.startsWith(e.id))) || null) : null;
+      if (!hit) {
+        await cleanupLaunch(short, c.name, before);
+        update(c.id, (x, s) => { delete s.chats[c.id]; });
+        const why = r.code !== 0 ? `Claude could not start the background chat${firstLine(r.err || r.out) ? ": " + firstLine(r.err || r.out) : "."}` : `Claude did not show the new chat within ${secs()} seconds, so it was stopped. Try again.`;
+        return fail("chat-start", c.id, c.project, why);
+      }
+      update(c.id, (x) => { x.sessionId = hit.sessionId; x.bgId = stopRef({ sessionId: hit.sessionId, bgId: short }, hit); x.pid = hit.pid; x.state = "working"; x.firstTurn = true; x.idleSince = 0; x.misses = 0; }); // the open list decides when the first turn is done
+      log("chat-start", c.id, c.project, `ok background pid ${hit.pid} Remote Control on${c.model ? " model " + c.model : ""}`);
+      return { ok: true, id: c.id, message: `Started a chat in ${c.project} with Remote Control on. Open it on your phone in the Claude app.` };
+    } finally { acting.delete(c.id); }
+  }
+
   // ---------- the actions ----------
   async function start({ project, task, model, remoteControl } = {}) {
     const pe = projectError(project);
@@ -177,16 +372,18 @@ export function makeChats(opts = {}) {
     if (!textOk(t)) return fail("chat-start", "-", project, `The task must be 1 to ${MAX_TEXT} characters.`);
     const m = model === undefined || model === null || model === "" ? null : model;
     if (m !== null && !MODELS.includes(m)) return fail("chat-start", "-", project, `Unknown model. Pick one of: ${MODELS.join(", ")}.`);
-    if (remoteControl) return fail("chat-start", "-", project, "Remote Control for Hub chats comes in step 14.6.");
+    if (remoteControl !== undefined && remoteControl !== null && typeof remoteControl !== "boolean") return fail("chat-start", "-", project, "Remote Control must be on or off.");
+    if (remoteControl === true && Object.values(readState().chats).some((x) => x.remoteControl && x.sessionId)) await refreshOpen(); // busy Remote Control chats count
     const st = settle(readState());
     if (working(st) >= maxWorking) return fail("chat-start", "-", project, busyMessage());
     const d = new Date();
     const c = {
       id: newId(), project, name: `Hub · ${project} · ${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
-      task: clip(t, 300), model: m, remoteControl: false, noTools, state: "working", startedAt: d.toISOString(), lastTurnAt: d.toISOString(),
+      task: clip(t, 300), model: m, remoteControl: false, bg: false, noTools, state: "working", startedAt: d.toISOString(), lastTurnAt: d.toISOString(),
       turns: 0, sessionId: randomUUID(), lastReply: "", lastError: "", refused: [], pid: null, turnFile: null, seq: ++st.seq,
     };
     while (st.chats[c.id]) c.id = newId();
+    if (remoteControl === true) return startBg(st, c, t);
     const l = launch(c, t, true);
     if (l.error) return fail("chat-start", c.id, project, l.error);
     beginTurn(c, l);
@@ -206,23 +403,21 @@ export function makeChats(opts = {}) {
     if (typeof id !== "string" || !ID_RE.test(id)) return fail("chat-answer", id, "-", "Unknown chat.");
     let st = settle(readState()); let c = st.chats[id];
     if (!c) return fail("chat-answer", id, "-", "Unknown chat.");
+    if (c.remoteControl || acting.has(id)) return fail("chat-answer", id, c.project, c.remoteControl ? RC_ANSWER_REFUSED : "This chat is being switched. Try again in a few seconds.");
     const t = cleanText(text);
     if (!textOk(t)) return fail("chat-answer", id, c.project, `The answer must be 1 to ${MAX_TEXT} characters.`);
     let why = notAnswerable(c);
     if (why) return fail("chat-answer", id, c.project, why);
     if (working(st) >= maxWorking) return fail("chat-answer", id, c.project, busyMessage());
     // Rule 3 (T9): never write into a chat that is open anywhere else. If the list cannot be read, nothing is sent.
-    let open;
-    try {
-      let timer;
-      open = await Promise.race([Promise.resolve().then(() => listOpen()), new Promise((_, no) => { timer = setTimeout(() => no(new Error("timeout")), 6000); })]).finally(() => clearTimeout(timer));
-      if (!Array.isArray(open)) throw new Error("not a list");
-    } catch { return fail("chat-answer", id, c.project, "Can't check whether the chat is open elsewhere, so nothing was sent."); }
+    const open = await readOpen();
+    if (!open) return fail("chat-answer", id, c.project, "Can't check whether the chat is open elsewhere, so nothing was sent.");
     if (open.some((e) => e && e.sessionId === c.sessionId && (e.pid || e.kind === "interactive")))
       return fail("chat-answer", id, c.project, "This chat is open somewhere else (the Claude app or a terminal). Answer it there, so the chat does not split.");
     // The check above waited: look again before sending.
     st = settle(readState()); c = st.chats[id];
     if (!c) return fail("chat-answer", id, "-", "Unknown chat.");
+    if (c.remoteControl || acting.has(id)) return fail("chat-answer", id, c.project, c.remoteControl ? RC_ANSWER_REFUSED : "This chat is being switched. Try again in a few seconds.");
     why = notAnswerable(c);
     if (why) return fail("chat-answer", id, c.project, why);
     if (working(st) >= maxWorking) return fail("chat-answer", id, c.project, busyMessage());
@@ -237,6 +432,17 @@ export function makeChats(opts = {}) {
     if (typeof id !== "string" || !ID_RE.test(id)) return fail("chat-stop", id, "-", "Unknown chat.");
     const st = settle(readState()); const c = st.chats[id];
     if (!c) return fail("chat-stop", id, "-", "Unknown chat.");
+    if (acting.has(id)) return fail("chat-stop", id, c.project, "This chat is still starting or being switched. Try again in a few seconds.");
+    if (c.remoteControl) { // a background chat: the same `claude stop` as switching Remote Control off
+      acting.add(id);
+      try {
+        const r = await endBg(c);
+        if (r.error) return fail("chat-stop", id, c.project, r.error);
+        update(id, (x) => { const rep = lastReplyOf(x); if (rep) x.lastReply = clip(rep, 1400); Object.assign(x, { remoteControl: false, state: "stopped", pid: null, misses: 0, firstTurn: false, lastTurnAt: new Date().toISOString() }); });
+        log("chat-stop", id, c.project, "ok (background chat, Remote Control off)");
+        return { ok: true, message: "Chat stopped. Remote Control is off; you can answer it here later." };
+      } finally { acting.delete(id); }
+    }
     if (c.state !== "working") return fail("chat-stop", id, c.project, "This chat is not working, so there is nothing to stop.");
     if (!ours(c.pid)) { applyTurn(c); writeState(st); return fail("chat-stop", id, c.project, "That chat had already finished."); }
     let ok;
@@ -250,10 +456,67 @@ export function makeChats(opts = {}) {
     return { ok: true, message: "Chat stopped. You can answer it later to continue." };
   }
 
+  /** Remote Control on or off for one Hub chat. OFF: `claude stop` of this chat, wait for no pid, then it is a normal idle Hub chat.
+   *  ON (idle / failed / stopped chat): continue the SAME session as a background chat with Remote Control. Real runs 2026-11-16:
+   *  a chat that never ran in the background continues under the same id with the flags; one that did must be woken with only
+   *  `--bg --resume <id>` (its saved options include Remote Control), flags would start a copy. A copy is detected, stopped, refused. */
+  async function setRemoteControl({ id, on } = {}) {
+    if (typeof id !== "string" || !ID_RE.test(id)) return fail("chat-rc", id, "-", "Unknown chat.");
+    let st = settle(readState()); let c = st.chats[id];
+    if (!c) return fail("chat-rc", id, "-", "Unknown chat.");
+    if (typeof on !== "boolean") return fail("chat-rc", id, c.project, "Say whether Remote Control should be on or off.");
+    if (acting.has(id)) return fail("chat-rc", id, c.project, "This chat is still starting or being switched. Try again in a few seconds.");
+    if (!on) {
+      if (!c.remoteControl) return fail("chat-rc", id, c.project, "Remote Control is already off for this chat.");
+      if (!c.sessionId) return fail("chat-rc", id, c.project, "This chat is still starting. Try again in a few seconds.");
+      acting.add(id);
+      try {
+        const r = await endBg(c);
+        if (r.error) return fail("chat-rc", id, c.project, r.error);
+        update(id, (x) => { const rep = lastReplyOf(x); if (rep) x.lastReply = clip(rep, 1400); Object.assign(x, { remoteControl: false, state: "idle", pid: null, misses: 0, firstTurn: false, lastTurnAt: new Date().toISOString() }); });
+        log("chat-rc", id, c.project, "ok off");
+        return { ok: true, message: "Remote Control is off. The chat stopped running in the background; you can answer it here now." };
+      } finally { acting.delete(id); }
+    }
+    if (c.remoteControl) return fail("chat-rc", id, c.project, "Remote Control is already on for this chat.");
+    let why = notAnswerable(c);
+    if (why) return fail("chat-rc", id, c.project, why);
+    // Rule 3 (T9): never continue a chat that is open anywhere else.
+    const open = await readOpen();
+    if (!open) return fail("chat-rc", id, c.project, "Can't check whether the chat is open elsewhere, so nothing was changed.");
+    if (open.some((e) => e && e.sessionId === c.sessionId && (e.pid || e.kind === "interactive")))
+      return fail("chat-rc", id, c.project, "This chat is open somewhere else (the Claude app or a terminal), so Remote Control was not switched on.");
+    st = settle(readState()); c = st.chats[id];
+    if (!c) return fail("chat-rc", id, "-", "Unknown chat.");
+    if (c.remoteControl || acting.has(id)) return fail("chat-rc", id, c.project, "This chat changed meanwhile. Try again.");
+    why = notAnswerable(c);
+    if (why) return fail("chat-rc", id, c.project, why);
+    acting.add(id);
+    try {
+      const before = new Set(open.filter((e) => e && e.pid && e.sessionId !== c.sessionId).map((e) => e.sessionId));
+      const bare = c.bg === true;
+      const r = await runCmd(bgArgs(c, { resume: true, bare }), join(root, c.project));
+      const short = shortIdOf(r.out);
+      if (short && !c.sessionId.startsWith(short)) { // Claude made a copy (T4): stop the copy, keep the chat as it was
+        await cleanupLaunch(short, c.name, before);
+        return fail("chat-rc", id, c.project, "Claude started a copy of the chat instead of continuing it, so the copy was stopped and Remote Control stays off.");
+      }
+      const hit = r.code === 0 ? await waitOpen((l) => pidEntry(l, c.sessionId)) : null;
+      if (!hit) {
+        await cleanupLaunch(short, c.name, before);
+        return fail("chat-rc", id, c.project, r.code !== 0 ? `Claude could not continue the chat in the background${firstLine(r.err || r.out) ? ": " + firstLine(r.err || r.out) : "."}` : `Claude did not show the chat within ${secs()} seconds, so it was stopped and Remote Control stays off.`);
+      }
+      update(id, (x) => Object.assign(x, { remoteControl: true, bg: true, bgId: stopRef(x, hit) || short, pid: hit.pid, state: hit.status === "busy" ? "working" : "idle", firstTurn: false, misses: 0, lastError: "", refused: [] }));
+      log("chat-rc", id, c.project, `ok on pid ${hit.pid}${bare ? " (woken with its saved options)" : ""}`);
+      return { ok: true, message: "Remote Control is on. Open the chat on your phone in the Claude app." };
+    } finally { acting.delete(id); }
+  }
+
   function list() {
     const st = settle(readState());
+    kick(st);
     return Object.values(st.chats).sort((a, b) => (b.seq || 0) - (a.seq || 0)).map((c) => ({
-      id: c.id, project: c.project, name: c.name, task: clip(redact(c.task || ""), 300), model: c.model || null, remoteControl: false,
+      id: c.id, project: c.project, name: c.name, task: clip(redact(c.task || ""), 300), model: c.model || null, remoteControl: c.remoteControl === true,
       state: c.state, startedAt: c.startedAt, lastTurnAt: c.lastTurnAt, turns: c.turns || 0, sessionId: c.sessionId || null,
       lastReply: clip(redact(c.lastReply || ""), 1400), lastError: clip(redact(c.lastError || ""), 600),
       refused: (c.refused || []).slice(0, 10).map((r) => clip(redact(r), 160)),
@@ -271,14 +534,15 @@ export function makeChats(opts = {}) {
     return { ok: true, message: `Opening the Claude app in ${project}. Press Send there to start.`, link: `claude://code/new?q=${encodeURIComponent(t)}&folder=${encodeURIComponent(join(root, project))}` };
   }
 
-  /** { id: pid } of the turns that are running (game mode slows them like other Hub programs). */
+  /** { id: pid } of the turns that are running, busy Remote Control chats included (game mode slows them like other Hub programs). */
   function workingPids() {
+    const st = readState(); kick(st);
     const out = {};
-    for (const c of Object.values(readState().chats)) if (c.state === "working" && alive(c.pid)) out[c.id] = c.pid;
+    for (const c of Object.values(st.chats)) if (c.state === "working" && alive(c.pid)) out[c.id] = c.pid;
     return out;
   }
 
-  return { start, answer, stop, list, workingPids, appLink };
+  return { start, answer, stop, list, workingPids, appLink, setRemoteControl };
 }
 
 // ---------- self-test ----------
@@ -297,20 +561,68 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const recDir = join(base, "calls");
   const fake = join(base, "fake-claude.mjs");
   writeFileSync(fake, `
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, renameSync, existsSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 const argv = process.argv.slice(2);
 const get = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
+const dir = process.env.HUB_FAKE_DIR;
+const record = (input) => { if (dir) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "call-" + Date.now() + "-" + process.pid + "-" + Math.random().toString(36).slice(2, 7) + ".json"), JSON.stringify({ argv, input, cwd: process.cwd() })); } };
+// background chats (14.6): a registry file stands in for Claude's background service
+const regPath = process.env.HUB_FAKE_REG || join(dir || ".", "reg.json");
+const readReg = () => { for (let i = 0; i < 50; i++) { try { return JSON.parse(readFileSync(regPath, "utf8")); } catch (e) { if (e.code === "ENOENT") return []; } } return []; };
+const writeReg = (r) => { const tmp = regPath + "." + process.pid; writeFileSync(tmp, JSON.stringify(r)); for (let i = 0; i < 50; i++) { try { renameSync(tmp, regPath); return; } catch { /* reader busy */ } } };
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const showsPid = (e) => !!e.pid && (e.goneAt ? Date.now() < e.goneAt : alive(e.pid)); // after a stop the pid lingers ~1 s in the list (T12)
+if (argv[0] === "agents") {
+  const out = readReg().filter((e) => !e.hidden && showsPid(e)).map((e) => ({ pid: e.pid, id: e.id, cwd: e.cwd, kind: "background", startedAt: e.startedAt, sessionId: e.sessionId, name: e.name,
+    status: Date.now() >= (e.turnStart || 0) && Date.now() < e.busyUntil ? "busy" : "idle", state: !e.busyUntil ? "blocked" : Date.now() < e.busyUntil ? "working" : "done" }));
+  process.stdout.write(JSON.stringify(out, null, 2) + "\\n");
+} else if (argv[0] === "stop") {
+  record("");
+  const reg = readReg(); const e = reg.find((x) => x.id === argv[1] && !x.goneAt && alive(x.pid));
+  if (!e) { process.stderr.write("no running background session " + argv[1] + "\\n"); process.exitCode = 1; }
+  else { try { process.kill(e.pid); } catch { /* gone */ } e.goneAt = Date.now() + 900; writeReg(reg); process.stdout.write("stopped " + e.id + "\\n"); }
+} else if (argv.includes("--bg")) {
+  record("");
+  const reg = readReg();
+  const resume = get("--resume");
+  const dash = argv.indexOf("--"); const task = dash >= 0 ? argv.slice(dash + 1).join(" ") : "";
+  const flags = argv.some((a, i) => a !== "--bg" && a !== "--resume" && argv[i - 1] !== "--resume");
+  const old = resume ? reg.find((x) => x.sessionId === resume) : null;
+  // like the real one: a chat that ran in the background before + any flag = a copy; so is a chat still running
+  const copy = !!resume && ((old && old.saved && flags) || (old && showsPid(old)) || (process.env.HUB_FAKE_COPY && existsSync(process.env.HUB_FAKE_COPY)));
+  const sessionId = resume && !copy ? resume : randomUUID();
+  const name = old && !flags ? old.name : get("--name") || "unnamed";
+  // like the real one: a new chat lists as "idle" for a moment BEFORE its first turn, then busy; the reply is saved when the turn ends
+  const now = Date.now(); const turnStart = now + 1200; const busyUntil = task ? turnStart + (task.includes("SLOW") ? 4000 : 400) : 0;
+  let file = "", line = "";
+  if (task && process.env.HUB_FAKE_SESSIONS) {
+    const d = join(process.env.HUB_FAKE_SESSIONS, process.cwd().replace(/[^A-Za-z0-9]/g, "-")); mkdirSync(d, { recursive: true });
+    file = join(d, sessionId + ".jsonl");
+    appendFileSync(file, JSON.stringify({ type: "user", message: { content: task } }) + "\\n");
+    line = JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "BG ECHO: " + task }] } }) + "\\n";
+  }
+  const writer = "const [f, t, d] = process.argv.slice(1); if (f) setTimeout(() => require('fs').appendFileSync(f, t), Number(d)); setInterval(() => {}, 1000);";
+  const kid = spawn(process.execPath, ["-e", writer, file, line, String(busyUntil - now - 100)], { detached: true, stdio: "ignore", windowsHide: true }); kid.unref();
+  const e = { id: sessionId.slice(0, 8), sessionId, name, cwd: process.cwd(), startedAt: now, pid: kid.pid, turnStart: task ? turnStart : 0, busyUntil,
+    saved: true, rc: argv.includes("--remote-control") || !!(old && old.rc), hidden: task.includes("NOSHOW") };
+  writeReg(reg.filter((x) => x.sessionId !== sessionId).concat([e]));
+  process.stdout.write("backgrounded · " + e.id + " · " + name + "\\n");
+  if (copy) process.stderr.write("note: started a copy as " + e.id + "\\n");
+} else {
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (d) => { input += d; });
 process.stdin.on("end", () => {
-  const dir = process.env.HUB_FAKE_DIR;
-  if (dir) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "call-" + Date.now() + "-" + process.pid + ".json"), JSON.stringify({ argv, input, cwd: process.cwd() })); }
+  record(input);
   const wait = input.includes("SLOWEST") ? 30000 : input.includes("SLOW") ? 2500 : 200;
   setTimeout(() => {
     if (input.includes("NOISE")) process.stderr.write("a warning on standard error\\n");
     if (input.includes("NOJSON")) { process.stdout.write("Something broke before any result.\\n"); process.exitCode = 1; return; }
+    const running = get("--resume") && readReg().find((x) => x.sessionId === get("--resume") && showsPid(x));
+    if (running) { process.stdout.write(JSON.stringify({ type: "result", subtype: "error", is_error: true, session_id: get("--resume"), result: "That session is running in the background (T5)." }) + "\\n"); process.exitCode = 1; return; }
     const failed = input.includes("FAIL");
     const denials = input.includes("DENY") ? [{ tool_name: "Bash", tool_use_id: "t1", tool_input: { command: "rm -rf build" } }, { tool_name: "Write", tool_use_id: "t2", tool_input: { file_path: "C:\\\\x\\\\notes.txt" } }] : [];
     process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: failed, session_id: get("--session-id") || get("--resume"),
@@ -318,8 +630,12 @@ process.stdin.on("end", () => {
     process.exitCode = failed ? 1 : 0;
   }, wait);
 });
+}
 `);
   process.env.HUB_FAKE_DIR = recDir;
+  process.env.HUB_FAKE_REG = join(base, "reg.json");
+  process.env.HUB_FAKE_SESSIONS = join(base, "sessions");
+  process.env.HUB_FAKE_COPY = join(base, "force-copy");
   let openList = [];
   const listOpen = async () => { if (openList === "throw") throw new Error("agents list failed"); return openList; };
   const redact = (s) => String(s).replace(/SECRET\w*/g, "[hidden]");
@@ -340,8 +656,9 @@ process.stdin.on("end", () => {
     ok("empty task refused", (await c.start({ project: "Fake", task: "   " })).ok === false);
     ok("too long task refused", (await c.start({ project: "Fake", task: "x".repeat(4001) })).ok === false);
     ok("unknown model refused", (await c.start({ project: "Fake", task: "hi", model: "gpt-4" })).ok === false);
-    const rc = await c.start({ project: "Fake", task: "hi", remoteControl: true });
-    ok("remoteControl refused with the 14.6 message", rc.ok === false && rc.error === "Remote Control for Hub chats comes in step 14.6.");
+    const rc = await c.start({ project: "Nope", task: "hi", remoteControl: true });
+    const rc2 = await c.start({ project: "Fake", task: "hi", remoteControl: "yes" });
+    ok("remoteControl: unknown project still refused, a non-boolean refused", rc.ok === false && rc.error === "Unknown project folder." && rc2.ok === false && rc2.error === "Remote Control must be on or off.");
     ok("nothing started by the refusals", c.list().length === 0 && calls().length === 0);
 
     // start, then idle with reply and session id
@@ -389,6 +706,13 @@ process.stdin.on("end", () => {
     ok("answer refused when the open-list reader throws", o3.ok === false && o3.error === "Can't check whether the chat is open elsewhere, so nothing was sent.");
     openList = { not: "a list" };
     ok("answer refused when the open-list is not a list", (await c.answer({ id: a.id, text: "open MARKER-E" })).ok === false);
+    openList = [{ sessionId: sid, kind: "interactive", status: "idle" }];
+    const on0 = await c.setRemoteControl({ id: a.id, on: true });
+    ok("Remote Control on refused: the chat is open elsewhere", on0.ok === false && /open somewhere else/.test(on0.error));
+    openList = "throw";
+    const on00 = await c.setRemoteControl({ id: a.id, on: true });
+    ok("Remote Control on refused when the open-list cannot be read", on00.ok === false && /Can't check/.test(on00.error));
+    ok("...and nothing was started in the background", !calls().some((k) => k.argv.includes("--bg")) && get(a.id).remoteControl === false);
     ok("no turn started by those refusals", get(a.id).turns === turnsBefore && !call("MARKER-E"));
     openList = [{ sessionId: "11111111-2222-3333-4444-555555555555", kind: "interactive", pid: 1 }];
     ok("another chat open elsewhere does not block", (await c.answer({ id: a.id, text: "Fourth MARKER-F" })).ok === true && await settled(a.id));
@@ -451,9 +775,128 @@ process.stdin.on("end", () => {
     ok("state file holds no full long task", !stateText.includes("x".repeat(301)));
   } catch (err) { ok("self-test crashed: " + (err && err.stack), false); }
   await waitFor(() => Object.keys(c.workingPids()).length === 0, 10000); // let every pretend process end first (Windows)
+
+  // ===== B. Remote Control with pretend background chats (14.6) =====
+  const regPath = process.env.HUB_FAKE_REG;
+  const reg = () => { for (let i = 0; i < 20; i++) { try { return JSON.parse(readFileSync(regPath, "utf8")); } catch (e) { if (e.code === "ENOENT") return []; } } return []; };
+  const foreignKid = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore", windowsHide: true }); foreignKid.unref();
+  const foreignSid = randomUUID();
+  writeFileSync(regPath, JSON.stringify([{ id: foreignSid.slice(0, 8), sessionId: foreignSid, name: "Someone else's chat", cwd: join(projects, "Fake"), startedAt: Date.now(), pid: foreignKid.pid, busyUntil: 0, saved: true, rc: true }]));
+  const rcDir = join(base, "rc");
+  const rce = makeChats({ root: projects, dataDir: join(rcDir, "data"), logDir: join(rcDir, "logs"), claude: [process.execPath, fake], redact, findTimeoutMs: 3000, rcRefreshMs: 150, sessionsDir: join(base, "sessions") });
+  const rget = (id) => rce.list().find((x) => x.id === id);
+  const rstate = (id, s, ms = 10000) => waitFor(() => { const x = rget(id); return x && x.state === s; }, ms);
+  const agentsNow = () => JSON.parse(execFileSync(process.execPath, [fake, "agents", "--json"], { encoding: "utf8", env: process.env, windowsHide: true }));
+  const bgCalls = () => calls().filter((k) => k.argv.includes("--bg"));
+  const stopCalls = () => calls().filter((k) => k.argv[0] === "stop");
+  try {
+    const r1 = await rce.start({ project: "Fake", task: "SLOW RC-MARKER-1 SECRET9", model: "haiku", remoteControl: true });
+    ok("RC: start with Remote Control ok", r1.ok === true && ID_RE.test(r1.id));
+    const R1 = rget(r1.id); const sid1 = R1.sessionId;
+    const e1 = reg().find((e) => e.sessionId === sid1);
+    ok("RC: listed remoteControl true; session id found by the chat's unique name", R1.remoteControl === true && UUID_RE.test(sid1 || "") && !!e1 && e1.name === R1.name && R1.name.endsWith(" · " + r1.id.slice(-4)));
+    ok("RC: working right after start, its pid in workingPids", R1.state === "working" && rce.workingPids()[r1.id] === e1.pid);
+    let early = true, sawIdle = false; const tEarly = Date.now();
+    while (Date.now() - tEarly < 3000) { const st0 = agentsNow().find((e) => e.sessionId === sid1).status; if (st0 === "busy") break; sawIdle = true; if (rget(r1.id).state !== "working") early = false; await pause(150); }
+    ok("RC: listed idle by Claude BEFORE its first turn: still working here", early && sawIdle);
+    const kb = bgCalls().find((k) => k.argv.join(" ").includes("RC-MARKER-1"));
+    ok("RC: --bg --remote-control <name>, auto mode, model, the task only after --, nothing on stdin", !!kb && kb.argv[0] === "--bg" && kb.argv[kb.argv.indexOf("--remote-control") + 1] === R1.name
+      && kb.argv.join(" ").includes("--permission-mode auto") && kb.argv.includes("haiku") && kb.argv.indexOf("--") === kb.argv.length - 2 && kb.argv[kb.argv.length - 1] === "SLOW RC-MARKER-1 SECRET9"
+      && !kb.argv.includes("-p") && !kb.argv.includes("--session-id") && kb.input === "");
+    ok("RC: becomes idle from the open list; reply read from the saved chat file (redacted)", (await rstate(r1.id, "idle")) && rget(r1.id).lastReply.startsWith("BG ECHO: SLOW RC-MARKER-1") && !rget(r1.id).lastReply.includes("SECRET9"));
+    ok("RC: idle, so not in workingPids", rce.workingPids()[r1.id] === undefined);
+    const ra = await rce.answer({ id: r1.id, text: "RC-MARKER-X" });
+    const ra2 = await rce.answer({ id: r1.id, text: "" });
+    ok("RC: answer refused with the exact sentence (before any other check)", ra.ok === false && ra.error === RC_ANSWER_REFUSED && ra2.error === RC_ANSWER_REFUSED);
+    ok("RC: the refused answer never reached claude", !calls().some((k) => (k.input + k.argv.join(" ")).includes("RC-MARKER-X")));
+    ok("RC: switching on while on is refused", (await rce.setRemoteControl({ id: r1.id, on: true })).ok === false);
+
+    // the limit counts busy Remote Control chats
+    const r2 = await rce.start({ project: "Fake", task: "SLOW RC-MARKER-2", remoteControl: true });
+    const n1 = await rce.start({ project: "Fake", task: "SLOW RC-MARKER-3" });
+    const r3 = await rce.start({ project: "Fake", task: "RC-MARKER-4", remoteControl: true });
+    ok("RC: a busy Remote Control chat counts; the third start is refused at the limit", r2.ok === true && n1.ok === true && r3.ok === false && r3.error === "Two chats are already working. Wait for one to finish." && Object.keys(rce.workingPids()).length === 2);
+    ok("RC: the refused third start launched nothing", !bgCalls().some((k) => k.argv.join(" ").includes("RC-MARKER-4")));
+    ok("RC: both settle to idle", (await rstate(r2.id, "idle")) && (await rstate(n1.id, "idle")));
+
+    // off: stop, wait for no pid, then a normal Hub chat
+    const off1 = await rce.setRemoteControl({ id: r1.id, on: false });
+    ok("RC off: ok", off1.ok === true);
+    ok("RC off: `claude stop` got this chat's short id, nothing else", stopCalls().length === 1 && stopCalls()[0].argv.length === 2 && stopCalls()[0].argv[1] === sid1.slice(0, 8));
+    ok("RC off: returned only once the open list showed no pid for it (T12b)", !agentsNow().some((e) => e.sessionId === sid1 && e.pid));
+    ok("RC off: a normal idle Hub chat, same session", (() => { const x = rget(r1.id); return x.remoteControl === false && x.state === "idle" && x.sessionId === sid1; })());
+    ok("RC off twice is refused", (await rce.setRemoteControl({ id: r1.id, on: false })).ok === false);
+    ok("RC off: answers normally", (await rce.answer({ id: r1.id, text: "RC-MARKER-5" })).ok === true && (await waitFor(() => rget(r1.id).state !== "working")) && rget(r1.id).lastReply === "ECHO: RC-MARKER-5");
+    const k5 = call("RC-MARKER-5");
+    ok("RC off: ...with -p --resume <the same session id>", !!k5 && k5.argv.includes("-p") && k5.argv[k5.argv.indexOf("--resume") + 1] === sid1 && rget(r1.id).sessionId === sid1);
+
+    // on again: a chat that ran in the background before is woken with only --bg --resume (flags would make a copy)
+    const on1 = await rce.setRemoteControl({ id: r1.id, on: true });
+    const kOn = bgCalls().filter((k) => k.argv.includes("--resume")).pop();
+    ok("RC on (ran in the background before): ok, woken with only `--bg --resume <id>`", on1.ok === true && !!kOn && kOn.argv.join(" ") === "--bg --resume " + sid1);
+    ok("RC on: the SAME session, Remote Control on, running again", (() => { const x = rget(r1.id); return x.remoteControl === true && x.sessionId === sid1 && agentsNow().some((e) => e.sessionId === sid1 && e.pid); })());
+    ok("RC on: answer refused again", (await rce.answer({ id: r1.id, text: "hi" })).error === RC_ANSWER_REFUSED);
+
+    // on for a chat that never ran in the background: the flags, same session, no task
+    const sidN = rget(n1.id).sessionId;
+    const on2 = await rce.setRemoteControl({ id: n1.id, on: true });
+    const kOn2 = bgCalls().filter((k) => k.argv.includes(sidN)).pop();
+    ok("RC on (plain Hub chat): ok with --remote-control, auto mode, --resume <its id>, no task", on2.ok === true && !!kOn2 && kOn2.argv.includes("--remote-control") && kOn2.argv.join(" ").includes("--permission-mode auto") && kOn2.argv[kOn2.argv.indexOf("--resume") + 1] === sidN && !kOn2.argv.includes("--"));
+    ok("RC on (plain Hub chat): the same session", rget(n1.id).remoteControl === true && rget(n1.id).sessionId === sidN);
+
+    // stop works for a Remote Control chat
+    const stN = await rce.stop({ id: n1.id });
+    ok("RC stop: ok; stopped, Remote Control off, no pid left", stN.ok === true && rget(n1.id).state === "stopped" && rget(n1.id).remoteControl === false && !agentsNow().some((e) => e.sessionId === sidN && e.pid));
+    ok("RC stop: a stopped chat can be answered later", (await rce.answer({ id: n1.id, text: "RC-MARKER-7" })).ok === true && (await waitFor(() => rget(n1.id).state !== "working")) && rget(n1.id).lastReply === "ECHO: RC-MARKER-7");
+
+    // a copy is never kept
+    const sid2 = rget(r2.id).sessionId;
+    ok("RC: second chat switched off", (await rce.setRemoteControl({ id: r2.id, on: false })).ok === true);
+    writeFileSync(process.env.HUB_FAKE_COPY, "1");
+    const known = new Set(reg().map((e) => e.sessionId));
+    const cp = await rce.setRemoteControl({ id: r2.id, on: true });
+    rmSync(process.env.HUB_FAKE_COPY, { force: true });
+    const copyEntry = reg().find((e) => !known.has(e.sessionId));
+    ok("RC on that made a copy: refused plainly; the copy was stopped", cp.ok === false && cp.error === "Claude started a copy of the chat instead of continuing it, so the copy was stopped and Remote Control stays off."
+      && !!copyEntry && (await waitFor(() => !alive(copyEntry.pid), 5000)) && !agentsNow().some((e) => e.sessionId === copyEntry.sessionId));
+    ok("RC on that made a copy: the chat stays as it was (off, idle, same session)", rget(r2.id).remoteControl === false && rget(r2.id).sessionId === sid2 && rget(r2.id).state === "idle");
+
+    // a background start whose session never shows up
+    const nsBefore = rce.list().length;
+    const ns = await rce.start({ project: "Fake", task: "NOSHOW RC-MARKER-6", remoteControl: true });
+    const hidden = reg().find((e) => e.hidden);
+    ok("RC start that never shows: fails plainly", ns.ok === false && ns.error === "Claude did not show the new chat within 3 seconds, so it was stopped. Try again.");
+    ok("RC start that never shows: nothing left running, no chat kept", !!hidden && (await waitFor(() => !alive(hidden.pid), 5000)) && stopCalls().some((k) => k.argv[1] === hidden.id) && rce.list().length === nsBefore);
+
+    // ids: only the engine's own chats can be stopped or switched
+    let idsOk = true;
+    for (const bad of ["h-20990101-000000-zzzz", "../x", foreignSid, foreignSid.slice(0, 8), 42, undefined, null]) {
+      for (const on of [true, false]) if ((await rce.setRemoteControl({ id: bad, on })).ok !== false) idsOk = false;
+      if ((await rce.stop({ id: bad })).ok !== false) idsOk = false;
+    }
+    ok("RC: unknown ids and someone else's chat can never be stopped or switched", idsOk);
+    ok("RC: `on` must be true or false", (await rce.setRemoteControl({ id: r1.id, on: "off" })).ok === false && rget(r1.id).remoteControl === true);
+    ok("RC: someone else's background chat was never stopped", alive(foreignKid.pid) && !stopCalls().some((k) => k.argv[1] === foreignSid.slice(0, 8)));
+
+    // a Remote Control chat that really ended (outside the Hub) shows as stopped, Remote Control off
+    const pidR1 = reg().find((e) => e.sessionId === sid1).pid;
+    ok("RC: still on while it runs (no false 'stopped')", (await pause(600), rget(r1.id).remoteControl === true && rget(r1.id).state === "idle"));
+    try { process.kill(pidR1); } catch { /* gone */ }
+    ok("RC: a chat that really ended shows as stopped with Remote Control off", await waitFor(() => { const x = rget(r1.id); return x.state === "stopped" && x.remoteControl === false; }, 8000));
+    ok("RC: no background chat of the engine left running", reg().filter((e) => e.sessionId !== foreignSid).every((e) => !alive(e.pid)));
+
+    const rlog = readFileSync(join(rcDir, "logs", "hub_actions.log"), "utf8");
+    ok("RC: log has chat-rc lines (on, off, refused) and background starts", /chat-rc \S+ Fake ok off/.test(rlog) && /chat-rc \S+ Fake ok on/.test(rlog) && /chat-rc \S+ \S+ refused: /.test(rlog) && /chat-start \S+ Fake ok background/.test(rlog));
+    ok("RC: log has no task or answer text", !/MARKER|SECRET|ECHO/.test(rlog));
+    ok("RC: log lines have action, id, project, result", rlog.trim().split(/\n/).every((l) => /^\S+ chat-[\w-]+ \S+ \S+ .+/.test(l)));
+  } catch (err) { ok("RC self-test crashed: " + (err && err.stack), false); }
+  for (const e of reg()) { try { process.kill(e.pid); } catch { /* gone */ } }
+  try { process.kill(foreignKid.pid); } catch { /* gone */ }
+  await waitFor(() => Object.keys(rce.workingPids()).length === 0, 10000);
+  await pause(300);
   try { rmSync(base, { recursive: true, force: true }); } catch { /* temp only */ }
 
-  // ===== B. one real round trip (only with --real) =====
+  // ===== C. one real round trip (only with --real) =====
   if (process.argv.includes("--real")) {
     const rbase = join(tmpdir(), "hub-chats-real-" + process.pid);
     const r = makeChats({ dataDir: join(rbase, "data"), logDir: join(rbase, "logs"), noTools: true });
@@ -477,6 +920,90 @@ process.stdin.on("end", () => {
     }
     await waitFor(() => Object.keys(r.workingPids()).length === 0, 30000);
     try { rmSync(rbase, { recursive: true, force: true }); } catch { /* temp only */ }
+  }
+
+  // ===== D. real Remote Control checks (only with --real-rc; Hub folder, cheapest model, all tools off; only its own chats) =====
+  if (process.argv.includes("--real-rc")) {
+    const rbase = join(tmpdir(), "hub-chats-realrc-" + process.pid);
+    const r = makeChats({ dataDir: join(rbase, "data"), logDir: join(rbase, "logs"), noTools: true });
+    const g = (id) => r.list().find((x) => x.id === id);
+    const created = new Set(); const names = new Set();
+    const agentsReal = () => { try { const v = JSON.parse(execFileSync("claude", ["agents", "--json"], { encoding: "utf8", windowsHide: true, timeout: 15000 })); return Array.isArray(v) ? v : []; } catch { return null; } };
+    const logsOf = (sid) => { try { return stripAnsi(execFileSync("claude", ["logs", sid.slice(0, 8)], { encoding: "utf8", windowsHide: true, timeout: 15000 })); } catch (e) { return stripAnsi(String((e && e.stdout) || "")); } };
+    const hubFiles = () => { try { return new Set(readdirSync(join(homedir(), ".claude", "projects", encodeCwd(HUB))).filter((f) => f.endsWith(".jsonl"))); } catch { return new Set(); } };
+    const rcActive = (sid) => waitFor(() => /remote-control is active/i.test(logsOf(sid)), 30000);
+    const runningOurs = (l) => (l || []).filter((e) => e && e.pid && (created.has(e.sessionId) || names.has(e.name)));
+    const noneRunning = () => { const l = agentsReal(); return l !== null && !runningOurs(l).length; };
+    const note = (id) => { const x = g(id); if (x && x.sessionId) { created.add(x.sessionId); names.add(x.name); } return x; };
+    try {
+      // 1. start with Remote Control
+      const one = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-ONE", model: "haiku", remoteControl: true });
+      ok("real-rc: start with Remote Control ok" + (one.ok ? "" : " (" + one.error + ")"), one.ok === true);
+      if (one.ok) {
+        const c1 = note(one.id);
+        console.log(`real-rc: chat 1 session id ${c1.sessionId} (name "${c1.name}")`);
+        const e1 = (agentsReal() || []).find((x) => x.sessionId === c1.sessionId);
+        ok("real-rc: in `claude agents --json` with a pid; listed remoteControl true", !!(e1 && e1.pid) && c1.remoteControl === true);
+        ok("real-rc: idle after its first turn, reply HUB-RC-ONE (read from the saved chat file)", (await waitFor(() => g(one.id).state === "idle", 120000)) && g(one.id).lastReply.trim() === "HUB-RC-ONE");
+        ok("real-rc: `claude logs` says Remote Control is active", (await rcActive(c1.sessionId)));
+        ok("real-rc: answer refused while Remote Control is on", (await r.answer({ id: one.id, text: "Reply with exactly: NO" })).error === RC_ANSWER_REFUSED);
+        // 2. off, wait for no pid, answer with -p --resume
+        const t0 = Date.now(); const off = await r.setRemoteControl({ id: one.id, on: false });
+        console.log(`real-rc: switch off took ${Date.now() - t0} ms: ${off.ok ? off.message : off.error}`);
+        ok("real-rc: switch off ok; no pid for it any more; listed off and idle", off.ok === true && noneRunning() && g(one.id).remoteControl === false && g(one.id).state === "idle");
+        const two = await r.answer({ id: one.id, text: "Reply with exactly: HUB-RC-TWO" });
+        ok("real-rc: answer after off ok" + (two.ok ? "" : " (" + two.error + ")"), two.ok === true);
+        await waitFor(() => g(one.id).state !== "working", 180000);
+        const c2 = g(one.id);
+        console.log(`real-rc: chat 1 session id after the answer ${c2.sessionId} (state ${c2.state}${c2.lastError ? ", error: " + c2.lastError : ""})`);
+        ok("real-rc: reply HUB-RC-TWO in the SAME session", c2.state === "idle" && c2.lastReply.trim() === "HUB-RC-TWO" && c2.sessionId === c1.sessionId);
+        // 3. on again (woken with its saved options)
+        const filesBefore = hubFiles();
+        const on = await r.setRemoteControl({ id: one.id, on: true });
+        console.log(`real-rc: switch on again: ${on.ok ? on.message : on.error}`);
+        const run3 = (agentsReal() || []).filter((x) => x.pid && x.name === c1.name);
+        run3.forEach((x) => created.add(x.sessionId));
+        const newFiles = [...hubFiles()].filter((f) => !filesBefore.has(f));
+        console.log(`real-rc: running under its name after on: ${run3.map((x) => x.sessionId).join(", ") || "none"}; new chat files in the Hub folder: ${newFiles.join(", ") || "none"}`);
+        ok("real-rc: on again continues the SAME session (one running chat, same id, no file for a copy)", on.ok === true && g(one.id).remoteControl === true && g(one.id).sessionId === c1.sessionId && run3.length === 1 && run3[0].sessionId === c1.sessionId && !newFiles.some((f) => run3.some((x) => f.startsWith(x.sessionId)) || f.startsWith(c1.sessionId)));
+        ok("real-rc: on again: `claude logs` says Remote Control is active", (await rcActive(c1.sessionId)));
+        const s1 = await r.stop({ id: one.id });
+        ok("real-rc: stop of the Remote Control chat ok; no pid left", s1.ok === true && noneRunning());
+      }
+      // 4. a plain Hub chat switched on (it never ran in the background: the flags, same session)
+      const p = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-PLAIN", model: "haiku" });
+      ok("real-rc: plain chat start ok", p.ok === true);
+      if (p.ok) {
+        await waitFor(() => g(p.id).state !== "working", 180000);
+        const p1 = note(p.id);
+        console.log(`real-rc: chat 2 session id ${p1.sessionId} (state ${p1.state}, reply ${JSON.stringify(p1.lastReply)})`);
+        const filesBefore = hubFiles();
+        const on = await r.setRemoteControl({ id: p.id, on: true });
+        console.log(`real-rc: plain chat switch on: ${on.ok ? on.message : on.error}`);
+        const run4 = (agentsReal() || []).filter((x) => x.pid && (x.name === p1.name || x.sessionId === p1.sessionId));
+        run4.forEach((x) => created.add(x.sessionId));
+        const newFiles = [...hubFiles()].filter((f) => !filesBefore.has(f));
+        ok("real-rc: plain chat on continues the SAME session", on.ok === true && g(p.id).remoteControl === true && g(p.id).sessionId === p1.sessionId && run4.length === 1 && run4[0].sessionId === p1.sessionId && !newFiles.some((f) => f.startsWith(p1.sessionId)));
+        ok("real-rc: plain chat on: `claude logs` says Remote Control is active", (await rcActive(p1.sessionId)));
+        const off = await r.setRemoteControl({ id: p.id, on: false });
+        ok("real-rc: plain chat off again ok; no pid left", off.ok === true && noneRunning());
+      }
+    } catch (err) { ok("real-rc crashed: " + (err && err.stack), false); }
+    finally {
+      // ALWAYS: stop every chat this test created (only those: their session ids or their unique names), then wait for no pid.
+      for (const x of r.list()) if (x.sessionId) { created.add(x.sessionId); names.add(x.name); }
+      for (const e of runningOurs(agentsReal())) {
+        if (typeof e.id === "string" && BG_ID_RE.test(e.id) && typeof e.sessionId === "string" && e.sessionId.startsWith(e.id)) {
+          try { execFileSync("claude", ["stop", e.id], { encoding: "utf8", windowsHide: true, timeout: 15000 }); console.log(`real-rc: cleanup stopped ${e.id}`); } catch { console.log(`real-rc: cleanup could not stop ${e.id}`); }
+          created.add(e.sessionId);
+        }
+      }
+      await waitFor(() => { const l = agentsReal(); return l !== null && !runningOurs(l).length; }, 20000);
+      await waitFor(() => Object.keys(r.workingPids()).length === 0, 60000);
+      console.log(`real-rc: every session id this test created: ${[...created].join(", ") || "none"}`);
+      ok("real-rc: none of the test's chats left running", noneRunning());
+      try { rmSync(rbase, { recursive: true, force: true }); } catch { /* temp only */ }
+    }
   }
   process.exitCode = bad ? 1 : 0;
 }
