@@ -16,6 +16,20 @@ From each project card on the Hub page: start a new Claude chat with a task, see
 ## The one hard rule found by testing
 A chat that is open in the Claude app must never get a message from outside: it splits silently (test T9). The Hub checks `claude agents --json` before every send and refuses if the chat is open anywhere else.
 
+## Engine contract (written by the manager 2026-11-16; binding for 14.1 to 14.6)
+`tools/dashboard/lib/chats.mjs` exports `makeChats(opts)`; opts (all optional, for tests): `root` (the projects folder), `dataDir`, `logDir`, `claude` (the program to run), `maxWorking` (2, D41), `listOpen` (async, the `claude agents --json` reader). It returns:
+- `start({ project, task, model, remoteControl })` -> `{ ok: true, id, message }` or `{ ok: false, error }`. `project` = a real folder directly under `root` (same rule as openClaude in control.mjs). `task` = 1 to 4000 characters. `model` = one of the engine's own short list, or missing for the default. `remoteControl` is refused with a plain message until step 14.6 adds it.
+- `answer({ id, text })`, `stop({ id })` -> `{ ok, message }` or `{ ok: false, error }`.
+- `list()` -> `[{ id, project, name, task, model, remoteControl, state, startedAt, lastTurnAt, turns, sessionId, lastReply, lastError, refused }]`, newest first. `state` = `working` (a turn is running), `idle` (the last turn ended, it can be answered), `failed` (the last turn ended with an error), `stopped` (Ivan stopped it). `task` and `lastReply` are clipped (300 / 1400 characters); `refused` = the actions the safety checker refused in the last turn (short plain lines, D39).
+- `workingPids()` -> `{ id: pid }` of running turns (game mode slows them like other Hub programs).
+Rules the engine itself enforces (the server and the page are not trusted to):
+1. The Hub's chat id (`id`) is made by the engine (`h-` + date, time and 4 random characters) and is the only id the page ever sends. Claude's own session id never comes from the page.
+2. Task and answer text reach Claude through standard input, never on a command line and never through a shell; the program is started with an argument list (`shell: false`).
+3. Before every `answer`: refuse while this chat's own turn is still running, and refuse when the open-chats list (CLAUDE_CONTROL T13) shows the chat's session as open anywhere (T9: writing into an open chat splits it). If the list cannot be read, refuse.
+4. At most `maxWorking` turns at once; one more is refused with a plain message.
+5. Permission mode is auto (D39); nothing in the engine can switch it to a mode that skips the checks.
+6. Every start, answer, stop and refusal is one line in logs/hub_actions.log (action, chat id, project, result), without the task or answer text. State is kept in data/hub_chats.json (written to a temporary file, then renamed).
+
 ## Steps (proposed grades; re-graded on the spot before each starts)
 **14.1 Chat engine** — Grade: strong (starts Claude with permissions). Use: tools/dashboard/lib/chats.mjs: start (`claude -p` or `--bg` in the project folder, folder chosen by the server from the project list), answer (`--resume`, only when T13's list shows the chat closed), stop, the permission mode from D39, at most N at once (D41), a log line per action, game mode treats them like Hub programs. Done when: a self-test starts a test chat, answers it, refuses to answer one that is open elsewhere, stops it. Test: `node tools/dashboard/lib/chats.mjs --selftest` with the cheapest model and no tools.
 **14.2 Live list of all chats** — Grade: standard. Use: `claude agents --json` + the app's chat records (read-only, CLAUDE_CONTROL T14) + the existing attention check. Done when: /api/chats lists every open chat per project with app/Hub kind, working or idle, needs you, Remote Control on/off. Test: compare with the app's sidebar on the real PC.
