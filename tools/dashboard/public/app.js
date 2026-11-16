@@ -145,7 +145,7 @@ async function pollWhileStarting() {
   const until = Date.now() + 5 * 60_000;
   while (Date.now() < until) {
     await new Promise((d) => setTimeout(d, 2000));
-    await Promise.all([loadRuntime(), loadRunning()]); if (lastData && !form) render(lastData);
+    await Promise.all([loadRuntime(), loadRunning()]); if (lastData && !form && !answerBusy()) render(lastData);
     if (!runtime.some((r) => r.status === "starting")) break;
   }
   polling = false;
@@ -172,8 +172,13 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const act = b.dataset.act, name = b.dataset.name, rt = rtFor(name);
   if (act === "cancel") { asking = null; setNote(""); }
-  else if (act === "yes") { const a = asking; asking = null; if (a && a.kind.startsWith("chat-")) { doChat(a); if (lastData) render(lastData); } else if (a) perform(a); return; }
-  else if (act === "chat-new") { asking = null; form = { project: name, text: "", model: lastModel() }; focusForm = true; setNote(""); }
+  else if (act === "yes") { const a = asking; asking = null; if (a && a.kind.startsWith("cp-")) { doPanel(a); if (lastData) render(lastData); } else if (a && a.kind.startsWith("chat-")) { doChat(a); if (lastData) render(lastData); } else if (a) perform(a); return; }
+  else if (act === "chat-open") { const id = b.dataset.id; asking = null; form = null; openChat = openChat === id ? null : id; setNote(""); }
+  else if (act === "cp-send") askPanel(b.dataset.id, name, "cp-send");
+  else if (act === "cp-handoff") askPanel(b.dataset.id, name, "cp-handoff");
+  else if (act === "cp-pickup") askPanel(b.dataset.id, name, "cp-pickup");
+  else if (act === "cp-stop") askPanel(b.dataset.id, name, "cp-stop");
+  else if (act === "chat-new") { asking = null; openChat = null; form = { project: name, text: "", model: lastModel() }; focusForm = true; setNote(""); }
   else if (act === "chat-cancel") { form = null; asking = null; setNote(""); }
   else if (act === "chat-ask-here") { if (form) askChat("chat-here", form.project); }
   else if (act === "chat-ask-app") { if (form) askChat("chat-app", form.project); }
@@ -191,6 +196,7 @@ document.addEventListener("click", (e) => {
   if (lastData) render(lastData);
   const focus = document.querySelector(".actions.ask .btn.primary"); if (focus && asking) focus.focus();
   else if (focusForm && form) { const t = $("chat-text"); if (t) t.focus(); }
+  else if (act === "chat-open") { const again = [...document.querySelectorAll('button[data-act="chat-open"]')].find((x) => x.dataset.id === b.dataset.id); if (again) again.focus(); }
   else if (act === "chat-more") { const again = [...document.querySelectorAll('button[data-act="chat-more"]')].find((x) => x.dataset.name === name); if (again) again.focus(); }
   focusForm = false;
 });
@@ -251,6 +257,10 @@ let chatsData = null;               // answer of /api/chats; null = never read y
 const chatsExpanded = new Set();    // projects whose "Show N more" is open
 let form = null;                    // { project, text, model } while the New chat form is open (only one on the page)
 let focusForm = false;
+let openChat = null;                // id of the chat whose panel is open (only one panel or the form on the page)
+const drafts = new Map();           // chat id -> text typed in its answer box
+const sending = new Set();          // chat ids with a request on its way
+const ANSWER_MAX = 4000;
 const TASK_MAX = 4000;
 const MODELS = [["", "Default"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]];
 const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped" };
@@ -270,19 +280,123 @@ async function loadChats() {
   } catch { /* keep the last data */ }
 }
 
-function chatLine(c) {
+function chatLine(c, project) {
   const state = STATE_WORD[c.state] ? c.state : "idle";
-  return h("li", { class: "chat" + (c.needsYou ? " needs" : "") },
-    h("div", { class: "chat-row" },
+  const open = openChat === c.id;
+  return h("li", { class: "chat" + (c.needsYou ? " needs" : "") + (open ? " open" : "") },
+    h("button", { class: "chat-row chat-btn", type: "button", "aria-expanded": String(open), "aria-controls": "cp-" + c.id, "data-act": "chat-open", "data-id": c.id, "data-name": project },
       h("span", { class: "chat-name", title: c.name }, c.name),
       h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
       h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
-      c.needsYou ? h("span", { class: "cneeds" }, "Needs you") : null),
-    c.needsYou && c.snippet ? h("p", { class: "chat-snip" }, c.snippet) : null);
+      c.needsYou ? h("span", { class: "cneeds" }, "Needs you") : null,
+      h("span", { class: "chev", "aria-hidden": "true" })),
+    c.needsYou && c.snippet && !open ? h("p", { class: "chat-snip" }, c.snippet) : null,
+    open ? chatPanel(c, project) : null);
+}
+
+function panelMeta(c) {
+  const state = STATE_WORD[c.state] ? c.state : "idle";
+  const bits = [];
+  if (c.kind === "hub") {
+    if (c.since) bits.push("Started " + ago(c.since));
+    if (c.lastActive) bits.push("Last turn " + ago(c.lastActive));
+    if (c.model) bits.push(c.model);
+    if (c.turns !== null && c.turns !== undefined) bits.push("Turns: " + c.turns);
+  } else if (c.lastActive) bits.push("Last active " + ago(c.lastActive));
+  return h("div", { class: "cp-meta" }, h("span", { class: "cstate cs-" + state }, STATE_WORD[state]), bits.map((t) => h("span", {}, t)));
+}
+
+function panelAsk(c) {
+  if (!(asking && asking.kind.startsWith("cp-") && asking.id === c.id)) return null;
+  return h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
+    h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
+    h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
+    h("button", { class: "btn", type: "button", "data-act": "cancel" }, "Cancel"));
+}
+
+function chatPanel(c, project) {
+  const kids = [panelMeta(c)];
+  if (c.kind === "hub") {
+    if (c.state === "failed") {
+      kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "What went wrong"), h("div", { class: "cp-text bad" }, c.snippet || "No details were saved.")));
+    } else {
+      kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Claude last said"),
+        c.lastReply ? h("div", { class: "cp-text" }, c.lastReply)
+          : h("p", { class: "cp-empty" }, c.state === "working" ? "Working on it…" : "No reply yet.")));
+    }
+    if (Array.isArray(c.refused) && c.refused.length) {
+      kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Claude was not allowed to:"), h("ul", { class: "cp-refused" }, c.refused.map((r) => h("li", {}, r)))));
+    }
+    const busy = sending.has(c.id);
+    const ask = panelAsk(c);
+    if (c.canAnswer) {
+      const draft = drafts.get(c.id) || "";
+      const ta = h("textarea", { id: "ans-text", class: "chat-text", rows: "3", maxlength: String(ANSWER_MAX), "data-id": c.id });
+      ta.value = draft;
+      kids.push(h("div", { class: "cf-field" }, h("label", { for: "ans-text" }, "Your answer"), ta, h("span", { class: "cf-count", id: "ans-count" }, `${draft.length} / ${ANSWER_MAX}`)));
+      kids.push(ask || h("div", { class: "actions" },
+        h("button", { class: "btn primary", id: "ans-send", type: "button", "data-act": "cp-send", "data-id": c.id, "data-name": project, disabled: busy || !draft.trim() }, "Send"),
+        h("button", { class: "btn", type: "button", "data-act": "cp-handoff", "data-id": c.id, "data-name": project, disabled: busy }, "Hand off"),
+        h("button", { class: "btn", type: "button", "data-act": "cp-pickup", "data-id": c.id, "data-name": project, disabled: busy }, "Pick up")));
+    } else if (c.state === "working") {
+      kids.push(ask || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-stop", "data-id": c.id, "data-name": project, disabled: busy }, "Stop"), h("span", { class: "cp-rc" }, "Working…")));
+    }
+  } else if (c.kind === "app") {
+    kids.push(h("p", { class: "cp-note" }, "This chat is open in the Claude app. Answer it there so it does not split."));
+    if (c.needsYou && c.snippet) kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Waiting for you"), h("div", { class: "cp-text" }, c.snippet)));
+    const ok = typeof c.openLink === "string" && c.openLink.startsWith("claude://claude.ai/epitaxy/local_");
+    const rc = c.remoteControl === true ? "Remote Control: on" : c.remoteControl === false ? "Remote Control: off" : null;
+    if (ok || rc) kids.push(h("div", { class: "actions" }, ok ? h("a", { class: "btn", href: c.openLink }, "Open in the app") : null, rc ? h("span", { class: "cp-rc" }, rc) : null));
+  } else {
+    kids.push(h("p", { class: "cp-note" }, "This chat is open in a terminal. Answer it there."));
+    if (c.needsYou && c.snippet) kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Waiting for you"), h("div", { class: "cp-text" }, c.snippet)));
+  }
+  return h("div", { class: "chat-panel", id: "cp-" + c.id, role: "group", "aria-label": `Chat ${c.name}` }, kids);
+}
+
+function askPanel(id, project, kind) {
+  const draft = (drafts.get(id) || "").trim();
+  if (kind === "cp-send" && !draft) return;
+  const text = kind === "cp-send" ? `Send this answer to the chat in ${project}?`
+    : kind === "cp-handoff" ? "Hand off this chat?"
+    : kind === "cp-pickup" ? "Run /pickup in this chat?"
+    : "Stop this chat?";
+  const extra = kind === "cp-handoff" ? "Claude saves where the work stands and writes the handoff note. Claude works without a window and uses your Claude allowance."
+    : kind === "cp-stop" ? "You can answer it later to continue."
+    : "Claude works without a window and uses your Claude allowance.";
+  asking = { kind, name: chatKey(project), project, id, label: project, text, extra };
+  setNote("");
+}
+
+async function doPanel(a) {
+  const c = findChat(a.id);
+  if (!c || c.kind !== "hub" || !/^h-/.test(a.id) || sending.has(a.id)) return;
+  const body = a.kind === "cp-stop" ? { action: "chat-stop", id: a.id }
+    : { action: "chat-answer", id: a.id, text: a.kind === "cp-handoff" ? "/handoff" : a.kind === "cp-pickup" ? "/pickup" : (drafts.get(a.id) || "").trim() };
+  if (a.kind === "cp-send" && !body.text) return;
+  sending.add(a.id);
+  setNote("Working on it…");
+  let r;
+  try { r = await send(body); } finally { sending.delete(a.id); }
+  if (r.ok) { setNote(r.message || "Done."); if (a.kind === "cp-send") drafts.delete(a.id); }
+  else setNote(r.error || "That did not work.", true);
+  await loadChats(); if (lastData) render(lastData);
+}
+
+function findChat(id) {
+  if (!chatsData) return null;
+  for (const e of chatsData.projects) { const c = e.chats.find((x) => x.id === id); if (c) return c; }
+  return null;
+}
+
+// the answer box counts as busy while it holds text or has the cursor: a refresh then leaves the page alone
+function answerBusy() {
+  const ae = document.activeElement;
+  return !!(openChat && ((drafts.get(openChat) || "").length || (ae && ae.id === "ans-text")));
 }
 
 function chatForm(project) {
-  const ask = asking && asking.name === chatKey(project) ? h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
+  const ask = asking && asking.name === chatKey(project) && asking.kind.startsWith("chat-") ? h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
     h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
     h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
     h("button", { class: "btn", type: "button", "data-act": "cancel" }, "Cancel")) : null;
@@ -308,9 +422,9 @@ function chatsArea(project) {
   const list = entry ? entry.chats : [];
   const open = form && form.project === project;
   const expanded = chatsExpanded.has(project);
-  const shown = expanded ? list : list.slice(0, FIRST_LINES);
+  const shown = expanded ? list : list.filter((c, i) => i < FIRST_LINES || c.id === openChat);
   const kids = [h("div", { class: "chats-head" }, h("h4", {}, "Chats"), list.length ? h("span", { class: "count" }, String(list.length)) : null)];
-  if (list.length) kids.push(h("ul", { class: "chat-list" }, shown.map(chatLine)));
+  if (list.length) kids.push(h("ul", { class: "chat-list" }, shown.map((c) => chatLine(c, project))));
   else if (chatsData) kids.push(h("p", { class: "chat-none" }, "No chats yet."));
   if (list.length > FIRST_LINES) kids.push(h("button", { class: "chat-more", type: "button", "aria-expanded": String(expanded), "data-act": "chat-more", "data-name": project }, expanded ? "Show fewer" : `Show ${list.length - FIRST_LINES} more`));
   if (chatsData && chatsData.openListOk === false) kids.push(h("p", { class: "chat-none" }, "Can't see the chats that are open in the Claude app right now."));
@@ -352,6 +466,12 @@ async function doChat(a) {
 document.addEventListener("input", (e) => {
   if (form && e.target.id === "chat-text") { form.text = e.target.value; const c = $("chat-count"); if (c) c.textContent = `${form.text.length} / ${TASK_MAX}`; }
 });
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "ans-text" || !openChat) return;
+  drafts.set(openChat, e.target.value);
+  const c = $("ans-count"); if (c) c.textContent = `${e.target.value.length} / ${ANSWER_MAX}`;
+  const b = $("ans-send"); if (b) b.disabled = !e.target.value.trim() || sending.has(openChat);
+});
 document.addEventListener("change", (e) => {
   if (form && e.target.id === "chat-model") { form.model = e.target.value; rememberModel(form.model); }
 });
@@ -382,7 +502,11 @@ function card(p, answer) {
 
 function render(data) {
   lastData = data;
-  const keep = document.activeElement && (document.activeElement.id === "chat-text" || document.activeElement.id === "chat-model") ? document.activeElement.id : null;
+  if (openChat && chatsData && !findChat(openChat)) { openChat = null; if (asking && asking.kind.startsWith("cp-")) asking = null; }
+  for (const id of [...drafts.keys()]) if (chatsData && !findChat(id)) drafts.delete(id);
+  const ae = document.activeElement;
+  const keep = ae && (ae.id === "chat-text" || ae.id === "chat-model" || ae.id === "ans-text") ? ae.id : null;
+  const sel = keep === "ans-text" ? [ae.selectionStart, ae.selectionEnd] : null;
   renderGame();
   const { projects, decisions, answers, manager } = data;
   const byName = new Map(answers.map((a) => [a.project, a]));
@@ -442,7 +566,7 @@ function render(data) {
     running && manager.queueDepth !== null && manager.queueDepth !== undefined ? h("p", {}, `${manager.queueDepth} task${manager.queueDepth === 1 ? "" : "s"} waiting in the queue`) : null,
     manager.note && !mrt ? h("p", {}, manager.note) : null,
     controls("AI_Orcestration", { claude: false })));
-  if (keep && $(keep)) $(keep).focus();
+  if (keep && $(keep)) { $(keep).focus(); if (sel) try { $(keep).setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
 }
 
 async function load() {
@@ -482,9 +606,9 @@ load();
 let ticks = 0;
 setInterval(async () => {
   ticks++;
-  if (document.hidden) { if (ticks % 12 === 0 && !asking && !form) load(); return; }
-  if (asking || form) return;
+  if (document.hidden) { if (ticks % 12 === 0 && !asking && !form && !answerBusy()) load(); return; }
+  if (asking || form || answerBusy()) return;
   if (ticks % 3 === 0) load();
-  else { await loadRunning(); if (lastData && !form && !asking) render(lastData); }
+  else { await loadRunning(); if (lastData && !form && !asking && !answerBusy()) render(lastData); }
 }, 10_000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && !asking && !form) load(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !asking && !form && !answerBusy()) load(); });

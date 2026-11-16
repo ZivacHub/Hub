@@ -277,3 +277,22 @@ a.run.on:hover { text-decoration: underline; }
   .chat-row { flex-wrap: wrap; }
   .chat-name { flex-basis: 100%; }
 }
+
+/* chat panel (steps 14.4 and 14.5) */
+.chat-btn { width: 100%; font: inherit; color: inherit; text-align: left; background: transparent; border: 0; border-radius: 8px; padding: 5px 6px; margin: 0 -6px; width: calc(100% + 12px); cursor: pointer; }
+.chat-btn:hover { background: var(--surface-2); }
+.chat.needs .chat-btn:hover { background: color-mix(in oklab, var(--warn-bg) 80%, var(--surface)); }
+.chev { flex: none; width: 7px; height: 7px; margin: 0 2px 2px 2px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); }
+.chat-btn[aria-expanded="true"] .chev { transform: rotate(225deg); margin-bottom: -2px; }
+.chat-panel { display: grid; gap: 10px; background: var(--surface-2); border-radius: 10px; padding: 10px; margin-top: 4px; min-width: 0; }
+.cp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.8125rem; color: var(--muted); }
+.cp-block { display: grid; gap: 4px; min-width: 0; }
+.cp-label { font-size: 0.8125rem; font-weight: 600; }
+.cp-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.5; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-height: 16rem; overflow: auto; }
+.cp-text.bad { border-color: color-mix(in oklch, var(--c-bad) 45%, transparent); color: var(--c-bad); }
+.cp-empty, .cp-note { font-size: 0.875rem; color: var(--muted); }
+.cp-note { color: var(--ink); }
+.cp-refused { list-style: disc; margin: 0; padding-left: 1.2rem; font-size: 0.875rem; display: grid; gap: 2px; }
+.cp-rc { font-size: 0.8125rem; color: var(--muted); }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.chat-panel .actions.ask { background: var(--surface); }
