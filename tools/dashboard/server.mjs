@@ -63,7 +63,8 @@ const throttleCfg = DEMO ? null : loadThrottleConfig();
 const gameLog = (action, id, result) => { try { mkdirSync(join(HERE, "..", "..", "logs"), { recursive: true }); appendFileSync(join(HERE, "..", "..", "logs", "hub_actions.log"), `${new Date().toISOString()} ${action} ${id} ${result}\n`); } catch { /* logging never breaks game mode */ } };
 const dataFile = (n) => join(HERE, "..", "..", "data", n);
 const throttle = DEMO ? null : makeThrottle({
-  hubPids: () => ({ ...control.startedPids(), ...chats.workingPids() }), statePath: dataFile("game_state.json"),   // Hub chats that are working count as Hub programs cfg: throttleCfg, log: gameLog,
+  // Hub chats that are working count as Hub programs (Phase 14), so game mode slows them like the rest
+  hubPids: () => ({ ...control.startedPids(), ...chats.workingPids() }), statePath: dataFile("game_state.json"), cfg: throttleCfg, log: gameLog,
   // programs the Hub started AND Ivan flagged in config/projects.json with "usesGpu": true get frozen, not only slowed (step 13.3)
   gpuPids: () => Object.fromEntries(Object.entries(control.startedPids()).filter(([id]) => control.config().find((p) => p.id === id)?.usesGpu === true)),
 });
