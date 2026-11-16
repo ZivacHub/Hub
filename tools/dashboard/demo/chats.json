@@ -1,0 +1,184 @@
+{
+  "projects": [
+    {
+      "project": "Clip Studio",
+      "chats": [
+        {
+          "id": "h-20261116-091000-q7w2",
+          "kind": "hub",
+          "name": "Hub · Clip Studio · 16 Nov 09:10",
+          "state": "working",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 130,
+          "lastActiveAgoMinutes": 2,
+          "model": "opus",
+          "turns": 3,
+          "canAnswer": false,
+          "openLink": null,
+          "lastReply": "",
+          "refused": []
+        },
+        {
+          "id": "h-20261116-101500-k3x9",
+          "kind": "hub",
+          "name": "Hub · Clip Studio · 16 Nov 10:15",
+          "state": "idle",
+          "needsYou": true,
+          "why": "question",
+          "snippet": "Which caption style should I burn in: word-by-word highlight or whole sentences?",
+          "remoteControl": false,
+          "sinceAgoMinutes": 95,
+          "lastActiveAgoMinutes": 40,
+          "model": "sonnet",
+          "turns": 2,
+          "canAnswer": true,
+          "openLink": null,
+          "lastReply": "The caption export now handles empty captions. Tests pass: 9 of 9.",
+          "refused": []
+        },
+        {
+          "id": "s-1a2b3c4d",
+          "kind": "app",
+          "name": "Captions step 4.3",
+          "state": "working",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": true,
+          "sinceAgoMinutes": 25,
+          "lastActiveAgoMinutes": 6,
+          "model": null,
+          "turns": null,
+          "canAnswer": false,
+          "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000001",
+          "lastReply": "",
+          "refused": []
+        },
+        {
+          "id": "s-5e6f7a8b",
+          "kind": "terminal",
+          "name": "Caption timing check",
+          "state": "idle",
+          "needsYou": true,
+          "why": "permission",
+          "snippet": "Maybe waiting for your permission to run Bash",
+          "remoteControl": null,
+          "sinceAgoMinutes": 70,
+          "lastActiveAgoMinutes": 11,
+          "model": null,
+          "turns": null,
+          "canAnswer": false,
+          "openLink": null,
+          "lastReply": "",
+          "refused": []
+        }
+      ]
+    },
+    {
+      "project": "Job Applier",
+      "chats": [
+        {
+          "id": "s-9c0d1e2f",
+          "kind": "app",
+          "name": "Match scoring",
+          "state": "idle",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 1500,
+          "lastActiveAgoMinutes": 1500,
+          "model": null,
+          "turns": null,
+          "canAnswer": false,
+          "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000002",
+          "lastReply": "",
+          "refused": []
+        },
+        {
+          "id": "h-20261115-164000-b2n8",
+          "kind": "hub",
+          "name": "Hub · Job Applier · 15 Nov 16:40",
+          "state": "failed",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 800,
+          "lastActiveAgoMinutes": 760,
+          "model": "haiku",
+          "turns": 4,
+          "canAnswer": true,
+          "openLink": null,
+          "lastReply": "",
+          "refused": [
+            "Bash: rm -rf build",
+            "Write: data/samples/listings.json"
+          ]
+        }
+      ]
+    },
+    {
+      "project": "Space Game",
+      "chats": [
+        {
+          "id": "h-20261114-182000-m4q1",
+          "kind": "hub",
+          "name": "Hub · Space Game · 14 Nov 18:20",
+          "state": "stopped",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 2900,
+          "lastActiveAgoMinutes": 2880,
+          "model": "sonnet",
+          "turns": 1,
+          "canAnswer": true,
+          "openLink": null,
+          "lastReply": "",
+          "refused": []
+        },
+        {
+          "id": "s-3d4e5f6a",
+          "kind": "app",
+          "name": "Boss phase two attack pattern",
+          "state": "idle",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": true,
+          "sinceAgoMinutes": 1900,
+          "lastActiveAgoMinutes": 1800,
+          "model": null,
+          "turns": null,
+          "canAnswer": false,
+          "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000003",
+          "lastReply": "",
+          "refused": []
+        },
+        {
+          "id": "h-20261115-093000-r5t8",
+          "kind": "hub",
+          "name": "Hub · Space Game · 15 Nov 09:30",
+          "state": "idle",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 430,
+          "lastActiveAgoMinutes": 300,
+          "model": "opus",
+          "turns": 2,
+          "canAnswer": true,
+          "openLink": null,
+          "lastReply": "Phase two attack pattern passes 6 of 6 tests after the restart fix.",
+          "refused": []
+        }
+      ]
+    }
+  ]
+}

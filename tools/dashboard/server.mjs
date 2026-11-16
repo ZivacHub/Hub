@@ -35,6 +35,10 @@ import { makePauses } from "./lib/pauses.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
+// Hub chats (Phase 14): windowless Claude chats the Hub starts itself (lib/chats.mjs), and the live list of every chat (lib/chatlist.mjs)
+const chats = DEMO ? null : (await import("./lib/chats.mjs")).makeChats({ redact: real.redact });
+const chatlist = DEMO ? null : await import("./lib/chatlist.mjs");
+const chatSample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "chats.json"), "utf8")) : null;
 const sample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "sample.json"), "utf8")) : null;
 const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
 const demoProjects = () => ({ generatedAt: new Date().toISOString(), demo: true, projects: sample.projects });
@@ -59,7 +63,7 @@ const throttleCfg = DEMO ? null : loadThrottleConfig();
 const gameLog = (action, id, result) => { try { mkdirSync(join(HERE, "..", "..", "logs"), { recursive: true }); appendFileSync(join(HERE, "..", "..", "logs", "hub_actions.log"), `${new Date().toISOString()} ${action} ${id} ${result}\n`); } catch { /* logging never breaks game mode */ } };
 const dataFile = (n) => join(HERE, "..", "..", "data", n);
 const throttle = DEMO ? null : makeThrottle({
-  hubPids: () => control.startedPids(), statePath: dataFile("game_state.json"), cfg: throttleCfg, log: gameLog,
+  hubPids: () => ({ ...control.startedPids(), ...chats.workingPids() }), statePath: dataFile("game_state.json"),   // Hub chats that are working count as Hub programs cfg: throttleCfg, log: gameLog,
   // programs the Hub started AND Ivan flagged in config/projects.json with "usesGpu": true get frozen, not only slowed (step 13.3)
   gpuPids: () => Object.fromEntries(Object.entries(control.startedPids()).filter(([id]) => control.config().find((p) => p.id === id)?.usesGpu === true)),
 });
@@ -82,7 +86,14 @@ const doneTracker = makeDoneTracker();  // "everything is done" (D28: only tells
 const TOKEN = randomBytes(24).toString("hex");
 let allowedOrigins = [];
 
+// sample chats: the file holds minutes-ago numbers, the answer gets real times (`--demo-chats=empty` shows the empty state)
+const demoChats = () => {
+  const projects = args.includes("--demo-chats=empty") ? [] : chatSample.projects.map((p) => ({ ...p, chats: p.chats.map(({ sinceAgoMinutes, lastActiveAgoMinutes, ...c }) => ({ ...c, since: ago(sinceAgoMinutes), lastActive: ago(lastActiveAgoMinutes) })) }));
+  return { generatedAt: new Date().toISOString(), demo: true, max: 2, working: projects.flatMap((p) => p.chats).filter((c) => c.kind === "hub" && c.state === "working").length, openListOk: true, projects };
+};
+
 const api = {
+  "/api/chats": () => (DEMO ? demoChats() : chatlist.readChats({ hubChats: chats.list(), redact: real.redact })),
   "/api/projects": () => (DEMO ? demoProjects() : real.projects()),
   "/api/decisions": () => (DEMO ? { generatedAt: new Date().toISOString(), decisions: sample.decisions } : real.decisions()),
   "/api/answers": () => (DEMO ? { generatedAt: new Date().toISOString(), answers: sample.answers.map((a) => ({ ...a, at: ago(a.agoMinutes) })) } : real.answers()),
@@ -104,7 +115,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -136,6 +147,15 @@ async function gameAction(body) {
   return { ok: true, message: "Not ignored any more." };
 }
 
+// Chat buttons (Phase 14). Nothing but plain values comes from the page: the project is checked against the real folders, the chat id is the
+// Hub's own id (never a Claude session id), the permission mode is fixed inside the engine, and every refusal is logged there.
+async function chatAction(body) {
+  if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true });
+  if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
+  if (body.action === "chat-stop") return chats.stop({ id: body.id });
+  return chats.appLink({ project: body.project, task: body.task }); // chat-app-link: only builds the link; the page opens it and Ivan presses Send in the app
+}
+
 async function handleAction(req, send) {
   const h = req.headers;
   if (!String(h["content-type"] || "").toLowerCase().startsWith("application/json")) return send(415, err("JSON only"));
@@ -143,13 +163,15 @@ async function handleAction(req, send) {
   if (h["sec-fetch-site"] && h["sec-fetch-site"] !== "same-origin") return send(403, err("forbidden origin"));
   const got = Buffer.from(String(h["x-hub-token"] || "")); const want = Buffer.from(TOKEN);
   if (got.length !== want.length || !timingSafeEqual(got, want)) return send(403, err("missing or wrong token"));
-  let raw = ""; for await (const chunk of req) { raw += chunk; if (raw.length > 2000) return send(413, err("too big")); }
+  let raw = ""; for await (const chunk of req) { raw += chunk; if (raw.length > 14000) return send(413, err("too big")); }   // chat tasks and answers may be long; every other action stays under 2000 (checked below)
   let body; try { body = JSON.parse(raw); } catch { return send(400, err("not JSON")); }
   if (!body || body.confirm !== true) return send(400, err("confirmation missing"));
   if (!ACTIONS.includes(body.action)) return send(400, err("unknown action"));
+  if (raw.length > 2000 && !body.action.startsWith("chat-")) return send(413, err("too big"));
   if (DEMO) return send(200, err("Sample data mode: the buttons are switched off."));
   let result;
   if (body.action.startsWith("game-")) result = await gameAction(body);
+  else if (body.action.startsWith("chat-")) result = await chatAction(body);
   else if (body.action === "start") result = await control.start(String(body.id));
   else if (body.action === "stop") result = await control.stop(String(body.id));
   else if (body.action === "autostart") result = control.setAutostart(String(body.id), body.value === true);
@@ -222,6 +244,20 @@ server.listen(PORT, HOST, async () => {
   ok("unlisted action refused", (await raw("/api/action", json, JSON.stringify({ action: "run", cmd: "calc", confirm: true }), "POST")).status === 400);
   const unk = await raw("/api/action", json, act, "POST");
   ok("unlisted project id refused (not started)", unk.status === 200 && JSON.parse(unk.text).ok === false);
+  // Hub chat buttons (Phase 14): every one needs the token; none of these tests may start a real chat (bad project, empty task or no such chat)
+  const cj = (o) => JSON.stringify({ confirm: true, ...o });
+  const refused = async (o, h = json) => { const r = await raw("/api/action", h, cj(o), "POST"); return r.status === 200 && JSON.parse(r.text).ok === false; };
+  ok("chat-start without the token is refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-start", project: "Hub", task: "x" }), "POST")).status === 403);
+  ok("chat-answer and chat-stop without the token are refused", (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-answer", id: "h-20260101-000000-abcd", text: "x" }), "POST")).status === 403 && (await raw("/api/action", { ...json, "X-Hub-Token": "" }, cj({ action: "chat-stop", id: "h-20260101-000000-abcd" }), "POST")).status === 403);
+  ok("chat-start refuses an unknown project and a path", await refused({ action: "chat-start", project: "NoSuchProject", task: "x" }) && await refused({ action: "chat-start", project: "..\\Windows", task: "x" }) && await refused({ action: "chat-start", project: "../..", task: "x" }));
+  ok("chat-start refuses an empty task, an unknown model and Remote Control", await refused({ action: "chat-start", project: "Hub", task: "  " }) && await refused({ action: "chat-start", project: "Hub", task: "x", model: "gpt-4" }) && await refused({ action: "chat-start", project: "Hub", task: "x", remoteControl: true }));
+  ok("chat-answer and chat-stop refuse an unknown chat and a Claude session id", await refused({ action: "chat-answer", id: "h-20260101-000000-abcd", text: "x" }) && await refused({ action: "chat-answer", id: "18ec7052-3a6a-46cc-ade3-7ff857195e3d", text: "x" }) && await refused({ action: "chat-stop", id: "h-20260101-000000-abcd" }));
+  ok("a long chat task is not cut off as 'too big' but still refused for its project", await refused({ action: "chat-start", project: "NoSuchProject", task: "x".repeat(3000) }));
+  ok("a long body on any other action is still 413", (await raw("/api/action", json, JSON.stringify({ action: "stop", id: "x", pad: "y".repeat(3000), confirm: true }), "POST")).status === 413);
+  const lnk = await raw("/api/action", json, cj({ action: "chat-app-link", project: "Hub", task: "Hello there" }), "POST"); const lj = JSON.parse(lnk.text);
+  ok("chat-app-link builds the app's new-chat link for a real project only", lnk.status === 200 && lj.ok === true && lj.link.startsWith("claude://code/new?q=Hello%20there&folder=") && await refused({ action: "chat-app-link", project: "NoSuchProject", task: "x" }));
+  const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
+  ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
   // game-mode buttons (13.4): with no game running every one of them is refused, and none can be reached without the token
   for (const a of [{ action: "game-off" }, { action: "game-on" }, { action: "game-ignore", app: "opera" }, { action: "game-unignore", app: "opera" }]) {
     const r = await raw("/api/action", json, JSON.stringify({ ...a, confirm: true }), "POST");

@@ -260,6 +260,17 @@ export function makeChats(opts = {}) {
     }));
   }
 
+  /** "Start in the app" (D38): the link that opens the Claude app's new-chat page with the folder and the task filled in. The app
+   *  waits for Send (test T6), so nothing starts by itself. The folder is chosen here, never by the page. */
+  function appLink({ project, task } = {}) {
+    const pe = projectError(project);
+    if (pe) return fail("chat-app-link", "-", project, pe);
+    const t = cleanText(task);
+    if (!textOk(t) || t.length > 1500) return fail("chat-app-link", "-", project, "For \"Start in the app\" the task must be 1 to 1500 characters.");
+    log("chat-app-link", "-", project, "ok");
+    return { ok: true, message: `Opening the Claude app in ${project}. Press Send there to start.`, link: `claude://code/new?q=${encodeURIComponent(t)}&folder=${encodeURIComponent(join(root, project))}` };
+  }
+
   /** { id: pid } of the turns that are running (game mode slows them like other Hub programs). */
   function workingPids() {
     const out = {};
@@ -267,7 +278,7 @@ export function makeChats(opts = {}) {
     return out;
   }
 
-  return { start, answer, stop, list, workingPids };
+  return { start, answer, stop, list, workingPids, appLink };
 }
 
 // ---------- self-test ----------
@@ -419,6 +430,14 @@ process.stdin.on("end", () => {
     const kO = call("MARKER-O");
     ok("...in the same session", kO && kO.argv[kO.argv.indexOf("--resume") + 1] === get(s.id).sessionId);
 
+    // "Start in the app" link (D38)
+    const lk = c.appLink({ project: "Fake", task: "Fix the A&B page?" });
+    ok("app link: claude://code/new with the task and the folder encoded", lk.ok === true && lk.link.startsWith("claude://code/new?q=Fix%20the%20A%26B%20page%3F&folder=") && lk.link.includes(encodeURIComponent(join(projects, "Fake"))));
+    ok("app link refused: unknown project, slash, empty, too long", [{ project: "Nope", task: "hi" }, { project: "Fake/..", task: "hi" }, { project: "Fake", task: " " }, { project: "Fake", task: "x".repeat(1501) }].every((x) => c.appLink(x).ok === false));
+    ok("app link starts nothing", calls().every((k) => !k.input.includes("A&B")));
+    const logNow = readFileSync(join(base, "logs", "hub_actions.log"), "utf8");
+    ok("app link is logged without the task text", logNow.includes("chat-app-link") && !logNow.includes("A&B"));
+
     // order, survival, log
     const all = c.list();
     ok("newest first", all[0].id === s.id && all[all.length - 1].id === a.id);
@@ -427,7 +446,7 @@ process.stdin.on("end", () => {
     const logText = readFileSync(join(base, "logs", "hub_actions.log"), "utf8");
     ok("log has start, answer, stop and refusal lines", ["chat-start", "chat-answer", "chat-stop", "refused:"].every((w) => logText.includes(w)));
     ok("log has no task or answer text", !/MARKER|SECRET|Hello|Pretend/.test(logText));
-    ok("log lines have action, id, project, result", logText.trim().split(/\n/).every((l) => /^\S+ chat-\w+ \S+ \S+ .+/.test(l)));
+    ok("log lines have action, id, project, result", logText.trim().split(/\n/).every((l) => /^\S+ chat-[\w-]+ \S+ \S+ .+/.test(l)));
     const stateText = readFileSync(join(base, "data", "hub_chats.json"), "utf8");
     ok("state file holds no full long task", !stateText.includes("x".repeat(301)));
   } catch (err) { ok("self-test crashed: " + (err && err.stack), false); }

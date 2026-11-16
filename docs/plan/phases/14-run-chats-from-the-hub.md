@@ -30,6 +30,40 @@ Rules the engine itself enforces (the server and the page are not trusted to):
 5. Permission mode is auto (D39); nothing in the engine can switch it to a mode that skips the checks.
 6. Every start, answer, stop and refusal is one line in logs/hub_actions.log (action, chat id, project, result), without the task or answer text. State is kept in data/hub_chats.json (written to a temporary file, then renamed).
 
+## Chat list contract (GET /api/chats; written by the manager 2026-11-16, binding for 14.2 to 14.6)
+```
+{ generatedAt: ISO, demo?: true, max: 2, working: N,       // working = Hub turns running now, max = the limit (D41)
+  openListOk: true|false,                                   // false when `claude agents --json` could not be read (then only Hub chats are listed)
+  projects: [ { project: "Hub", chats: [ chat ] } ] }       // only projects that have chats
+chat = { id, kind: "hub"|"app"|"terminal", name, state: "working"|"idle"|"failed"|"stopped",
+         needsYou: bool, why: ""|"question"|"permission", snippet,   // from the saved chat file (attention.mjs chatFileState); snippet clipped 220, "" if none
+         remoteControl: true|false|null,                   // app: the app record's remoteControlUserEnabled; hub: false (14.6 changes it); terminal: null
+         since: ISO|null, lastActive: ISO|null, model: text|null, turns: number|null,
+         canAnswer: bool,                                   // true ONLY for kind hub with state idle, failed or stopped
+         openLink: text|null,                               // app chats only: "claude://claude.ai/epitaxy/" + the app record's sessionId, built only when that id matches /^local_[0-9a-f-]{8,64}$/i
+         lastReply: text, refused: [text] }                 // hub chats only (clipped 1400 / 160 each); "" and [] for the others
+```
+- `id`: Hub chats = the engine's id (h-...); other chats = "s-" + the first 8 characters of the session id. Display and identity only; the page never sends a Claude session id to the server.
+- Hub chats come from the engine's list() (injected); they are never listed twice if the same session also shows in the open list.
+- Open chats = entries of `claude agents --json` (fields pid, cwd, kind, startedAt, sessionId, name, status). An entry is an app chat when an app record has `cliSessionId` equal to its `sessionId` (and `isArchived` is not true); otherwise terminal. Entry status busy -> working, idle -> idle. A chat belongs to the project whose folder (directly under the projects folder) contains its cwd; entries outside the projects folder are left out.
+- App records (read-only, test T14): `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\*\*\local_*.json`; only the fields sessionId, cliSessionId, cwd, title, isArchived, remoteControlUserEnabled are used.
+- Saved chat file: `~/.claude/projects/<cwd with every non-letter, non-digit character turned into "-">/<sessionId>.jsonl`.
+- Order: projects with a chat that needs you first, then projects with a working chat, then by newest lastActive; chats inside a project: needsYou, working, the rest, newest first. Text fields go through redact() (injected) and are clipped (name 80).
+
+## Server actions the page may use (POST /api/action, same guards as Start / Stop: token, same Origin, JSON, confirm:true; written by the manager 2026-11-16)
+- `{ action: "chat-start", project, task, model?, remoteControl? }` -> `{ ok, id, message }` (a Hub chat, windowless). `model` is one of haiku, sonnet, opus, fable or missing (default). `remoteControl` stays false until 14.6.
+- `{ action: "chat-answer", id, text }`, `{ action: "chat-stop", id }` -> `{ ok, message }`. `id` is a Hub chat id (h-...) from /api/chats, never anything else.
+- `{ action: "chat-app-link", project, task }` -> `{ ok, link, message }`: the page opens `link` (navigation to a claude:// address) and Ivan presses Send in the app. Task 1 to 1500 characters.
+- Refusals come back as `{ ok: false, error }` in plain words; the page shows the error text as is (textContent).
+- The page reads `GET /api/chats` (contract above) with the rest of its refresh (every 10 s in front, 2 minutes hidden). Demo: `--demo` shows demo/chats.json, `--demo-chats=empty` the empty state; in demo mode every POST answers "Sample data mode: the buttons are switched off."
+
+## Page design for 14.3 to 14.5 (inside the existing design; manager 2026-11-16)
+- Each project card gets a **Chats** area under the Start / Stop row: one line per chat of that project (name, a labelled state tag, "needs you" mark with the snippet when needsYou, kind word Hub / App / Terminal) and a **New chat** button. Projects with no chats show only the button.
+- **New chat** opens an inline form in the card (no modal, like the existing "Start X?" row): a task box (1 to 4000 characters, counter), a model picker (Default, Haiku, Sonnet, Opus; remembers the last pick in localStorage), buttons **Start here** (asks "Start a chat in X? Yes / Cancel" first, D25) and **Start in the app** (asks first, then opens the link), and a quick **Pick up** button (starts a new Hub chat whose task is exactly `/pickup`, asks first). A refusal or success shows in the page's existing note line.
+- A Hub chat line opens its **chat panel** inline: state, last reply (clipped, readable), refused actions (listed plainly, "Claude was not allowed to: ..."), when the chat is idle / failed / stopped: an answer box + **Send** (asks first) and **Hand off** (sends exactly `/handoff`, asks first) and **Pick up** (sends exactly `/pickup`, asks first); when working: **Stop** (asks first) and "Working..."; the panel refreshes with the page. App and terminal chats show no answer box: an app chat shows "Open in the app" (the openLink) and the text "Answer it in the app so it does not split." (D40); a terminal chat shows "Answer it in its terminal."
+- The main page's side column gets a **Chats** summary only if it fits the existing pattern (counts: working, waiting for you); otherwise the card areas are enough. A chat that needs you also keeps showing in "Chats waiting for you" as today (not changed).
+- Same rules as every page: text only through textContent, no inline styles or scripts, light and dark, phone width, visible focus, no animation.
+
 ## Steps (proposed grades; re-graded on the spot before each starts)
 **14.1 Chat engine** — Grade: strong (starts Claude with permissions). Use: tools/dashboard/lib/chats.mjs: start (`claude -p` or `--bg` in the project folder, folder chosen by the server from the project list), answer (`--resume`, only when T13's list shows the chat closed), stop, the permission mode from D39, at most N at once (D41), a log line per action, game mode treats them like Hub programs. Done when: a self-test starts a test chat, answers it, refuses to answer one that is open elsewhere, stops it. Test: `node tools/dashboard/lib/chats.mjs --selftest` with the cheapest model and no tools.
 **14.2 Live list of all chats** — Grade: standard. Use: `claude agents --json` + the app's chat records (read-only, CLAUDE_CONTROL T14) + the existing attention check. Done when: /api/chats lists every open chat per project with app/Hub kind, working or idle, needs you, Remote Control on/off. Test: compare with the app's sidebar on the real PC.

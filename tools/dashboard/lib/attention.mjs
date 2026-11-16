@@ -96,6 +96,11 @@ function summaryOfFile(p, m, size) {
   return entry;
 }
 
+/** One saved chat file: what it is doing now ({ state, at, why, snippet, urgent... } as `decide` returns it, or {} when empty) and its title; null when unreadable. Remembered per file. */
+export function chatFileState(file, nowMs = Date.now()) {
+  try { const st = statSync(file); const e = summaryOfFile(file, st.mtimeMs, st.size); return { ...(decide(e.summary, nowMs) || {}), title: e.title }; } catch { return null; }
+}
+
 /** For one project: every recent chat (last message within maxDays) that needs Ivan, newest first. */
 export function chatsNeedingYou(chatDirs, { maxDays = 7, nowMs = Date.now(), max = 6 } = {}) {
   const files = [];
@@ -157,5 +162,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   ok("the remembered summary gives the same answer as classify, now and later", (() => { const rows = [user(10), say(9, "Which one?")]; const sm = summarize(rows); return decide(sm, NOW).state === "question" && decide(sm, NOW + 600_000).state === "question" && JSON.stringify(decide(sm, NOW)) === JSON.stringify(classify(rows, NOW)); })());
   ok("a working chat knows when its work began", classify([user(40, "old"), say(39, "ok"), user(7, "now do this"), call(1, "Bash")], NOW).since === t(7));
   ok("work after a long pause counts from the end of the pause", classify([user(900, "start"), say(899, "Which one?"), result(2.5), call(1, "Bash")], NOW).since === t(2.5));
+  ok("chatFileState reads a real file: question, title; missing file: null", await (async () => {
+    const fs = await import("node:fs"); const os = await import("node:os");
+    const f = join(os.tmpdir(), "hub-attention-test-" + process.pid + ".jsonl");
+    fs.writeFileSync(f, [{ type: "custom-title", customTitle: "Test chat" }, user(10), say(9, "Which one?")].map((r) => JSON.stringify(r)).join("\n") + "\n");
+    const r = chatFileState(f, NOW); const gone = chatFileState(f + ".missing", NOW); fs.rmSync(f);
+    return r && r.state === "question" && r.title === "Test chat" && gone === null;
+  })());
   process.exit(bad ? 1 : 0);
 }
