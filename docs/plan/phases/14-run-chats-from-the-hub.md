@@ -53,3 +53,6 @@ Rules the engine itself enforces (the server and the page are not trusted to):
 - Windowless chats use Ivan's Claude allowance like any chat; the Hub shows which are working.
 - The app's chat records and links are not a published interface; an app update can change them. Re-run the tests in CLAUDE_CONTROL.md after an update.
 - The test chat "hub-test-bg" is still in the app's sidebar (Remote Control off) and 5 test chat files are in the Hub's chat folder: cleanup waits for D41.
+
+## Test chats to clean up at the end of the phase (D41, deleting is the manager's, with the 5 older ones named in .claude/memory.md 2026-11-13)
+Created by the 14.1 tests on 2026-11-16 (all in the Hub folder, cheapest model, no tools): cc2d206f-a6d4-4b06-abfa-ffb4c8d351b7, 0951b614-c8f8-441f-81f9-018595458cbf, 30461bb4-3e9c-40a1-af09-eb7c01ee2b45, f17de858-11c7-4491-879d-1ea2b0f675a8. Their files are `<id>.jsonl` in ~/.claude/projects/C--Users-Ivan-Desktop-BUSNUS-Hub/.
