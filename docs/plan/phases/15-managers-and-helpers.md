@@ -54,3 +54,4 @@ Since 2026-11-13 the main chat of a project is a "manager": it hands tasks to he
 
 ## Phase gate record
 - Plain-words preview, search result, questions (D42, D43) and the hand-out list shown 2026-11-15. Search: GitHub (atc-claude-kanban, claude-code-kanban, claudedash, agents-observe, Mohano, claude-code-karma) and the skills catalog ("subagent monitor dashboard", "agent task board"); ideas only, nothing adopted, no code copied. Decisions: D42 (own screen + a line), D43 (five defaults accepted). The owner's go: 2026-11-15 ("Go, whole phase").
+- Phase close 2026-11-16: six helper tasks, all passed at the first try (Sonnet: 15.1, 15.4, 15.5; Haiku: 15.2, 15.3, 15.6); Ivan on the live screen: "Looks good, close it". Left as is: long check notes on the screen; a parked step shows under "No manager chat recorded" (the park command saves no chat id; a workshop matter).

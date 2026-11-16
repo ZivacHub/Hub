@@ -1,6 +1,6 @@
 # Phase 14 — Run my chats from the Hub (Ivan's wish 2026-11-13)
 Board: docs/plan/BOARD.md lists this phase's steps and ticks. This file holds the detail. A pickup reads only the CURRENT phase's file.
-Status: GATE OPEN. The check is done and the preview, search and questions were shown on 2026-11-13; Ivan's answers (D38 to D41) did not arrive. Build nothing until he answers and says go.
+Status: GATE PASSED 2026-11-16. D38 both buttons, D39 auto mode, D40 see and open, D41 all five defaults; Ivan's go: "Go, whole phase". Built in whole-phase mode (manager + helpers).
 
 ## Ivan's words (2026-11-13)
 > "I want a new phase right after the current one: "Run my chats from the Hub". From the Hub page I want to start a new chat for any project with a task, see and answer chats, pick up, hand off, and turn Remote Control on and off. First check, with proof, what the Claude desktop app and the claude command line really allow from outside (no guessing). Then run the phase gate with choice cards, then build it."
@@ -32,7 +32,7 @@ A chat that is open in the Claude app must never get a message from outside: it 
 4. D41 Five small defaults: model picker; Remote Control off at start; at most 2 chats at once; never write into an open app chat; clean up the test chats.
 
 ## Phase gate record
-- Check with proof: docs/reference/CLAUDE_CONTROL.md (2026-11-13). Skills/repos search: GitHub (vibe-kanban, happy, opcode, claudecodeui, claude-squad, crystal, claude-code-webui, session managers), nothing copied; no new skill needed (frontend-design, impeccable, playwright-cli, security-review cover it). Preview and questions shown 2026-11-13. Ivan's go: not yet.
+- Check with proof: docs/reference/CLAUDE_CONTROL.md (2026-11-13). Skills/repos search: GitHub (vibe-kanban, happy, opcode, claudecodeui, claude-squad, crystal, claude-code-webui, session managers), nothing copied; no new skill needed (frontend-design, impeccable, playwright-cli, security-review cover it). Preview and questions shown 2026-11-13 and again 2026-11-16. Decisions: D38 to D41 (2026-11-16). Hand-out list shown 2026-11-16: 14.1 and 14.6 Opus high, 14.2 to 14.5 Sonnet medium, sample data Haiku low, server routes and the test-chat cleanup with the manager; almost everything runs one at a time (real test chats, browser, shared page files). Ivan's go: 2026-11-16 ("Go, whole phase").
 
 ## Risks and open points (only for this phase)
 - Memory is tight (11 to 14 of 15.6 GB): each windowless chat is a full Claude program.
