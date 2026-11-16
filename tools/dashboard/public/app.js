@@ -177,8 +177,10 @@ document.addEventListener("click", (e) => {
   else if (act === "cp-send") askPanel(b.dataset.id, name, "cp-send");
   else if (act === "cp-handoff") askPanel(b.dataset.id, name, "cp-handoff");
   else if (act === "cp-pickup") askPanel(b.dataset.id, name, "cp-pickup");
+  else if (act === "cp-rc-on") askPanel(b.dataset.id, name, "cp-rc-on");
+  else if (act === "cp-rc-off") askPanel(b.dataset.id, name, "cp-rc-off");
   else if (act === "cp-stop") askPanel(b.dataset.id, name, "cp-stop");
-  else if (act === "chat-new") { asking = null; openChat = null; form = { project: name, text: "", model: lastModel() }; focusForm = true; setNote(""); }
+  else if (act === "chat-new") { asking = null; openChat = null; form = { project: name, text: "", model: lastModel(), remoteControl: false }; focusForm = true; setNote(""); }
   else if (act === "chat-cancel") { form = null; asking = null; setNote(""); }
   else if (act === "chat-ask-here") { if (form) askChat("chat-here", form.project); }
   else if (act === "chat-ask-app") { if (form) askChat("chat-app", form.project); }
@@ -288,6 +290,7 @@ function chatLine(c, project) {
       h("span", { class: "chat-name", title: c.name }, c.name),
       h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
       h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
+      c.remoteControl === true ? h("span", { class: "crc" }, "Remote Control") : null,
       c.needsYou ? h("span", { class: "cneeds" }, "Needs you") : null,
       h("span", { class: "chev", "aria-hidden": "true" })),
     c.needsYou && c.snippet && !open ? h("p", { class: "chat-snip" }, c.snippet) : null,
@@ -306,8 +309,9 @@ function panelMeta(c) {
   return h("div", { class: "cp-meta" }, h("span", { class: "cstate cs-" + state }, STATE_WORD[state]), bits.map((t) => h("span", {}, t)));
 }
 
-function panelAsk(c) {
+function panelAsk(c, rcRow = false) {
   if (!(asking && asking.kind.startsWith("cp-") && asking.id === c.id)) return null;
+  if (rcRow !== asking.kind.startsWith("cp-rc-")) return null;
   return h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
     h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
     h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
@@ -329,6 +333,9 @@ function chatPanel(c, project) {
     }
     const busy = sending.has(c.id);
     const ask = panelAsk(c);
+    const rcAsk = panelAsk(c, true);
+    const rcOn = c.remoteControl === true;
+    kids.splice(1, 0, h("p", { class: "cp-rcline" }, rcOn ? "Remote Control: on" : "Remote Control: off"));
     if (c.canAnswer) {
       const draft = drafts.get(c.id) || "";
       const ta = h("textarea", { id: "ans-text", class: "chat-text", rows: "3", maxlength: String(ANSWER_MAX), "data-id": c.id });
@@ -338,8 +345,14 @@ function chatPanel(c, project) {
         h("button", { class: "btn primary", id: "ans-send", type: "button", "data-act": "cp-send", "data-id": c.id, "data-name": project, disabled: busy || !draft.trim() }, "Send"),
         h("button", { class: "btn", type: "button", "data-act": "cp-handoff", "data-id": c.id, "data-name": project, disabled: busy }, "Hand off"),
         h("button", { class: "btn", type: "button", "data-act": "cp-pickup", "data-id": c.id, "data-name": project, disabled: busy }, "Pick up")));
-    } else if (c.state === "working") {
-      kids.push(ask || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-stop", "data-id": c.id, "data-name": project, disabled: busy }, "Stop"), h("span", { class: "cp-rc" }, "Working…")));
+    } else {
+      if (rcOn) kids.push(h("p", { class: "cp-note" }, "Remote Control is on. Answer it on your phone, or turn Remote Control off here to answer it from the Hub."));
+      if (c.state === "working") kids.push(ask || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-stop", "data-id": c.id, "data-name": project, disabled: busy }, "Stop"), h("span", { class: "cp-rc" }, "Working…")));
+    }
+    if (rcOn) kids.push(rcAsk || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-rc-off", "data-id": c.id, "data-name": project, disabled: busy }, "Turn Remote Control off")));
+    else if (c.canAnswer) kids.push(rcAsk || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-rc-on", "data-id": c.id, "data-name": project, disabled: busy }, "Turn Remote Control on")));
+    if (typeof c.openLink === "string" && c.openLink.startsWith("claude://resume?session=")) {
+      kids.push(h("div", { class: "actions" }, h("a", { class: "btn", href: c.openLink }, "Open in the app"), h("span", { class: "cp-rc" }, "Afterwards the chat lives in the app; answer it there.")));
     }
   } else if (c.kind === "app") {
     kids.push(h("p", { class: "cp-note" }, "This chat is open in the Claude app. Answer it there so it does not split."));
@@ -357,11 +370,15 @@ function chatPanel(c, project) {
 function askPanel(id, project, kind) {
   const draft = (drafts.get(id) || "").trim();
   if (kind === "cp-send" && !draft) return;
-  const text = kind === "cp-send" ? `Send this answer to the chat in ${project}?`
+  const text = kind === "cp-rc-on" ? "Turn Remote Control on?"
+    : kind === "cp-rc-off" ? "Turn Remote Control off?"
+    : kind === "cp-send" ? `Send this answer to the chat in ${project}?`
     : kind === "cp-handoff" ? "Hand off this chat?"
     : kind === "cp-pickup" ? "Run /pickup in this chat?"
     : "Stop this chat?";
-  const extra = kind === "cp-handoff" ? "Claude saves where the work stands and writes the handoff note. Claude works without a window and uses your Claude allowance."
+  const extra = kind === "cp-rc-on" ? "The chat runs in the background so you can open it on your phone. You cannot answer it here while it is on. Claude works without a window and uses your Claude allowance."
+    : kind === "cp-rc-off" ? "The chat stops running in the background; you can answer it here afterwards."
+    : kind === "cp-handoff" ? "Claude saves where the work stands and writes the handoff note. Claude works without a window and uses your Claude allowance."
     : kind === "cp-stop" ? "You can answer it later to continue."
     : "Claude works without a window and uses your Claude allowance.";
   asking = { kind, name: chatKey(project), project, id, label: project, text, extra };
@@ -371,7 +388,8 @@ function askPanel(id, project, kind) {
 async function doPanel(a) {
   const c = findChat(a.id);
   if (!c || c.kind !== "hub" || !/^h-/.test(a.id) || sending.has(a.id)) return;
-  const body = a.kind === "cp-stop" ? { action: "chat-stop", id: a.id }
+  const body = a.kind === "cp-rc-on" || a.kind === "cp-rc-off" ? { action: "chat-remote-control", id: a.id, on: a.kind === "cp-rc-on" }
+    : a.kind === "cp-stop" ? { action: "chat-stop", id: a.id }
     : { action: "chat-answer", id: a.id, text: a.kind === "cp-handoff" ? "/handoff" : a.kind === "cp-pickup" ? "/pickup" : (drafts.get(a.id) || "").trim() };
   if (a.kind === "cp-send" && !body.text) return;
   sending.add(a.id);
@@ -410,6 +428,7 @@ function chatForm(project) {
       ta,
       h("span", { class: "cf-count", id: "chat-count" }, `${form.text.length} / ${TASK_MAX}`)),
     h("div", { class: "cf-field cf-model" }, h("label", { for: "chat-model" }, "Model"), sel),
+    h("label", { class: "cf-check", for: "chat-rc" }, h("input", { type: "checkbox", id: "chat-rc", checked: form.remoteControl === true }), "Reach it from my phone (Remote Control)"),
     ask || h("div", { class: "actions" },
       h("button", { class: "btn primary", type: "button", "data-act": "chat-ask-here" }, "Start here"),
       h("button", { class: "btn", type: "button", "data-act": "chat-ask-app" }, "Start in the app"),
@@ -438,7 +457,8 @@ function askChat(kind, project) {
   const text = kind === "chat-here" ? `Start a chat in ${project} with this task?`
     : kind === "chat-app" ? `Open the Claude app in ${project} with this task?`
     : `Start a chat in ${project} that runs /pickup?`;
-  const extra = kind === "chat-app" ? "You press Send there." : "Claude works without a window and uses your Claude allowance.";
+  const extra = kind === "chat-app" ? "You press Send there."
+    : "Claude works without a window and uses your Claude allowance." + (form.remoteControl ? " Remote Control is on: the chat keeps running in the background so you can open it on your phone. You cannot answer it here while it is on." : "");
   asking = { kind, name: chatKey(project), project, id: null, label: project, text, extra };
   setNote("");
 }
@@ -449,7 +469,7 @@ async function doChat(a) {
   if (!task) { setNote("Write what Claude should do first.", true); return; }
   let body;
   if (a.kind === "chat-app") body = { action: "chat-app-link", project: a.project, task };
-  else { body = { action: "chat-start", project: a.project, task }; if (form.model) body.model = form.model; }
+  else { body = { action: "chat-start", project: a.project, task }; if (form.model) body.model = form.model; if (form.remoteControl) body.remoteControl = true; }
   setNote("Working on it…");
   const r = await send(body);
   if (!r.ok) { setNote(r.error || "That did not work.", true); if (lastData) render(lastData); return; }
@@ -473,6 +493,7 @@ document.addEventListener("input", (e) => {
   const b = $("ans-send"); if (b) b.disabled = !e.target.value.trim() || sending.has(openChat);
 });
 document.addEventListener("change", (e) => {
+  if (form && e.target.id === "chat-rc") form.remoteControl = e.target.checked;
   if (form && e.target.id === "chat-model") { form.model = e.target.value; rememberModel(form.model); }
 });
 

@@ -24,6 +24,12 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 
 *Helpers screen (sample data): per project, each manager chat and the tasks it handed out, with the model and the state of each.*
 
+| Chats on the cards | Chat panel | Remote Control | Dark theme | Phone width |
+|---|---|---|---|---|
+| ![Project cards with their chats](docs/screenshots/chats-cards-light.png) | ![A chat panel with its reply and answer box](docs/screenshots/chats-panel-light.png) | ![Turning Remote Control on asks first](docs/screenshots/chats-remote-control.png) | ![Chat panel, dark theme](docs/screenshots/chats-panel-dark.png) | ![Chat panel on a phone-sized screen](docs/screenshots/chats-phone.png) |
+
+*Chats (sample data): the list on each card, the panel with the answer box, Hand off and Pick up, and the Remote Control switch.*
+
 | Dark theme | Phone width |
 |---|---|
 | ![Hub dashboard, dark theme](docs/screenshots/dashboard-dark.png) | ![Hub dashboard on a phone-sized screen](docs/screenshots/dashboard-phone-light.png) |
@@ -37,6 +43,7 @@ I run many projects side by side, each planned and built with Claude Code. Hub r
 - **Running now, and done:** one panel lists what is working this minute (the programs the Hub started, Claude chats that are busy, the Manager when it runs a task) and shows a calm "Everything is done" line when nothing has worked for two minutes. The Hub only tells you: it never turns the PC off. It costs nothing with no page open (0% of a core) and under 1% of one core with the dashboard in front of you; a hidden tab polls once every two minutes.
 - **Game mode:** when I start a game, the Hub notices (a program on my game list, or a full-screen app with a busy graphics card; launchers, browsers and video players do not count) and calms the background work it started: lowest priority, only a quarter of the processor, a memory ceiling, flagged programs frozen, one Docker container paused and the local AI model unloaded. When the game ends everything is put back exactly as it was. A strip at the top of the page says what is slowed and has two buttons that ask first: *Turn game mode off for now* and *Ignore this app*. It only ever slows programs the Hub itself started, apart from the two things I named (that container and the model).
 - **Helpers:** each project's main Claude chat works as a manager: it hands tasks to helper chats on cheaper models and checks their work. A line in the side column counts those tasks, and a separate Helpers screen (`/helpers.html`) shows, per project, each manager chat and under it every task: which model got it and whether it is running, stuck, waiting for the manager's check, waiting for me, failed or done. It only reads the small record files my Claude Code hooks write in each project (`.claude/helpers/`), so it has no buttons and changes nothing.
+- **Chats:** every project card lists its Claude chats (the ones the Hub started, the ones open in the Claude app, other terminal chats) with a state tag and an amber "Needs you" mark. A **New chat** form starts a chat with a task in two ways: "Start here" (a windowless chat the Hub runs and shows) or "Start in the app" (opens the Claude app's new-chat page with folder and task filled in), plus a quick "Pick up", and an optional "Reach it from my phone (Remote Control)" tick. Click a Hub chat to read its last reply, answer it, hand off, pick up, stop it, switch Remote Control on or off, or open it in the app. Every button asks first; chats open in the app can only be opened, never written into, because that would split them. Chats run in Claude's auto mode and use your Claude allowance.
 - **Manager card:** status of a separate orchestration service (running or not, queue, current goal), with Start and Stop.
 - **Start / Stop / Open in Claude Code:** each project on my start list gets Running or Stopped, Start and Stop buttons, and a "Start with PC" switch; every project gets an "Open in Claude Code" button. Each one asks "Start X?" first.
 - Light by default, dark by switch (remembered), refreshes itself every 30 seconds.
