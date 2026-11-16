@@ -228,3 +228,52 @@ a.run.on:hover { text-decoration: underline; }
 .done { color: var(--ok); font-size: 0.9375rem; margin-bottom: 8px; }
 .done b { font-weight: 650; }
 .game-ignored li { display: grid; grid-template-columns: minmax(6rem, 10rem) auto; justify-content: start; gap: 12px; }
+
+/* chats on the project cards (step 14.3) */
+:root {
+  --c-run: oklch(45% 0.11 155); --c-run-bg: oklch(95% 0.035 155);
+  --c-bad: oklch(48% 0.15 25); --c-bad-bg: oklch(95% 0.035 25);
+}
+:root[data-theme="dark"] {
+  --c-run: oklch(78% 0.13 155); --c-run-bg: oklch(28% 0.05 155);
+  --c-bad: oklch(78% 0.12 25); --c-bad-bg: oklch(30% 0.06 25);
+}
+.chats { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.chats-head { display: flex; align-items: baseline; gap: 8px; }
+.chats-head h4 { margin: 0; font-size: 0.75rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.chats-head .count { font-size: 0.75rem; }
+.chat-list { display: grid; gap: 8px; }
+.chat { display: grid; gap: 2px; min-width: 0; }
+.chat.needs { background: color-mix(in oklab, var(--warn-bg) 55%, var(--surface)); border-radius: 8px; margin: 0 -8px; padding: 5px 8px; }
+.chat-row { display: flex; align-items: center; gap: 6px 8px; min-width: 0; font-size: 0.875rem; }
+.chat-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.cstate { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.cstate::before { content: ""; width: 7px; height: 7px; flex: none; background: currentColor; border-radius: 50%; }
+.cs-working { background: var(--c-run-bg); color: var(--c-run); border-color: color-mix(in oklch, var(--c-run) 35%, transparent); }
+.cs-idle { color: var(--muted); border-color: var(--line-strong); font-weight: 500; }
+.cs-idle::before { background: transparent; border: 2px solid currentColor; width: 9px; height: 9px; }
+.cs-stopped { color: var(--muted); border-color: var(--line); font-weight: 500; }
+.cs-stopped::before { border-radius: 1px; background: var(--off); }
+.cs-failed { background: var(--c-bad-bg); color: var(--c-bad); border-color: color-mix(in oklch, var(--c-bad) 40%, transparent); }
+.cs-failed::before { border-radius: 0; clip-path: polygon(0 0, 100% 0, 50% 100%); width: 9px; height: 8px; }
+.ckind { flex: none; font-size: 0.75rem; color: var(--muted); }
+.cneeds { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); white-space: nowrap; }
+.cneeds::before { content: ""; width: 6px; height: 6px; background: currentColor; transform: rotate(45deg); border-radius: 1px; }
+.chat-snip { color: var(--muted); font-size: 0.8125rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.chat-none { color: var(--muted); font-size: 0.8125rem; }
+.chat-more { justify-self: start; font: inherit; font-size: 0.8125rem; font-weight: 600; color: var(--accent); background: transparent; border: 0; padding: 2px 0; cursor: pointer; }
+.chat-more:hover { text-decoration: underline; }
+.chat-form { display: grid; gap: 10px; background: var(--surface-2); border-radius: 10px; padding: 10px; }
+.cf-field { display: grid; gap: 4px; }
+.cf-field label { font-size: 0.8125rem; font-weight: 600; }
+.chat-text, .chat-model {
+  font: inherit; font-size: 0.875rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 10px; width: 100%;
+}
+.chat-text { resize: vertical; min-height: 5.5rem; }
+.chat-model { width: auto; justify-self: start; min-width: 9rem; }
+.cf-count { justify-self: end; font-size: 0.75rem; color: var(--muted); }
+.chat-form .actions.ask { background: var(--surface); }
+@media (max-width: 480px) {
+  .chat-row { flex-wrap: wrap; }
+  .chat-name { flex-basis: 100%; }
+}

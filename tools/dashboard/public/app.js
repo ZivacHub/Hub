@@ -127,6 +127,7 @@ function renderHelpers() {
 async function loadRunning() {
   await loadGame();
   await loadHelpers();
+  await loadChats();
   try { const j = await (await fetch("/api/running", { cache: "no-store" })).json(); runningNow = j.items || []; doneInfo = j.done || { allDone: false, finishedAt: null }; } catch { /* keep the last list */ }
 }
 
@@ -144,7 +145,7 @@ async function pollWhileStarting() {
   const until = Date.now() + 5 * 60_000;
   while (Date.now() < until) {
     await new Promise((d) => setTimeout(d, 2000));
-    await Promise.all([loadRuntime(), loadRunning()]); if (lastData) render(lastData);
+    await Promise.all([loadRuntime(), loadRunning()]); if (lastData && !form) render(lastData);
     if (!runtime.some((r) => r.status === "starting")) break;
   }
   polling = false;
@@ -171,7 +172,13 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const act = b.dataset.act, name = b.dataset.name, rt = rtFor(name);
   if (act === "cancel") { asking = null; setNote(""); }
-  else if (act === "yes") { const a = asking; asking = null; if (a) perform(a); return; }
+  else if (act === "yes") { const a = asking; asking = null; if (a && a.kind.startsWith("chat-")) { doChat(a); if (lastData) render(lastData); } else if (a) perform(a); return; }
+  else if (act === "chat-new") { asking = null; form = { project: name, text: "", model: lastModel() }; focusForm = true; setNote(""); }
+  else if (act === "chat-cancel") { form = null; asking = null; setNote(""); }
+  else if (act === "chat-ask-here") { if (form) askChat("chat-here", form.project); }
+  else if (act === "chat-ask-app") { if (form) askChat("chat-app", form.project); }
+  else if (act === "chat-ask-pickup") { if (form) askChat("chat-pickup", form.project); }
+  else if (act === "chat-more") { if (chatsExpanded.has(name)) chatsExpanded.delete(name); else chatsExpanded.add(name); }
   else if (act === "ask-game-off") asking = question("game-off", GAME_ASK, null, "Turn game mode off for now?", "Background programs go back to full speed and anything paused starts again. Game mode switches on again with your next game.");
   else if (act === "ask-game-on") asking = question("game-on", GAME_ASK, null, "Turn game mode back on?", "It switches on at the next check, about 10 seconds, if a game is running.");
   else if (act === "ask-game-ignore") asking = { ...question("game-ignore", GAME_ASK, null, `Ignore ${game.game}?`, "Game mode will not switch on for this app again, even while it is full screen. You can undo this in the list below."), app: game.app };
@@ -183,8 +190,15 @@ document.addEventListener("click", (e) => {
     : question("autostart-on", name, rt, `Start ${rt.label} together with the PC?`, rt.warn || "It starts a few seconds after the PC does, once the Hub's start-up entry is installed.");
   if (lastData) render(lastData);
   const focus = document.querySelector(".actions.ask .btn.primary"); if (focus && asking) focus.focus();
+  else if (focusForm && form) { const t = $("chat-text"); if (t) t.focus(); }
+  else if (act === "chat-more") { const again = [...document.querySelectorAll('button[data-act="chat-more"]')].find((x) => x.dataset.name === name); if (again) again.focus(); }
+  focusForm = false;
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && asking) { asking = null; if (lastData) render(lastData); } });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (asking) { asking = null; if (lastData) render(lastData); }
+  else if (form) { form = null; if (lastData) render(lastData); }
+});
 
 // ---------- game mode strip (step 13.4) ----------
 function renderGame() {
@@ -232,6 +246,116 @@ function renderGame() {
   el.replaceChildren(...kids);
 }
 
+// ---------- chats on the cards (step 14.3) ----------
+let chatsData = null;               // answer of /api/chats; null = never read yet
+const chatsExpanded = new Set();    // projects whose "Show N more" is open
+let form = null;                    // { project, text, model } while the New chat form is open (only one on the page)
+let focusForm = false;
+const TASK_MAX = 4000;
+const MODELS = [["", "Default"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]];
+const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped" };
+const KIND_WORD = { hub: "Hub", app: "App", terminal: "Terminal" };
+const FIRST_LINES = 4;
+function lastModel() { try { const m = localStorage.getItem("hub-chat-model"); return MODELS.some(([v]) => v === m) ? m : ""; } catch { return ""; } }
+function rememberModel(m) { try { localStorage.setItem("hub-chat-model", m); } catch { /* storage blocked: still works for this visit */ } }
+const chatKey = (project) => "chat:" + project;   // the name a chat question is filed under, so the card's Start / Stop row stays as it is
+
+async function loadChats() {
+  try {
+    const r = await fetch("/api/chats", { cache: "no-store" });
+    if (!r.ok) throw new Error("chats");
+    const j = await r.json();
+    if (!j || !Array.isArray(j.projects)) throw new Error("chats");
+    chatsData = j;
+  } catch { /* keep the last data */ }
+}
+
+function chatLine(c) {
+  const state = STATE_WORD[c.state] ? c.state : "idle";
+  return h("li", { class: "chat" + (c.needsYou ? " needs" : "") },
+    h("div", { class: "chat-row" },
+      h("span", { class: "chat-name", title: c.name }, c.name),
+      h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
+      h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
+      c.needsYou ? h("span", { class: "cneeds" }, "Needs you") : null),
+    c.needsYou && c.snippet ? h("p", { class: "chat-snip" }, c.snippet) : null);
+}
+
+function chatForm(project) {
+  const ask = asking && asking.name === chatKey(project) ? h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
+    h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
+    h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
+    h("button", { class: "btn", type: "button", "data-act": "cancel" }, "Cancel")) : null;
+  const ta = h("textarea", { id: "chat-text", class: "chat-text", rows: "4", maxlength: String(TASK_MAX) });
+  ta.value = form.text;
+  const sel = h("select", { id: "chat-model", class: "chat-model" }, MODELS.map(([v, l]) => h("option", { value: v }, l)));
+  sel.value = form.model;
+  return h("div", { class: "chat-form", role: "group", "aria-label": `New chat in ${project}` },
+    h("div", { class: "cf-field" },
+      h("label", { for: "chat-text" }, "What should Claude do?"),
+      ta,
+      h("span", { class: "cf-count", id: "chat-count" }, `${form.text.length} / ${TASK_MAX}`)),
+    h("div", { class: "cf-field cf-model" }, h("label", { for: "chat-model" }, "Model"), sel),
+    ask || h("div", { class: "actions" },
+      h("button", { class: "btn primary", type: "button", "data-act": "chat-ask-here" }, "Start here"),
+      h("button", { class: "btn", type: "button", "data-act": "chat-ask-app" }, "Start in the app"),
+      h("button", { class: "btn", type: "button", "data-act": "chat-ask-pickup" }, "Pick up"),
+      h("button", { class: "btn", type: "button", "data-act": "chat-cancel" }, "Cancel")));
+}
+
+function chatsArea(project) {
+  const entry = chatsData ? chatsData.projects.find((x) => x.project === project) : null;
+  const list = entry ? entry.chats : [];
+  const open = form && form.project === project;
+  const expanded = chatsExpanded.has(project);
+  const shown = expanded ? list : list.slice(0, FIRST_LINES);
+  const kids = [h("div", { class: "chats-head" }, h("h4", {}, "Chats"), list.length ? h("span", { class: "count" }, String(list.length)) : null)];
+  if (list.length) kids.push(h("ul", { class: "chat-list" }, shown.map(chatLine)));
+  else if (chatsData) kids.push(h("p", { class: "chat-none" }, "No chats yet."));
+  if (list.length > FIRST_LINES) kids.push(h("button", { class: "chat-more", type: "button", "aria-expanded": String(expanded), "data-act": "chat-more", "data-name": project }, expanded ? "Show fewer" : `Show ${list.length - FIRST_LINES} more`));
+  if (chatsData && chatsData.openListOk === false) kids.push(h("p", { class: "chat-none" }, "Can't see the chats that are open in the Claude app right now."));
+  if (open) kids.push(chatForm(project));
+  else kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "chat-new", "data-name": project }, "New chat")));
+  return h("div", { class: "chats" }, kids);
+}
+
+function askChat(kind, project) {
+  if (kind !== "chat-pickup" && !form.text.trim()) { setNote("Write what Claude should do first.", true); return; }
+  const text = kind === "chat-here" ? `Start a chat in ${project} with this task?`
+    : kind === "chat-app" ? `Open the Claude app in ${project} with this task?`
+    : `Start a chat in ${project} that runs /pickup?`;
+  const extra = kind === "chat-app" ? "You press Send there." : "Claude works without a window and uses your Claude allowance.";
+  asking = { kind, name: chatKey(project), project, id: null, label: project, text, extra };
+  setNote("");
+}
+
+async function doChat(a) {
+  if (!form || form.project !== a.project) return;
+  const task = a.kind === "chat-pickup" ? "/pickup" : form.text.trim();
+  if (!task) { setNote("Write what Claude should do first.", true); return; }
+  let body;
+  if (a.kind === "chat-app") body = { action: "chat-app-link", project: a.project, task };
+  else { body = { action: "chat-start", project: a.project, task }; if (form.model) body.model = form.model; }
+  setNote("Working on it…");
+  const r = await send(body);
+  if (!r.ok) { setNote(r.error || "That did not work.", true); if (lastData) render(lastData); return; }
+  if (a.kind === "chat-app") {
+    if (typeof r.link !== "string" || !r.link.startsWith("claude://code/new?")) { setNote("The Hub did not get a valid link.", true); if (lastData) render(lastData); return; }
+    const link = h("a", { href: r.link });
+    document.body.append(link); link.click(); link.remove();
+  }
+  setNote(r.message || "Done.");
+  form = null;
+  await loadChats(); if (lastData) render(lastData);
+}
+
+document.addEventListener("input", (e) => {
+  if (form && e.target.id === "chat-text") { form.text = e.target.value; const c = $("chat-count"); if (c) c.textContent = `${form.text.length} / ${TASK_MAX}`; }
+});
+document.addEventListener("change", (e) => {
+  if (form && e.target.id === "chat-model") { form.model = e.target.value; rememberModel(form.model); }
+});
+
 // ---------- cards ----------
 function card(p, answer) {
   const needs = p.decisionsWaiting > 0;
@@ -250,6 +374,7 @@ function card(p, answer) {
       h("div", { class: "asking-top" }, h("span", { class: "pill" }, n.state === "permission" ? "Maybe waiting for permission" : "Claude is asking you"), h("span", {}, `waiting ${waited(n.since)}`)),
       h("p", { class: "asking-q" }, n.snippet))),
     controls(p.name),
+    chatsArea(p.name),
     answer ? h("details", { class: "said" },
       h("summary", {}, h("span", { class: "when" }, `Claude last said · ${ago(answer.at)}${answer.chat ? " · " + answer.chat : ""}`), h("span", { class: "short" }, answer.short)),
       answer.long && answer.long !== answer.short ? h("p", { class: "long" }, answer.long) : null) : null);
@@ -257,6 +382,7 @@ function card(p, answer) {
 
 function render(data) {
   lastData = data;
+  const keep = document.activeElement && (document.activeElement.id === "chat-text" || document.activeElement.id === "chat-model") ? document.activeElement.id : null;
   renderGame();
   const { projects, decisions, answers, manager } = data;
   const byName = new Map(answers.map((a) => [a.project, a]));
@@ -316,6 +442,7 @@ function render(data) {
     running && manager.queueDepth !== null && manager.queueDepth !== undefined ? h("p", {}, `${manager.queueDepth} task${manager.queueDepth === 1 ? "" : "s"} waiting in the queue`) : null,
     manager.note && !mrt ? h("p", {}, manager.note) : null,
     controls("AI_Orcestration", { claude: false })));
+  if (keep && $(keep)) $(keep).focus();
 }
 
 async function load() {
@@ -355,9 +482,9 @@ load();
 let ticks = 0;
 setInterval(async () => {
   ticks++;
-  if (document.hidden) { if (ticks % 12 === 0 && !asking) load(); return; }
-  if (asking) return;
+  if (document.hidden) { if (ticks % 12 === 0 && !asking && !form) load(); return; }
+  if (asking || form) return;
   if (ticks % 3 === 0) load();
-  else { await loadRunning(); if (lastData) render(lastData); }
+  else { await loadRunning(); if (lastData && !form && !asking) render(lastData); }
 }, 10_000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && !asking) load(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !asking && !form) load(); });
