@@ -11,19 +11,17 @@ A local dashboard of all BUSNUS projects: cards, waiting decisions, chats waitin
 ## Last session (2026-11-16)
 - Phase 15 closed (15.7 "Looks good, close it"); Phase 14 gate (D38 to D41, go "Go, whole phase") and 14.1 to 14.6 built with Opus / Sonnet / Haiku helpers, all passed the manager's checks first try (records: `node ~/.claude/hooks/helpers.mjs table . --since 2026-11-16`). Commits 877aed9 to 318d335. Details and the two mistakes: .claude/memory.md (2026-11-16).
 - After the dashboard restart: a real end-to-end run through the real server passed (start, answer in the same chat, refusals, Remote Control on and off); the real page shows the chat lines on real data.
-- Cleanup (D41): the 5 test chat files named on 2026-11-13 deleted, app chat "hub-test-bg" archived. The 2026-11-16 test chats (list at the bottom of docs/plan/phases/14-run-chats-from-the-hub.md) are NOT deleted: not in D41's list, asked Ivan.
-- Left unfinished: 14.7 (his use), the cleanup question, Phase 13 and the rest.
+- Cleanup done: the 5 test chat files named on 2026-11-13 (D41), the app chat "hub-test-bg" archived, and on 2026-11-17 Ivan's yes ("Yes, delete them"): the 15 test chats of 2026-11-16 and the two leftover tool-output folders deleted, the two test entries removed from data/hub_chats.json. No test chats are left.
+- Left unfinished: 14.7 (his use), Phase 13 and the rest.
 
 ## Next steps (strictly in order; step 1 is where the next session starts)
 1. 14.7 Milestone with Ivan: he opens http://127.0.0.1:4780, starts a small real task with "Start here" on a project card, answers it from the panel, tries "Start in the app" and WATCHES that the Claude app's new-chat page has folder and task filled in (test T6, never looked at on screen), and starts one chat with the Remote Control tick and opens it on his phone. Make his changes (page files are read fresh; a change to a server file needs a dashboard restart). Then `node ~/.claude/hooks/helpers.mjs unpark . 20261116-193726-14-7`, tick 14.7 and Phase 14 with his words, phase close. Done when: his words are on the 14.7 board line and Phase 14 is [x].
    Read first: docs/plan/phases/14-run-chats-from-the-hub.md, docs/reference/CLAUDE_CONTROL.md
-2. Ask Ivan about deleting the 2026-11-16 test chats (about 16 small files, list in the Phase 14 file) and the two leftover tool-output folders of the deleted chats; delete only on his yes.
-3. Phase 13: 13.5 smoothness test (fake game loop, fake heavy program, target 90 percent of solo speed; a real game was detected live: League on 2026-11-15, Roblox on 2026-11-16), then 13.6 with Ivan (League about 10 minutes).
-4. 11.5 and 11.6 (his install file + restart, when it suits him), then Phase 10 (security pass over ALL routes incl. /api/helpers and the chat actions: the manager already read them once, the full pass is not done) and Phase 4.
+2. Phase 13: 13.5 smoothness test (fake game loop, fake heavy program, target 90 percent of solo speed; a real game was detected live: League on 2026-11-15, Roblox on 2026-11-16), then 13.6 with Ivan (League about 10 minutes).
+3. 11.5 and 11.6 (his install file + restart, when it suits him), then Phase 10 (security pass over ALL routes incl. /api/helpers and the chat actions: the manager already read them once, the full pass is not done) and Phase 4.
 
 ## Waiting on the owner
 - 14.7 use the chat buttons on the real dashboard and say what to change.
-- Delete the 2026-11-16 test chats? (asked in chat.)
 - D15 nicknames [proposed] (voice track). 11.5/11.6 install + restart. 13.6 playing League. Small: LICENSE line (D22), public internal notes (D21), first-run audit and template sync v3 to v6 offered by the start-up check (neither applied), cleanup of JarvisTrial leftovers (about 1.4 GB).
 
 ## Gotchas a fresh session would get wrong (max 8, only things still true)
