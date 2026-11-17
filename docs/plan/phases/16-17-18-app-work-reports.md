@@ -30,3 +30,9 @@ Board: docs/plan/BOARD.md. Status: PROPOSED, no gate run, nothing started. This 
 
 ## Open questions for each gate (to put to Ivan as choice cards when the phase starts)
 Phase 16: Edge window or Electron; closing the window hides or quits. Phase 17: how far D40 may move. Phase 18: format and where it lives.
+
+## Phase 16 gate record (2026-11-17)
+- Preview shown. Skills search: the skills catalogue has nothing for Electron or desktop apps; context7 for Electron 44 docs (Tray, minimize to tray via an empty window-all-closed listener, app.setLoginItemSettings, requestSingleInstanceLock). Repos looked at (search summaries only, nothing copied, licences unchecked): command-deck, EasyCC, ittop, AgentScope. Download size measured: electron-v44.9.3-win32-x64.zip 158,508,870 bytes; disk 28 GB free.
+- Decisions: D48 Electron, D50 download yes, D51 X hides to the icon, D52 programs hidden (no terminal panel), D53 .bat files folded into the Hub, projects stop with the Hub, start-up switch in the icon menu.
+- Hand-out list shown: 16.1 Opus (high), 16.2 Sonnet (medium; the icon file too), 16.3 Opus (high; touches start-up and starts programs), 16.4 Ivan. Real tests run one at a time (a window, the tray, start-up).
+- Ivan's go: not yet given.

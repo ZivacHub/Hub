@@ -337,8 +337,8 @@ Layout: the two sections below. When a decision is answered, move its block from
 **Result:** Project programs start without a window, from the Hub, with their output readable on the card. A terminal panel inside the Hub window is not part of Phase 16 (maybe after Phase 17, only if he asks).
 **Affects:** Phase 16 (16.3)
 
-## D53 — Project .bat files folded into the Hub app   [proposed 2026-11-17: waiting for Ivan's yes to the reading below]
+## D53 — Project .bat files folded into the Hub app; projects stop with the Hub   [decided 2026-11-17]
 **Question:** How should "start with Windows" work (a switch in the icon menu, or the old install file)?
 **The owner said (2026-11-17), his own words, not one of the options:** "generaly I would like that every "bat" file that has project to run, it would be good to interate to the "app" so when we run a project it runs as subpart of the "app"".
-**My reading (proposed, not decided):** the Hub program replaces the separate .bat files: starting a project means the Hub starts it from its own list (config/projects.json, already so since Phase 11) and it runs as a part of the Hub, visible and stoppable inside it. The Hub program itself starts with Windows from a switch Ivan flips in the icon menu; the old Install Hub Autostart.bat is then not needed. Open point: do the projects stop when he quits the Hub for real, or keep running?
+**Reading he confirmed:** the Hub program replaces the separate .bat files: starting a project means the Hub starts it from its own list (config/projects.json, already so since Phase 11) and it runs as a part of the Hub, visible and stoppable inside it. The Hub program itself starts with Windows from a switch Ivan flips in the icon menu; the old Install Hub Autostart.bat is then not needed. **Confirmed by the owner (2026-11-17):** he agreed to the reading and chose "They stop with the Hub (Recommended)": quitting the Hub for real stops everything it started; closing the window with X does not quit (D51), so projects keep running in the background.
 **Affects:** Phase 16 (16.3), step 11.5 (folded in if confirmed)
