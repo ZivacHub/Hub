@@ -67,7 +67,7 @@ export const classify = (rows, nowMs = Date.now()) => decide(summarize(rows), no
 
 // ---------- real chat files ----------
 import { readdirSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 
 function tailRows(file, bytes) {
   const size = statSync(file).size; const fd = openSync(file, "r");
@@ -109,7 +109,7 @@ export function chatsNeedingYou(chatDirs, { maxDays = 7, nowMs = Date.now(), max
   const out = [];
   for (const f of files) {
     if (nowMs - f.m > maxDays * 86_400_000) break; // older than the window (and so is every file after it)
-    let c; try { const e = summaryOfFile(f.p, f.m, f.size); c = decide(e.summary, nowMs); if (c) c.title = e.title; } catch { continue; }
+    let c; try { const e = summaryOfFile(f.p, f.m, f.size); c = decide(e.summary, nowMs); if (c) { c.title = e.title; const sid = basename(f.p, ".jsonl"); c.sessionId = /^[0-9a-fA-F-]{8,64}$/.test(sid) ? sid : null; } } catch { continue; }
     if (c && (c.state === "question" || c.state === "permission") && c.at && nowMs - Date.parse(c.at) <= maxDays * 86_400_000) out.push(c);
     if (out.length >= max) break;
   }
@@ -168,6 +168,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     fs.writeFileSync(f, [{ type: "custom-title", customTitle: "Test chat" }, user(10), say(9, "Which one?")].map((r) => JSON.stringify(r)).join("\n") + "\n");
     const r = chatFileState(f, NOW); const gone = chatFileState(f + ".missing", NOW); fs.rmSync(f);
     return r && r.state === "question" && r.title === "Test chat" && gone === null;
+  })());
+  ok("chatsNeedingYou gives each item its sessionId (file name), null for an odd name", await (async () => {
+    const fs = await import("node:fs"); const os = await import("node:os");
+    const d = fs.mkdtempSync(join(os.tmpdir(), "hub-attention-sid-"));
+    const id = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+    const rows = [user(10), say(9, "Which one?")].map((r) => JSON.stringify(r)).join("\n") + "\n";
+    fs.writeFileSync(join(d, id + ".jsonl"), rows); fs.writeFileSync(join(d, "odd name!.jsonl"), rows);
+    const r = chatsNeedingYou([d], { nowMs: NOW }); fs.rmSync(d, { recursive: true, force: true });
+    return r.length === 2 && r.some((x) => x.sessionId === id) && r.some((x) => x.sessionId === null);
   })());
   process.exit(bad ? 1 : 0);
 }

@@ -39,6 +39,30 @@ const logSafe = (s, n = 40) => String(s ?? "-").replace(/\s+/g, "_").replace(/[^
 const stripAnsi = (s) => String(s ?? "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "");
 const encodeCwd = (p) => String(p).replace(/[^A-Za-z0-9]/g, "-"); // how Claude names a folder's chat-file folder (chatlist.mjs does the same)
 
+/** "What the chat does" for its name (D44): the task's first 5 words (only letters, digits, spaces, dots, dashes), at most 40 characters,
+ *  cut at a word boundary. A task starting with "/" shows its command word (/pickup = "Pick up", /handoff = "Hand off") plus up to 3 words. */
+const SLASH_NAMES = { pickup: "Pick up", handoff: "Hand off" };
+const cleanWords = (s) => String(s ?? "").replace(/[^\p{L}\p{N} .\-]/gu, " ").split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w));
+function cutWords(words, max = 40) {
+  let out = "";
+  for (const w of words) { const n = out ? out + " " + w : w; if (n.length > max) break; out = n; }
+  return out || (words[0] ? words[0].slice(0, max) : "");
+}
+export function whatItDoes(task) {
+  const t = String(task ?? "").trim();
+  let words;
+  if (t.startsWith("/")) {
+    const m = /^\/(\S*)\s*([\s\S]*)$/.exec(t);
+    const cmd = cleanWords(m[1]).join("");
+    if (!cmd) words = [];
+    else {
+      const head = SLASH_NAMES[cmd.toLowerCase()] || cmd.charAt(0).toUpperCase() + cmd.slice(1);
+      words = [...head.split(" "), ...cleanWords(m[2]).slice(0, 3)];
+    }
+  } else words = cleanWords(t).slice(0, 5);
+  return cutWords(words) || "New chat";
+}
+
 export function makeChats(opts = {}) {
   const root = opts.root || BUSNUS;
   const dataDir = opts.dataDir || join(HUB, "data");
@@ -365,7 +389,7 @@ export function makeChats(opts = {}) {
   }
 
   // ---------- the actions ----------
-  async function start({ project, task, model, remoteControl } = {}) {
+  async function start({ project, task, model, remoteControl, workflow } = {}) {
     const pe = projectError(project);
     if (pe) return fail("chat-start", "-", project, pe);
     const t = cleanText(task);
@@ -377,14 +401,16 @@ export function makeChats(opts = {}) {
     const st = settle(readState());
     if (working(st) >= maxWorking) return fail("chat-start", "-", project, busyMessage());
     const d = new Date();
+    const wf = workflow !== false; // D44: a Hub chat follows the project workflow unless this is exactly false
+    const first = wf && !t.startsWith("/") ? "/pickup " + t : t; // the length limit applied to the task Ivan typed, not to this
     const c = {
-      id: newId(), project, name: `Hub · ${project} · ${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      id: newId(), project, workflow: wf, name: `${project} · ${whatItDoes(t)} · ${d.getDate()} ${MONTHS[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`,
       task: clip(t, 300), model: m, remoteControl: false, bg: false, noTools, state: "working", startedAt: d.toISOString(), lastTurnAt: d.toISOString(),
       turns: 0, sessionId: randomUUID(), lastReply: "", lastError: "", refused: [], pid: null, turnFile: null, seq: ++st.seq,
     };
     while (st.chats[c.id]) c.id = newId();
-    if (remoteControl === true) return startBg(st, c, t);
-    const l = launch(c, t, true);
+    if (remoteControl === true) return startBg(st, c, first);
+    const l = launch(c, first, true);
     if (l.error) return fail("chat-start", c.id, project, l.error);
     beginTurn(c, l);
     st.chats[c.id] = c; writeState(st);
@@ -516,7 +542,7 @@ export function makeChats(opts = {}) {
     const st = settle(readState());
     kick(st);
     return Object.values(st.chats).sort((a, b) => (b.seq || 0) - (a.seq || 0)).map((c) => ({
-      id: c.id, project: c.project, name: c.name, task: clip(redact(c.task || ""), 300), model: c.model || null, remoteControl: c.remoteControl === true,
+      id: c.id, project: c.project, name: c.name, task: clip(redact(c.task || ""), 300), model: c.model || null, remoteControl: c.remoteControl === true, workflow: c.workflow !== false,
       state: c.state, startedAt: c.startedAt, lastTurnAt: c.lastTurnAt, turns: c.turns || 0, sessionId: c.sessionId || null,
       lastReply: clip(redact(c.lastReply || ""), 1400), lastError: clip(redact(c.lastError || ""), 600),
       refused: (c.refused || []).slice(0, 10).map((r) => clip(redact(r), 160)),
@@ -640,7 +666,8 @@ process.stdin.on("end", () => {
   const listOpen = async () => { if (openList === "throw") throw new Error("agents list failed"); return openList; };
   const redact = (s) => String(s).replace(/SECRET\w*/g, "[hidden]");
   const mk = () => makeChats({ root: projects, dataDir: join(base, "data"), logDir: join(base, "logs"), claude: [process.execPath, fake], listOpen, redact });
-  const c = mk();
+  const c0 = mk();
+  const c = { ...c0, start: (o) => c0.start({ workflow: false, ...o }) }; // the older tests check the plain text: workflow off (D44); new tests use c0
   const get = (id) => c.list().find((x) => x.id === id);
   const settled = (id) => waitFor(() => { const x = get(id); return x && x.state !== "working"; });
   const calls = () => { try { return readdirSync(recDir).map((f) => JSON.parse(readFileSync(join(recDir, f), "utf8"))); } catch { return []; } };
@@ -674,7 +701,7 @@ process.stdin.on("end", () => {
     ok("workingPids empty when idle", Object.keys(c.workingPids()).length === 0);
     const k1 = call("MARKER-A");
     ok("text arrived on standard input (trimmed)", k1 && k1.input === "Hello MARKER-A SECRET42 NOISE");
-    ok("text not in the arguments", k1 && !k1.argv.some((x) => x.includes("MARKER") || x.includes("SECRET")));
+    ok("text not in the arguments", k1 && !k1.argv.some((x, i) => k1.argv[i - 1] !== "--name" && (x.includes("MARKER") || x.includes("SECRET"))));
     ok("auto permission mode, json output, model flag", k1 && k1.argv.join(" ").includes("-p --output-format json --permission-mode auto --permission-prompts none") && k1.argv.includes("haiku"));
     ok("new session id given by the engine", k1 && k1.argv[k1.argv.indexOf("--session-id") + 1] === A1.sessionId);
     ok("ran in the project folder", k1 && resolve(k1.cwd).toLowerCase() === resolve(projects, "Fake").toLowerCase());
@@ -773,6 +800,43 @@ process.stdin.on("end", () => {
     ok("log lines have action, id, project, result", logText.trim().split(/\n/).every((l) => /^\S+ chat-[\w-]+ \S+ \S+ .+/.test(l)));
     const stateText = readFileSync(join(base, "data", "hub_chats.json"), "utf8");
     ok("state file holds no full long task", !stateText.includes("x".repeat(301)));
+
+    // D44: the project workflow
+    const w1 = await c0.start({ project: "Fake", task: "  Fix the card layout WFMARK1  " });
+    ok("workflow default: first turn is '/pickup <task>' on standard input", w1.ok && await settled(w1.id) && !!call("WFMARK1") && call("WFMARK1").input === "/pickup Fix the card layout WFMARK1");
+    ok("workflow default: list() says workflow true", get(w1.id).workflow === true);
+    const w2 = await c0.start({ project: "Fake", task: "/handoff WFMARK2" });
+    ok("a task starting with '/' is sent unchanged", w2.ok && await settled(w2.id) && call("WFMARK2").input === "/handoff WFMARK2");
+    const w3 = await c0.start({ project: "Fake", task: "Plain WFMARK3", workflow: false });
+    ok("workflow false: task sent unchanged, list() says workflow false", w3.ok && await settled(w3.id) && call("WFMARK3").input === "Plain WFMARK3" && get(w3.id).workflow === false);
+    const w4 = await c0.start({ project: "Fake", task: "x".repeat(4000) });
+    ok("the 4000 limit counts the task only, not '/pickup '", w4.ok === true && await settled(w4.id));
+    const w5 = await c0.start({ project: "Fake", task: "WFMARK5" });
+    await settled(w5.id);
+    const w5a = await c0.answer({ id: w5.id, text: "Answer WFMARK6" });
+    ok("an answer is never wrapped", w5a.ok === true && await settled(w5.id) && call("WFMARK6").input === "Answer WFMARK6");
+    const nameOf = async (task) => { const r = await c.start({ project: "Fake", task }); const n = get(r.id).name; await settled(r.id); return n; };
+    const nm = {
+      normal: await nameOf("Fix the card layout please now"),
+      long: await nameOf("Reorganise the complete dashboard navigation structure and more words here"),
+      odd: await nameOf('Say "hi" to a/b\nthen c\\d `rm` & more words'),
+      pick: await nameOf("/pickup"), hand: await nameOf("/handoff"),
+      other: await nameOf("/something else"), pickTask: await nameOf("/pickup fix the footer now please"),
+      punct: await nameOf("?!?! ... ***"), slash: await nameOf("/"),
+    };
+    console.log("# names: " + JSON.stringify(nm));
+    const dateTail = / · \d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d\d:\d\d$/;
+    const what = (n) => { const m = /^Fake · (.*?)( · \d{1,2} \w{3} \d\d:\d\d)$/.exec(n); return m && dateTail.test(n) ? m[1] : null; };
+    ok("name: a normal task = first 5 words", what(nm.normal) === "Fix the card layout please");
+    ok("name: a long task is cut at a word boundary, at most 40 characters", what(nm.long) === "Reorganise the complete dashboard" && what(nm.long).length <= 40);
+    ok("name: odd characters removed (quotes, slashes, newlines, backticks, &)", what(nm.odd) === "Say hi to a b" && !/["`\\\n&]/.test(nm.odd));
+    ok("name: /pickup = Pick up, /handoff = Hand off", what(nm.pick) === "Pick up" && what(nm.hand) === "Hand off");
+    ok("name: another /word = capitalised, plus up to 3 words", what(nm.other) === "Something else" && what(nm.pickTask) === "Pick up fix the footer");
+    ok("name: only punctuation (or just '/') = New chat", what(nm.punct) === "New chat" && what(nm.slash) === "New chat");
+    ok("name: never holds the full task", !nm.long.includes("more words") && !nm.normal.includes("now"));
+    ok("name is passed as --name on the first turn", call("WFMARK1").argv[call("WFMARK1").argv.indexOf("--name") + 1] === get(w1.id).name && get(w1.id).name.startsWith("Fake · Fix the card layout WFMARK1 · "));
+    const logWf = readFileSync(join(base, "logs", "hub_actions.log"), "utf8");
+    ok("log has no task text after the workflow starts", !/WFMARK|card layout|Reorganise/.test(logWf));
   } catch (err) { ok("self-test crashed: " + (err && err.stack), false); }
   await waitFor(() => Object.keys(c.workingPids()).length === 0, 10000); // let every pretend process end first (Windows)
 
@@ -783,7 +847,8 @@ process.stdin.on("end", () => {
   const foreignSid = randomUUID();
   writeFileSync(regPath, JSON.stringify([{ id: foreignSid.slice(0, 8), sessionId: foreignSid, name: "Someone else's chat", cwd: join(projects, "Fake"), startedAt: Date.now(), pid: foreignKid.pid, busyUntil: 0, saved: true, rc: true }]));
   const rcDir = join(base, "rc");
-  const rce = makeChats({ root: projects, dataDir: join(rcDir, "data"), logDir: join(rcDir, "logs"), claude: [process.execPath, fake], redact, findTimeoutMs: 3000, rcRefreshMs: 150, sessionsDir: join(base, "sessions") });
+  const rce0 = makeChats({ root: projects, dataDir: join(rcDir, "data"), logDir: join(rcDir, "logs"), claude: [process.execPath, fake], redact, findTimeoutMs: 3000, rcRefreshMs: 150, sessionsDir: join(base, "sessions") });
+  const rce = { ...rce0, start: (o) => rce0.start({ workflow: false, ...o }) }; // plain text for the older checks (D44); new tests use rce0
   const rget = (id) => rce.list().find((x) => x.id === id);
   const rstate = (id, s, ms = 10000) => waitFor(() => { const x = rget(id); return x && x.state === s; }, ms);
   const agentsNow = () => JSON.parse(execFileSync(process.execPath, [fake, "agents", "--json"], { encoding: "utf8", env: process.env, windowsHide: true }));
@@ -878,6 +943,18 @@ process.stdin.on("end", () => {
     ok("RC: `on` must be true or false", (await rce.setRemoteControl({ id: r1.id, on: "off" })).ok === false && rget(r1.id).remoteControl === true);
     ok("RC: someone else's background chat was never stopped", alive(foreignKid.pid) && !stopCalls().some((k) => k.argv[1] === foreignSid.slice(0, 8)));
 
+    // D44: workflow on the Remote Control path (task after --)
+    const wr = await rce0.start({ project: "Fake", task: "RCWF1 task words", remoteControl: true });
+    const kw = bgCalls().find((k) => k.argv.join(" ").includes("RCWF1"));
+    const wrName = wr.ok ? rget(wr.id).name : "";
+    ok("RC + workflow: the task after -- is '/pickup <task>'", wr.ok === true && !!kw && kw.argv[kw.argv.length - 2] === "--" && kw.argv[kw.argv.length - 1] === "/pickup RCWF1 task words" && rget(wr.id).workflow === true);
+    ok("RC + workflow: the name keeps its 4-character suffix", /^Fake · RCWF1 task words · \d{1,2} \w{3} \d\d:\d\d · [a-z0-9]{4}$/.test(wrName) && wrName.endsWith(" · " + wr.id.slice(-4)) && kw.argv[kw.argv.indexOf("--name") + 1] === wrName);
+    await rstate(wr.id, "idle"); const wr2 = await rce0.start({ project: "Fake", task: "/handoff RCWF2", remoteControl: true });
+    await rstate(wr2.id, "idle"); const wr3 = await rce0.start({ project: "Fake", task: "RCWF3 plain", remoteControl: true, workflow: false });
+    const kw2 = bgCalls().find((k) => k.argv.join(" ").includes("RCWF2")); const kw3 = bgCalls().find((k) => k.argv.join(" ").includes("RCWF3"));
+    ok("RC: a '/' task and workflow false are sent unchanged", wr2.ok === true && wr3.ok === true && kw2.argv[kw2.argv.length - 1] === "/handoff RCWF2" && kw3.argv[kw3.argv.length - 1] === "RCWF3 plain" && rget(wr3.id).workflow === false);
+    for (const x of [wr, wr2, wr3]) if (x.ok) { await waitFor(() => rget(x.id).state === "idle", 10000); await rce0.stop({ id: x.id }); }
+
     // a Remote Control chat that really ended (outside the Hub) shows as stopped, Remote Control off
     const pidR1 = reg().find((e) => e.sessionId === sid1).pid;
     ok("RC: still on while it runs (no false 'stopped')", (await pause(600), rget(r1.id).remoteControl === true && rget(r1.id).state === "idle"));
@@ -902,7 +979,7 @@ process.stdin.on("end", () => {
     const r = makeChats({ dataDir: join(rbase, "data"), logDir: join(rbase, "logs"), noTools: true });
     const rget = (id) => r.list().find((x) => x.id === id);
     const rsettled = (id) => waitFor(() => { const x = rget(id); return x && x.state !== "working"; }, 180000);
-    const one = await r.start({ project: "Hub", task: "Reply with exactly: HUB-ENGINE-ONE", model: "haiku" });
+    const one = await r.start({ project: "Hub", task: "Reply with exactly: HUB-ENGINE-ONE", model: "haiku", workflow: false });
     ok("real: start ok", one.ok === true);
     if (one.ok) {
       await rsettled(one.id);
@@ -937,7 +1014,7 @@ process.stdin.on("end", () => {
     const note = (id) => { const x = g(id); if (x && x.sessionId) { created.add(x.sessionId); names.add(x.name); } return x; };
     try {
       // 1. start with Remote Control
-      const one = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-ONE", model: "haiku", remoteControl: true });
+      const one = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-ONE", model: "haiku", remoteControl: true, workflow: false });
       ok("real-rc: start with Remote Control ok" + (one.ok ? "" : " (" + one.error + ")"), one.ok === true);
       if (one.ok) {
         const c1 = note(one.id);
@@ -971,7 +1048,7 @@ process.stdin.on("end", () => {
         ok("real-rc: stop of the Remote Control chat ok; no pid left", s1.ok === true && noneRunning());
       }
       // 4. a plain Hub chat switched on (it never ran in the background: the flags, same session)
-      const p = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-PLAIN", model: "haiku" });
+      const p = await r.start({ project: "Hub", task: "Reply with exactly: HUB-RC-PLAIN", model: "haiku", workflow: false });
       ok("real-rc: plain chat start ok", p.ok === true);
       if (p.ok) {
         await waitFor(() => g(p.id).state !== "working", 180000);

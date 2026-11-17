@@ -51,9 +51,9 @@ function question(kind, name, rt, text, extra) {
   return { kind, name, id: rt ? rt.id : null, label: rt ? rt.label : name, text, extra: extra || "" };
 }
 
-function controls(name, { claude = true } = {}) {
+function controls(name) {
   const rt = rtFor(name);
-  if (!rt && !claude) return null;
+  if (!rt) return null;
   if (asking && asking.name === name) {
     return h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
       h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
@@ -68,7 +68,6 @@ function controls(name, { claude = true } = {}) {
     if (rt.status === "stopped" && rt.canStart) kids.push(h("button", { class: "btn primary", type: "button", "data-act": "ask-start", "data-name": name }, "Start"));
     if ((rt.status === "running" || rt.status === "starting") && rt.startedByHub) kids.push(h("button", { class: "btn", type: "button", "data-act": "ask-stop", "data-name": name }, "Stop"));
   }
-  if (claude) kids.push(h("button", { class: "btn", type: "button", "data-act": "ask-claude", "data-name": name }, "Open in Claude Code"));
   if (rt) kids.push(h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(rt.startWithPc), "data-act": "ask-autostart", "data-name": name }, h("span", { class: "track", "aria-hidden": "true" }), "Start with PC"));
   const msgs = [];
   if (rt && rt.error) msgs.push(h("p", { class: "run-err" }, `Last start failed: ${rt.error}`));
@@ -152,8 +151,7 @@ async function pollWhileStarting() {
 }
 
 async function perform(a) {
-  const body = a.kind === "claude" ? { action: "open-claude", name: a.name }
-    : a.kind === "start" ? { action: "start", id: a.id }
+  const body = a.kind === "start" ? { action: "start", id: a.id }
     : a.kind === "stop" ? { action: "stop", id: a.id }
     : a.kind === "game-off" ? { action: "game-off" }
     : a.kind === "game-on" ? { action: "game-on" }
@@ -180,11 +178,12 @@ document.addEventListener("click", (e) => {
   else if (act === "cp-rc-on") askPanel(b.dataset.id, name, "cp-rc-on");
   else if (act === "cp-rc-off") askPanel(b.dataset.id, name, "cp-rc-off");
   else if (act === "cp-stop") askPanel(b.dataset.id, name, "cp-stop");
-  else if (act === "chat-new") { asking = null; openChat = null; form = { project: name, text: "", model: lastModel(), remoteControl: false }; focusForm = true; setNote(""); }
+  else if (act === "chat-new") { asking = null; openChat = null; form = { project: name, text: "", model: lastModel(), remoteControl: false, skipWorkflow: false }; focusForm = true; setNote(""); }
   else if (act === "chat-cancel") { form = null; asking = null; setNote(""); }
   else if (act === "chat-ask-here") { if (form) askChat("chat-here", form.project); }
   else if (act === "chat-ask-app") { if (form) askChat("chat-app", form.project); }
   else if (act === "chat-ask-pickup") { if (form) askChat("chat-pickup", form.project); }
+  else if (act === "chat-ask-terminal") { if (form) askChat("chat-terminal", form.project); }
   else if (act === "chat-more") { if (chatsExpanded.has(name)) chatsExpanded.delete(name); else chatsExpanded.add(name); }
   else if (act === "ask-game-off") asking = question("game-off", GAME_ASK, null, "Turn game mode off for now?", "Background programs go back to full speed and anything paused starts again. Game mode switches on again with your next game.");
   else if (act === "ask-game-on") asking = question("game-on", GAME_ASK, null, "Turn game mode back on?", "It switches on at the next check, about 10 seconds, if a game is running.");
@@ -192,7 +191,6 @@ document.addEventListener("click", (e) => {
   else if (act === "ask-game-unignore") asking = { ...question("game-unignore", GAME_ASK, null, `Stop ignoring ${b.dataset.app}?`, "Game mode can switch on for it again."), app: b.dataset.app };
   else if (act === "ask-start") asking = question("start", name, rt, `Start ${rt.label}?`, rt.warn || rt.note);
   else if (act === "ask-stop") asking = question("stop", name, rt, `Stop ${rt.label}?`);
-  else if (act === "ask-claude") asking = question("claude", name, rt, `Open Claude Code in ${name}?`, "A new terminal window opens in that project's folder.");
   else if (act === "ask-autostart") asking = rt.startWithPc ? question("autostart-off", name, rt, `Stop ${rt.label} from starting with the PC?`)
     : question("autostart-on", name, rt, `Start ${rt.label} together with the PC?`, rt.warn || "It starts a few seconds after the PC does, once the Hub's start-up entry is installed.");
   if (lastData) render(lastData);
@@ -282,6 +280,11 @@ async function loadChats() {
   } catch { /* keep the last data */ }
 }
 
+const APP_LINK = "claude://claude.ai/epitaxy/local_";
+function openThis(link) {
+  return typeof link === "string" && link.startsWith(APP_LINK) ? h("a", { class: "btn open-this", href: link }, "Open this chat") : null;
+}
+
 function chatLine(c, project) {
   const state = STATE_WORD[c.state] ? c.state : "idle";
   const open = openChat === c.id;
@@ -357,9 +360,9 @@ function chatPanel(c, project) {
   } else if (c.kind === "app") {
     kids.push(h("p", { class: "cp-note" }, "This chat is open in the Claude app. Answer it there so it does not split."));
     if (c.needsYou && c.snippet) kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Waiting for you"), h("div", { class: "cp-text" }, c.snippet)));
-    const ok = typeof c.openLink === "string" && c.openLink.startsWith("claude://claude.ai/epitaxy/local_");
+    const ok = openThis(c.openLink);
     const rc = c.remoteControl === true ? "Remote Control: on" : c.remoteControl === false ? "Remote Control: off" : null;
-    if (ok || rc) kids.push(h("div", { class: "actions" }, ok ? h("a", { class: "btn", href: c.openLink }, "Open in the app") : null, rc ? h("span", { class: "cp-rc" }, rc) : null));
+    if (ok || rc) kids.push(h("div", { class: "actions" }, ok, rc ? h("span", { class: "cp-rc" }, rc) : null));
   } else {
     kids.push(h("p", { class: "cp-note" }, "This chat is open in a terminal. Answer it there."));
     if (c.needsYou && c.snippet) kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Waiting for you"), h("div", { class: "cp-text" }, c.snippet)));
@@ -429,11 +432,13 @@ function chatForm(project) {
       h("span", { class: "cf-count", id: "chat-count" }, `${form.text.length} / ${TASK_MAX}`)),
     h("div", { class: "cf-field cf-model" }, h("label", { for: "chat-model" }, "Model"), sel),
     h("label", { class: "cf-check", for: "chat-rc" }, h("input", { type: "checkbox", id: "chat-rc", checked: form.remoteControl === true }), "Reach it from my phone (Remote Control)"),
+    h("label", { class: "cf-check", for: "chat-skip" }, h("input", { type: "checkbox", id: "chat-skip", checked: form.skipWorkflow === true }), "Skip the project workflow (for a quick question)"),
     ask || h("div", { class: "actions" },
       h("button", { class: "btn primary", type: "button", "data-act": "chat-ask-here" }, "Start here"),
       h("button", { class: "btn", type: "button", "data-act": "chat-ask-app" }, "Start in the app"),
       h("button", { class: "btn", type: "button", "data-act": "chat-ask-pickup" }, "Pick up"),
-      h("button", { class: "btn", type: "button", "data-act": "chat-cancel" }, "Cancel")));
+      h("button", { class: "btn", type: "button", "data-act": "chat-cancel" }, "Cancel"),
+      h("button", { class: "btn quiet term-btn", type: "button", "data-act": "chat-ask-terminal" }, "New terminal chat")));
 }
 
 function chatsArea(project) {
@@ -453,23 +458,35 @@ function chatsArea(project) {
 }
 
 function askChat(kind, project) {
-  if (kind !== "chat-pickup" && !form.text.trim()) { setNote("Write what Claude should do first.", true); return; }
+  if (kind === "chat-terminal") {
+    asking = { kind, name: chatKey(project), project, id: null, label: project, text: `Open a NEW Claude Code chat in a terminal window in ${project}? It is a new chat: it does not continue a chat that asked you something.`, extra: "" };
+    setNote(""); return;
+  }
+  if (kind !== "chat-pickup" && kind !== "chat-terminal" && !form.text.trim()) { setNote("Write what Claude should do first.", true); return; }
   const text = kind === "chat-here" ? `Start a chat in ${project} with this task?`
     : kind === "chat-app" ? `Open the Claude app in ${project} with this task?`
     : `Start a chat in ${project} that runs /pickup?`;
   const extra = kind === "chat-app" ? "You press Send there."
-    : "Claude works without a window and uses your Claude allowance." + (form.remoteControl ? " Remote Control is on: the chat keeps running in the background so you can open it on your phone. You cannot answer it here while it is on." : "");
+    : (kind === "chat-here" ? (form.skipWorkflow ? "The chat gets your task as it is, without the project workflow. " : "The chat first runs /pickup so it knows where the project stands, and is named like your other chats. ") : "") + "Claude works without a window and uses your Claude allowance." + (form.remoteControl ? " Remote Control is on: the chat keeps running in the background so you can open it on your phone. You cannot answer it here while it is on." : "");
   asking = { kind, name: chatKey(project), project, id: null, label: project, text, extra };
   setNote("");
 }
 
 async function doChat(a) {
   if (!form || form.project !== a.project) return;
+  if (a.kind === "chat-terminal") {
+    setNote("Working on it…");
+    const t = await send({ action: "open-claude", name: a.project });
+    setNote(t.ok ? t.message || "Done." : t.error || "That did not work.", !t.ok);
+    if (t.ok) form = null;
+    if (lastData) render(lastData);
+    return;
+  }
   const task = a.kind === "chat-pickup" ? "/pickup" : form.text.trim();
   if (!task) { setNote("Write what Claude should do first.", true); return; }
   let body;
   if (a.kind === "chat-app") body = { action: "chat-app-link", project: a.project, task };
-  else { body = { action: "chat-start", project: a.project, task }; if (form.model) body.model = form.model; if (form.remoteControl) body.remoteControl = true; }
+  else { body = { action: "chat-start", project: a.project, task }; if (form.model) body.model = form.model; if (form.remoteControl) body.remoteControl = true; if (form.skipWorkflow && a.kind === "chat-here") body.workflow = false; }
   setNote("Working on it…");
   const r = await send(body);
   if (!r.ok) { setNote(r.error || "That did not work.", true); if (lastData) render(lastData); return; }
@@ -494,6 +511,7 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", (e) => {
   if (form && e.target.id === "chat-rc") form.remoteControl = e.target.checked;
+  if (form && e.target.id === "chat-skip") form.skipWorkflow = e.target.checked;
   if (form && e.target.id === "chat-model") { form.model = e.target.value; rememberModel(form.model); }
 });
 
@@ -513,7 +531,8 @@ function card(p, answer) {
       h("span", { class: stale ? "stale" : "" }, saved(p.handoffDaysOld))),
     needsFor(p.name).slice(0, 1).map((n) => h("div", { class: "asking" },
       h("div", { class: "asking-top" }, h("span", { class: "pill" }, n.state === "permission" ? "Maybe waiting for permission" : "Claude is asking you"), h("span", {}, `waiting ${waited(n.since)}`)),
-      h("p", { class: "asking-q" }, n.snippet))),
+      h("p", { class: "asking-q" }, n.snippet),
+      openThis(n.openLink) ? h("div", { class: "w-act" }, openThis(n.openLink)) : null)),
     controls(p.name),
     chatsArea(p.name),
     answer ? h("details", { class: "said" },
@@ -570,7 +589,8 @@ function render(data) {
   $("needs").replaceChildren(...needs.map((n) => h("li", {},
     h("div", { class: "w-top" }, h("b", {}, n.project), h("span", {}, `waiting ${waited(n.since)}${n.state === "permission" ? " · maybe permission" : ""}`)),
     n.chat ? h("div", { class: "w-title" }, n.chat) : null,
-    h("div", { class: "w-q" }, n.snippet))));
+    h("div", { class: "w-q" }, n.snippet),
+    openThis(n.openLink) ? h("div", { class: "w-act" }, openThis(n.openLink)) : null)));
 
   $("wait-count").textContent = waiting ? waiting : "";
   $("waitlist").replaceChildren(...(waiting ? decisions.map((d) => h("li", {},
@@ -586,7 +606,7 @@ function render(data) {
     running && manager.busy ? h("p", {}, "Working on a task now.") : null,
     running && manager.queueDepth !== null && manager.queueDepth !== undefined ? h("p", {}, `${manager.queueDepth} task${manager.queueDepth === 1 ? "" : "s"} waiting in the queue`) : null,
     manager.note && !mrt ? h("p", {}, manager.note) : null,
-    controls("AI_Orcestration", { claude: false })));
+    controls("AI_Orcestration")));
   if (keep && $(keep)) { $(keep).focus(); if (sel) try { $(keep).setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
 }
 

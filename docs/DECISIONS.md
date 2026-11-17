@@ -282,3 +282,21 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-16):** chose "Accept all (Recommended)".
 **Result:** All five: a model picker that remembers the last pick; Remote Control off at start with a tick to start it on; at most 2 Hub chats working at once; the Hub never writes into a chat open in the app; Claude cleans up its test chats of 2026-11-13 (archive "hub-test-bg" in the app, delete the 5 test chat files named in .claude/memory.md).
 **Affects:** Phase 14
+
+## D44 — Chats started from the Hub follow the project workflow   [decided 2026-11-17]
+**Question:** Should a chat started from the Hub follow the project workflow (pickup, handoff, clear names) like his desktop chats?
+**The owner said (2026-11-17):** "we need to make so that hub uses the projectworkflow, meaning the handoff, pickup... like in descktop does we can see clearly what is what and in what chat we are talking" and chose "Yes, by default (Recommended)".
+**Result:** A Hub chat starts by running /pickup with the task as its argument (so it reads the project's goal, plan and handoff), and is named like his desktop chats: "Project · what it does · date time". The New chat form gets a tick "Skip the project workflow" for quick one-off questions. The Hand off button stays for the end. A task that already starts with "/" (the quick Pick up and Hand off buttons) is not wrapped again.
+**Affects:** Phase 14 (new step 14.8), lib/chats.mjs, the New chat form
+
+## D45 — "Open this chat" instead of a new terminal chat for answering   [decided 2026-11-17]
+**Question:** What happens to the "Open in Claude Code" button, which opens a brand-new terminal chat that is not the chat that asked the question?
+**The owner said (2026-11-17):** "Do you agree that opening a new sesion in terminal isnt the best becasue we are awnsering a question that was given in other chat?" and chose "Add 'Open this chat', demote the terminal one (Recommended)".
+**Result:** Every chat in "Chats waiting for you" and on the project cards gets an "Open this chat" button that opens that exact chat in the Claude app. The terminal button is renamed "New terminal chat", moves into the New chat form and says plainly that it starts a NEW chat.
+**Affects:** Phase 14 (new step 14.9), the "Chats waiting for you" list, the card buttons
+
+## D46 — App chats stay "open + phone" (D40 reaffirmed)   [decided 2026-11-17]
+**Question:** For chats that live in the Claude app, should the Hub also deliver typed answers through a go-between chat inside the app?
+**The owner said (2026-11-17):** chose "Open + phone (Recommended)".
+**Result:** D40 stands: the Hub shows the question and opens that exact chat in one click; answering happens in the app, or from the phone through Remote Control. No go-between chat.
+**Affects:** Phase 14 (14.9)

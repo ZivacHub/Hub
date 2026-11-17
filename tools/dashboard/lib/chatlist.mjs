@@ -122,10 +122,10 @@ function readOpenList() {
   });
 }
 
-function readAppRecords() {
+function readAppRecords(baseDir) {
   const out = [];
   try {
-    const base = join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "Claude-Data");
+    const base = baseDir || join(process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local"), "Claude-Data");
     const ls = (d) => { try { return readdirSync(d); } catch { return []; } };
     for (const d of ls(base).filter((n) => n.startsWith("claude_"))) {
       const sess = join(base, d, "claude-code-sessions");
@@ -145,6 +145,27 @@ function readAppRecords() {
     }
   } catch { /* less data */ }
   return out;
+}
+
+const linkCache = new Map(); // base ("" = real folder) -> { at, bySession: Map }
+/** Synchronous, cached (8 s): the "open in the app" link for a saved chat (its file name = the app record's cliSessionId), or null.
+ *  Uses the same app-records reader as readChats. baseDir is only for self-tests (a folder shaped like Claude-Data). Never throws. */
+export function appLinkForSession(cliSessionId, baseDir) {
+  try {
+    if (typeof cliSessionId !== "string" || !SESSION_ID.test(cliSessionId)) return null;
+    const key = baseDir ? String(baseDir) : "";
+    let c = linkCache.get(key);
+    if (!c || Date.now() - c.at >= 8000) {
+      const bySession = new Map();
+      for (const r of readAppRecords(baseDir || undefined)) {
+        if (!r || typeof r.cliSessionId !== "string" || r.isArchived === true) continue;
+        if (!bySession.has(r.cliSessionId)) bySession.set(r.cliSessionId, r);
+      }
+      c = { at: Date.now(), bySession }; linkCache.set(key, c);
+    }
+    const rec = c.bySession.get(cliSessionId);
+    return rec && typeof rec.sessionId === "string" && APP_ID.test(rec.sessionId) ? "claude://claude.ai/epitaxy/" + rec.sessionId : null;
+  } catch { return null; }
 }
 
 export async function readChats({ hubChats = [], redact = (s) => String(s ?? ""), root = DEFAULT_ROOT, maxWorking } = {}) {
@@ -274,6 +295,23 @@ async function selftest() {
   check("working count = hub working only", ord.working === 1 && b({ hubChats: [hub({ state: "working" }), hub({ id: "h-2", state: "working", sessionId: "x-2" })], open: [ent({ status: "busy" })] }).working === 2);
   check("max and openListOk pass through", (() => { const r = b({ maxWorking: 5, openListOk: false }); return r.max === 5 && r.openListOk === false; })());
   check("project without chats not listed", b({ hubChats: [], open: [ent({ cwd: "C:\\Elsewhere" })] }).projects.length === 0);
+
+  // appLinkForSession with made-up record files
+  {
+    const fs = await import("node:fs"); const os = await import("node:os");
+    const base = fs.mkdtempSync(join(os.tmpdir(), "hub-applink-"));
+    const dir = join(base, "claude_x", "claude-code-sessions", "a", "b"); fs.mkdirSync(dir, { recursive: true });
+    const put = (n, o) => fs.writeFileSync(join(dir, n + ".json"), JSON.stringify({ title: "T", cwd: "C:\\x", ...o }));
+    put("local_one", { sessionId: "local_abcdef12-3456", cliSessionId: "11111111-aaaa" });
+    put("local_two", { sessionId: "local_deadbeef-0001", cliSessionId: "22222222-bbbb", isArchived: true });
+    put("local_three", { sessionId: "local_../x", cliSessionId: "33333333-cccc" });
+    check("appLinkForSession: found", appLinkForSession("11111111-aaaa", base) === "claude://claude.ai/epitaxy/local_abcdef12-3456");
+    check("appLinkForSession: archived record gives null", appLinkForSession("22222222-bbbb", base) === null);
+    check("appLinkForSession: bad session id gives null", [null, undefined, 5, "", "short", "../x", "11111111-aaaa/..", "zzzzzzzz-1"].every((s) => appLinkForSession(s, base) === null));
+    check("appLinkForSession: unknown session gives null", appLinkForSession("99999999-ffff", base) === null);
+    check("appLinkForSession: bad record id gives null", appLinkForSession("33333333-cccc", base) === null);
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 
   // real check
   let r = null, err = "";

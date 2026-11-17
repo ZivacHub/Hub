@@ -151,7 +151,8 @@ async function gameAction(body) {
 // Chat buttons (Phase 14). Nothing but plain values comes from the page: the project is checked against the real folders, the chat id is the
 // Hub's own id (never a Claude session id), the permission mode is fixed inside the engine, and every refusal is logged there.
 async function chatAction(body) {
-  if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true });
+  // workflow (D44): the chat first runs /pickup, unless the page says exactly false (the "Skip the project workflow" tick)
+  if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true, workflow: body.workflow !== false });
   if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
   if (body.action === "chat-stop") return chats.stop({ id: body.id });
   if (body.action === "chat-remote-control") return chats.setRemoteControl({ id: body.id, on: typeof body.on === "boolean" ? body.on : undefined }); // only the Hub id and a true / false
