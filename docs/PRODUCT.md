@@ -32,6 +32,8 @@ This file is the compass: it is loaded at the start of every session. Keep it un
 
 - NEW WISHES (Ivan, 2026-11-09; phases proposed, not yet approved): "I dont realy turn off my pc so it would be good if it could do its work, and when everything is done, basically turn off"; "a silent mode, so it doesn't waste our resources"; "an ability to overview all the tasks that is basically running by the Claude or the other projects"; if I'm in a game "lower all other tasks, so I can play my game normally, but still tasks are running, maybe one by one" with CPU, graphics card and memory percentage limits.
 
+- NEW WISHES (Ivan, 2026-11-17; phases 16 to 18 proposed, not yet approved): the Hub "as an application ... of its own" (own window, like Chromium, an icon among the Windows background apps, starting the projects' programs and terminals itself so he runs nothing by hand); "work from the hub itself" with Claude able to run in the background while the Hub is "the main thing where we work, see projects, everything"; and a report file when a phase is completed ("The reports is the name I was looking for"). Bugs he found the same day: the Game card shows none of its two chats, and "Open this chat" makes the Hub close in the browser (steps 14.10, 14.11).
+
 ## Not doing (on purpose)
 - No Anthropic API key, no paid voice, no other languages, no phone app or sharing, not a replacement for the AI_Orcestration Manager (it uses it).
 
