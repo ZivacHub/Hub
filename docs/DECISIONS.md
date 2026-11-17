@@ -318,3 +318,27 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-17):** chose "Also test writing into closed app chats".
 **Result:** Phase 17 starts with a real test (a chat the test itself created, never his real chats without his yes): does a closed app chat continued from the Hub still show the new messages in the app, with no split. D40/D46 stand until the test passes; if it fails, Hub chats are the place to work.
 **Affects:** Phase 17 (17.1, 17.2)
+
+## D50 — Electron may be downloaded (158.5 MB)   [decided 2026-11-17]
+**Question:** OK to download Electron (158.5 MB, roughly 300 MB on disk) into the Hub folder, kept out of GitHub?
+**The owner said (2026-11-17):** chose "Yes, download it (Recommended)".
+**Result:** When Phase 16 starts building, Electron is installed into the Hub folder (node_modules, git-ignored). Nothing else on the PC changes.
+**Affects:** Phase 16 (16.1)
+
+## D51 — The close button hides the Hub to the background icon   [decided 2026-11-17]
+**Question:** Click the X on the Hub window: hide to the background icon, or quit?
+**The owner said (2026-11-17):** chose "Hide to the background icon (Recommended)".
+**Result:** The window hides and the Hub keeps running; the icon among the Windows hidden icons opens it again or quits it for real.
+**Affects:** Phase 16 (16.2)
+
+## D52 — In Phase 16 the Hub starts project programs hidden; no terminal panel yet   [decided 2026-11-17]
+**Question:** "The app runs the terminal and everything": how far in Phase 16?
+**The owner said (2026-11-17):** chose "Hub starts project programs hidden (Recommended)".
+**Result:** Project programs start without a window, from the Hub, with their output readable on the card. A terminal panel inside the Hub window is not part of Phase 16 (maybe after Phase 17, only if he asks).
+**Affects:** Phase 16 (16.3)
+
+## D53 — Project .bat files folded into the Hub app   [proposed 2026-11-17: waiting for Ivan's yes to the reading below]
+**Question:** How should "start with Windows" work (a switch in the icon menu, or the old install file)?
+**The owner said (2026-11-17), his own words, not one of the options:** "generaly I would like that every "bat" file that has project to run, it would be good to interate to the "app" so when we run a project it runs as subpart of the "app"".
+**My reading (proposed, not decided):** the Hub program replaces the separate .bat files: starting a project means the Hub starts it from its own list (config/projects.json, already so since Phase 11) and it runs as a part of the Hub, visible and stoppable inside it. The Hub program itself starts with Windows from a switch Ivan flips in the icon menu; the old Install Hub Autostart.bat is then not needed. Open point: do the projects stop when he quits the Hub for real, or keep running?
+**Affects:** Phase 16 (16.3), step 11.5 (folded in if confirmed)
