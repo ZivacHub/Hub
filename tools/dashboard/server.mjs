@@ -116,7 +116,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -150,7 +150,33 @@ async function gameAction(body) {
 
 // Chat buttons (Phase 14). Nothing but plain values comes from the page: the project is checked against the real folders, the chat id is the
 // Hub's own id (never a Claude session id), the permission mode is fixed inside the engine, and every refusal is logged there.
+// "Open this chat" / "Open in the app" (14.11): the PAGE never navigates to a claude:// address (that took the Hub page away). The page sends only an id;
+// the server checks it against the app records / the Hub's chats, builds the link itself and has Windows open it. The pieces are replaceable so the self-test never opens a real chat.
+const openHooks = {
+  open: (link) => new Promise((resolve) => {
+    try {
+      const p = spawn("explorer.exe", [link], { windowsHide: true, detached: true, stdio: "ignore", shell: false });
+      p.on("error", () => resolve(false)); p.unref(); setTimeout(() => resolve(true), 150);
+    } catch { resolve(false); }
+  }),
+  appRecords: () => chatlist.readAppRecords(),
+  hubChats: () => chats.list(),
+  log: (...a) => gameLog(...a),
+};
+async function openApp(body) {
+  const hubId = typeof body.hubId === "string" ? body.hubId : undefined, appId = typeof body.appId === "string" ? body.appId : undefined;
+  const which = hubId !== undefined ? "hub" : "app";
+  const id = String(hubId ?? appId ?? "-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) || "-";
+  const wrongType = (body.appId !== undefined && appId === undefined) || (body.hubId !== undefined && hubId === undefined);
+  const link = wrongType ? null : chatlist.openLinkFor({ appId, hubId }, { appRecords: openHooks.appRecords(), hubChats: openHooks.hubChats() });
+  if (!link) { openHooks.log("chat-open-app", id, "refused"); return { ok: false, error: "The Hub can not open that chat. Look at the page again." }; }
+  const done = await openHooks.open(link);
+  openHooks.log("chat-open-app", id, done ? "ok" : "failed:" + which);
+  return done ? { ok: true, message: "Opening in the Claude app." } : { ok: false, error: "Windows did not open the Claude app." };
+}
+
 async function chatAction(body) {
+  if (body.action === "chat-open-app") return openApp(body);
   // workflow (D44): the chat first runs /pickup, unless the page says exactly false (the "Skip the project workflow" tick)
   if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true, workflow: body.workflow !== false });
   if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
@@ -262,6 +288,26 @@ server.listen(PORT, HOST, async () => {
   ok("a long body on any other action is still 413", (await raw("/api/action", json, JSON.stringify({ action: "stop", id: "x", pad: "y".repeat(3000), confirm: true }), "POST")).status === 413);
   const lnk = await raw("/api/action", json, cj({ action: "chat-app-link", project: "Hub", task: "Hello there" }), "POST"); const lj = JSON.parse(lnk.text);
   ok("chat-app-link builds the app's new-chat link for a real project only", lnk.status === 200 && lj.ok === true && lj.link.startsWith("claude://code/new?q=Hello%20there&folder=") && await refused({ action: "chat-app-link", project: "NoSuchProject", task: "x" }));
+  // 14.11 "Open this chat": fake opener + fake records, so no real chat is ever opened
+  const opened = [], logged = [];
+  const U1 = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+  openHooks.open = async (l) => { opened.push(l); return true; };
+  openHooks.log = (...a) => logged.push(a.join(" "));
+  openHooks.appRecords = () => [{ sessionId: "local_abcdef12-3456", cliSessionId: "x-1" }, { sessionId: "local_deadbeef-0001", cliSessionId: "x-2", isArchived: true }];
+  openHooks.hubChats = () => [{ id: "h-rest", state: "idle", remoteControl: false, sessionId: U1 }, { id: "h-busy", state: "working", remoteControl: false, sessionId: U1 }];
+  const oa = (o, h = json) => raw("/api/action", h, cj({ action: "chat-open-app", ...o }), "POST");
+  const noOpen = async (o) => { const n = opened.length; const r = await oa(o); return r.status === 200 && JSON.parse(r.text).ok === false && opened.length === n; };
+  ok("chat-open-app without the token is refused", (await oa({ appId: "local_abcdef12-3456" }, { ...json, "X-Hub-Token": "" })).status === 403 && opened.length === 0);
+  ok("chat-open-app from another Origin is refused", (await oa({ appId: "local_abcdef12-3456" }, { ...json, Origin: "http://evil.example" })).status === 403 && opened.length === 0);
+  ok("chat-open-app without confirm is refused", (await raw("/api/action", json, JSON.stringify({ action: "chat-open-app", appId: "local_abcdef12-3456" }), "POST")).status === 400 && opened.length === 0);
+  ok("chat-open-app refuses an unknown, an archived and a malformed app id", await noOpen({ appId: "local_00000000-0000" }) && await noOpen({ appId: "local_deadbeef-0001" }) && await noOpen({ appId: "local_../x" }) && await noOpen({ appId: 5 }) && await noOpen({}));
+  ok("chat-open-app refuses a link sent as the app id", await noOpen({ appId: "claude://claude.ai/epitaxy/local_abcdef12-3456" }) && await noOpen({ appId: "calc.exe" }) && await noOpen({ hubId: "claude://resume?session=" + U1 }));
+  ok("chat-open-app refuses both ids, and a working or unknown Hub chat", await noOpen({ appId: "local_abcdef12-3456", hubId: "h-rest" }) && await noOpen({ hubId: "h-busy" }) && await noOpen({ hubId: "h-nope" }) && await noOpen({ hubId: "h-rest", appId: 5 }));
+  const good = await oa({ appId: "local_abcdef12-3456" }); const gj = JSON.parse(good.text);
+  ok("chat-open-app with a known app id calls the opener once with exactly the epitaxy link", good.status === 200 && gj.ok === true && gj.message === "Opening in the Claude app." && opened.length === 1 && opened[0] === "claude://claude.ai/epitaxy/local_abcdef12-3456");
+  const goodHub = await oa({ hubId: "h-rest" });
+  ok("chat-open-app with a resting Hub chat opens the resume link built by the server", JSON.parse(goodHub.text).ok === true && opened.length === 2 && opened[1] === "claude://resume?session=" + U1);
+  ok("chat-open-app logs action, id and result only", logged.some((l) => l === "chat-open-app local_abcdef12-3456 ok") && logged.some((l) => l.startsWith("chat-open-app") && l.endsWith("refused")) && logged.every((l) => !l.includes("claude://")));
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
   ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
   // game-mode buttons (13.4): with no game running every one of them is refused, and none can be reached without the token

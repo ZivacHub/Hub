@@ -81,6 +81,24 @@
       "project": "Job Applier",
       "chats": [
         {
+          "id": "s-7a8b9c0d",
+          "kind": "app",
+          "name": "Sample closed chat: listing parser",
+          "state": "closed",
+          "needsYou": false,
+          "why": "",
+          "snippet": "",
+          "remoteControl": false,
+          "sinceAgoMinutes": 5000,
+          "lastActiveAgoMinutes": 4900,
+          "model": null,
+          "turns": null,
+          "canAnswer": false,
+          "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000004",
+          "lastReply": "",
+          "refused": []
+        },
+        {
           "id": "s-9c0d1e2f",
           "kind": "app",
           "name": "Match scoring",

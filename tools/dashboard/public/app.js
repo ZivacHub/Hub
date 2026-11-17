@@ -169,6 +169,8 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   const act = b.dataset.act, name = b.dataset.name, rt = rtFor(name);
+  if (act === "open-app") { const id = b.dataset.appId; if (APP_ID.test(id || "")) openInApp({ action: "chat-open-app", appId: id }); return; }
+  if (act === "open-app-hub") { const id = b.dataset.id; if (/^h-/.test(id || "")) openInApp({ action: "chat-open-app", hubId: id }); return; }
   if (act === "cancel") { asking = null; setNote(""); }
   else if (act === "yes") { const a = asking; asking = null; if (a && a.kind.startsWith("cp-")) { doPanel(a); if (lastData) render(lastData); } else if (a && a.kind.startsWith("chat-")) { doChat(a); if (lastData) render(lastData); } else if (a) perform(a); return; }
   else if (act === "chat-open") { const id = b.dataset.id; asking = null; form = null; openChat = openChat === id ? null : id; setNote(""); }
@@ -263,7 +265,7 @@ const sending = new Set();          // chat ids with a request on its way
 const ANSWER_MAX = 4000;
 const TASK_MAX = 4000;
 const MODELS = [["", "Default"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]];
-const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped" };
+const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
 const KIND_WORD = { hub: "Hub", app: "App", terminal: "Terminal" };
 const FIRST_LINES = 4;
 function lastModel() { try { const m = localStorage.getItem("hub-chat-model"); return MODELS.some(([v]) => v === m) ? m : ""; } catch { return ""; } }
@@ -280,9 +282,18 @@ async function loadChats() {
   } catch { /* keep the last data */ }
 }
 
-const APP_LINK = "claude://claude.ai/epitaxy/local_";
+const APP_LINK = "claude://claude.ai/epitaxy/";
+const APP_ID = /^local_[0-9a-f-]{8,64}$/i;
+// 14.11: never a link: the page only sends an id, and the SERVER opens the chat (a claude:// link in the page took the Hub away)
 function openThis(link) {
-  return typeof link === "string" && link.startsWith(APP_LINK) ? h("a", { class: "btn open-this", href: link }, "Open this chat") : null;
+  if (typeof link !== "string" || !link.startsWith(APP_LINK)) return null;
+  const id = link.slice(APP_LINK.length);
+  return APP_ID.test(id) ? h("button", { class: "btn open-this", type: "button", "data-act": "open-app", "data-app-id": id }, "Open this chat") : null;
+}
+async function openInApp(body) {
+  setNote("Working on it…");
+  const r = await send(body);
+  setNote(r.ok ? r.message || "Opening in the Claude app." : r.error || "That did not work.", !r.ok);
 }
 
 function chatLine(c, project) {
@@ -355,10 +366,10 @@ function chatPanel(c, project) {
     if (rcOn) kids.push(rcAsk || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-rc-off", "data-id": c.id, "data-name": project, disabled: busy }, "Turn Remote Control off")));
     else if (c.canAnswer) kids.push(rcAsk || h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "cp-rc-on", "data-id": c.id, "data-name": project, disabled: busy }, "Turn Remote Control on")));
     if (typeof c.openLink === "string" && c.openLink.startsWith("claude://resume?session=")) {
-      kids.push(h("div", { class: "actions" }, h("a", { class: "btn", href: c.openLink }, "Open in the app"), h("span", { class: "cp-rc" }, "Afterwards the chat lives in the app; answer it there.")));
+      kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "open-app-hub", "data-id": c.id }, "Open in the app"), h("span", { class: "cp-rc" }, "Afterwards the chat lives in the app; answer it there.")));
     }
   } else if (c.kind === "app") {
-    kids.push(h("p", { class: "cp-note" }, "This chat is open in the Claude app. Answer it there so it does not split."));
+    kids.push(h("p", { class: "cp-note" }, c.state === "closed" ? "This chat is closed. Open it in the Claude app and answer it there." : "This chat is open in the Claude app. Answer it there so it does not split."));
     if (c.needsYou && c.snippet) kids.push(h("div", { class: "cp-block" }, h("span", { class: "cp-label" }, "Waiting for you"), h("div", { class: "cp-text" }, c.snippet)));
     const ok = openThis(c.openLink);
     const rc = c.remoteControl === true ? "Remote Control: on" : c.remoteControl === false ? "Remote Control: off" : null;

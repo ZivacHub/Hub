@@ -14,7 +14,8 @@ Board: docs/plan/BOARD.md. Status: PROPOSED, no gate run, nothing started. This 
 - "Open this chat": it is an ordinary link `claude://claude.ai/epitaxy/local_...`; the browser navigates to it. I could not press it here without opening a real chat of Ivan's, so the exact reason the page disappears is not proven; 14.11 removes the cause by never navigating the page (the server opens the link).
 
 ## Phase 16 notes (the Hub as its own app)
-- Cheapest route: a Microsoft Edge "app window" (`msedge --app=http://127.0.0.1:4780`): own window, own taskbar button, no tabs or address bar. No download, Edge is already on Windows.
+- DECIDED 2026-11-17 (D48): a real desktop program (Electron), not the Edge window. Announce the download size (about 100 MB) and get Ivan's yes before installing; read current Electron docs with context7 at the gate. The Edge route below is only the fallback.
+- Cheapest route (fallback, not chosen): a Microsoft Edge "app window" (`msedge --app=http://127.0.0.1:4780`): own window, own taskbar button, no tabs or address bar. No download, Edge is already on Windows.
 - Background icon ("hidden icons" arrow in the taskbar): a very small Windows tray program (PowerShell or a tiny script, no download) that keeps the server running, opens the window, quits. The alternative is a real desktop program (Electron: about 100 MB download, more to maintain).
 - Joins 11.5 (start with Windows, hidden) and Phase 11 (the Hub already starts and stops projects: extend to hidden terminals).
 - Open question: closing the window = hide to the icon (recommended) or quit.

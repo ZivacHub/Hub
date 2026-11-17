@@ -35,7 +35,7 @@ Rules the engine itself enforces (the server and the page are not trusted to):
 { generatedAt: ISO, demo?: true, max: 2, working: N,       // working = Hub turns running now, max = the limit (D41)
   openListOk: true|false,                                   // false when `claude agents --json` could not be read (then only Hub chats are listed)
   projects: [ { project: "Hub", chats: [ chat ] } ] }       // only projects that have chats
-chat = { id, kind: "hub"|"app"|"terminal", name, state: "working"|"idle"|"failed"|"stopped",
+chat = { id, kind: "hub"|"app"|"terminal", name, state: "working"|"idle"|"failed"|"stopped"|"closed",
          needsYou: bool, why: ""|"question"|"permission", snippet,   // from the saved chat file (attention.mjs chatFileState); snippet clipped 220, "" if none
          remoteControl: true|false|null,                   // app: the app record's remoteControlUserEnabled; hub: false (14.6 changes it); terminal: null
          since: ISO|null, lastActive: ISO|null, model: text|null, turns: number|null,
@@ -46,7 +46,8 @@ chat = { id, kind: "hub"|"app"|"terminal", name, state: "working"|"idle"|"failed
 - `id`: Hub chats = the engine's id (h-...); other chats = "s-" + the first 8 characters of the session id. Display and identity only; the page never sends a Claude session id to the server.
 - Hub chats come from the engine's list() (injected); they are never listed twice if the same session also shows in the open list.
 - Open chats = entries of `claude agents --json` (fields pid, cwd, kind, startedAt, sessionId, name, status). An entry is an app chat when an app record has `cliSessionId` equal to its `sessionId` (and `isArchived` is not true); otherwise terminal. Entry status busy -> working, idle -> idle. A chat belongs to the project whose folder (directly under the projects folder) contains its cwd; entries outside the projects folder are left out.
-- App records (read-only, test T14): `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\*\*\local_*.json`; only the fields sessionId, cliSessionId, cwd, title, isArchived, remoteControlUserEnabled are used.
+- App records (read-only, test T14): `%LOCALAPPDATA%\Claude-Data\claude_*\claude-code-sessions\*\*\local_*.json`; only the fields sessionId, cliSessionId, cwd, title, isArchived, remoteControlUserEnabled, lastActivityAt, createdAt are used.
+- **Closed chats (14.10):** `state` may also be `"closed"`: an app chat with no running process. It comes from an app record that is not archived, has a cliSessionId, is not a Hub chat's session, is not in the open list, and whose cwd is inside a project folder. Shape: kind "app", name = record title, since = createdAt, lastActive = lastActivityAt, remoteControl = the record flag, canAnswer false (no answer box; open it in the app), model null, turns null, lastReply "", refused []; needsYou / why / snippet come from the saved chat file like the others. At most the 12 newest closed chats per project. The page shows the tag "Closed" with its own marker shape.
 - Saved chat file: `~/.claude/projects/<cwd with every non-letter, non-digit character turned into "-">/<sessionId>.jsonl`.
 - Order: projects with a chat that needs you first, then projects with a working chat, then by newest lastActive; chats inside a project: needsYou, working, the rest, newest first. Text fields go through redact() (injected) and are clipped (name 80).
 
@@ -54,6 +55,7 @@ chat = { id, kind: "hub"|"app"|"terminal", name, state: "working"|"idle"|"failed
 - `{ action: "chat-start", project, task, model?, remoteControl? }` -> `{ ok, id, message }` (a Hub chat, windowless). `model` is one of haiku, sonnet, opus, fable or missing (default). `remoteControl` stays false until 14.6.
 - `{ action: "chat-answer", id, text }`, `{ action: "chat-stop", id }` -> `{ ok, message }`. `id` is a Hub chat id (h-...) from /api/chats, never anything else.
 - `{ action: "chat-app-link", project, task }` -> `{ ok, link, message }`: the page opens `link` (navigation to a claude:// address) and Ivan presses Send in the app. Task 1 to 1500 characters.
+- `{ action: "chat-open-app", appId: "local_<id>" }` or `{ action: "chat-open-app", hubId: "h-..." }` -> `{ ok, message }` (14.11). The page never navigates to a claude:// address; it sends only the id. The server accepts an appId only when it matches `/^local_[0-9a-f-]{8,64}$/i` and is the id of a not-archived app record; a hubId only for a Hub chat that is idle, failed or stopped with Remote Control off and a real session id. It builds the link itself (`claude://claude.ai/epitaxy/<appId>` or `claude://resume?session=<uuid>`, never one from the page) and has Windows open it (`explorer.exe` with the link as one argument, no shell, no window). One line in logs/hub_actions.log (action, id, result). The page shows "Opening in the Claude app." in its note line.
 - Refusals come back as `{ ok: false, error }` in plain words; the page shows the error text as is (textContent).
 - The page reads `GET /api/chats` (contract above) with the rest of its refresh (every 10 s in front, 2 minutes hidden). Demo: `--demo` shows demo/chats.json, `--demo-chats=empty` the empty state; in demo mode every POST answers "Sample data mode: the buttons are switched off."
 

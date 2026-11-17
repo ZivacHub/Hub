@@ -254,6 +254,8 @@ a.run.on:hover { text-decoration: underline; }
 .cs-idle::before { background: transparent; border: 2px solid currentColor; width: 9px; height: 9px; }
 .cs-stopped { color: var(--muted); border-color: var(--line); font-weight: 500; }
 .cs-stopped::before { border-radius: 1px; background: var(--off); }
+.cs-closed { color: var(--muted); border-color: var(--line); border-style: dashed; font-weight: 500; }
+.cs-closed::before { border-radius: 0; background: transparent; border: 2px solid currentColor; border-top-color: transparent; width: 9px; height: 9px; transform: rotate(45deg); }
 .cs-failed { background: var(--c-bad-bg); color: var(--c-bad); border-color: color-mix(in oklch, var(--c-bad) 40%, transparent); }
 .cs-failed::before { border-radius: 0; clip-path: polygon(0 0, 100% 0, 50% 100%); width: 9px; height: 8px; }
 .ckind { flex: none; font-size: 0.75rem; color: var(--muted); }
@@ -305,7 +307,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 /* step 14.8/14.9: open this chat, quiet terminal button */
 .w-act { margin-top: 6px; }
-a.btn.open-this { width: fit-content; }
+.btn.open-this { width: fit-content; }
 .btn.quiet { border-color: transparent; color: var(--muted); font-weight: 500; margin-left: auto; }
 .btn.quiet:hover { color: var(--ink); border-color: var(--line-strong); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
