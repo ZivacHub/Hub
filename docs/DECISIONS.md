@@ -300,3 +300,21 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-17):** chose "Open + phone (Recommended)".
 **Result:** D40 stands: the Hub shows the question and opens that exact chat in one click; answering happens in the app, or from the phone through Remote Control. No go-between chat.
 **Affects:** Phase 14 (14.9)
+
+## D47 — Fix the two bugs first   [decided 2026-11-17]
+**Question:** What to build first after his notes: the two bugs, the bugs then the app window, or the old order (11.5)?
+**The owner said (2026-11-17):** chose "Fix the two bugs first (Recommended)".
+**Result:** Steps 14.10 (all chats, also closed ones) and 14.11 ("Open this chat" keeps the Hub page open) come next, then his test 14.7, then the phase gate of Phase 16. Phase 11 (11.5, 11.6) and 13.5 still wait.
+**Affects:** Phase 14 (14.10, 14.11), plan order
+
+## D48 — The Hub becomes a real desktop program (Electron)   [decided 2026-11-17]
+**Question:** Own window made with Edge plus a tiny tray icon, a real desktop program (Electron), or stay in the browser?
+**The owner said (2026-11-17):** chose "A real desktop program (Electron)".
+**Result:** Phase 16 is built as an Electron program (own window, tray icon in the Windows hidden icons, keeps the dashboard server running in the background, starts with Windows). Electron is about 100 MB: its download size is announced and Ivan says yes before anything is installed, and current docs are read with context7 at the phase gate. The existing local web page stays the content.
+**Affects:** Phase 16 (all steps), 11.5 (start with Windows now means the Electron program)
+
+## D49 — Test whether a CLOSED app chat can be continued from the Hub   [decided 2026-11-17]
+**Question:** Hub chats only, or also test writing into app chats that are closed?
+**The owner said (2026-11-17):** chose "Also test writing into closed app chats".
+**Result:** Phase 17 starts with a real test (a chat the test itself created, never his real chats without his yes): does a closed app chat continued from the Hub still show the new messages in the app, with no split. D40/D46 stand until the test passes; if it fails, Hub chats are the place to work.
+**Affects:** Phase 17 (17.1, 17.2)
