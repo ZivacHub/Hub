@@ -44,3 +44,17 @@ export function isAllowedChatLink(url) {
   if (/[\s\u0000-\u001f\u007f"<>\\^`{|}]/.test(url)) return false;
   return CHAT_LINK_PREFIXES.some((p) => url.startsWith(p) && url.length > p.length);
 }
+
+/**
+ * true for a link to ANOTHER local program's page (a project card's "Running · port N" link): http (not https) on 127.0.0.1 or
+ * localhost, port 1024..65535 and not the Hub's own port, no user name or password. Such a link goes to the default browser.
+ */
+export function isOtherLocalPortLink(url, hubPort) {
+  if (typeof url !== "string" || url.length > 2048) return false;
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (u.protocol !== "http:" || (u.hostname !== "127.0.0.1" && u.hostname !== "localhost")) return false;
+  if (u.username || u.password || !/^\d{1,5}$/.test(u.port)) return false; // an empty port (= 80) never passes
+  const n = Number(u.port);
+  return n >= 1024 && n <= 65535 && n !== hubPort;
+}

@@ -6,8 +6,11 @@ import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electro
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { hubUrl, isAllowedChatLink, isHubOrigin, parsePort, parseServerArgs } from "./lib/rules.mjs";
+import { EventEmitter } from "node:events";
+import { hubUrl, isAllowedChatLink, isHubOrigin, isOtherLocalPortLink, parsePort, parseServerArgs } from "./lib/rules.mjs";
 import { findOrStartServer, stopServer } from "./lib/server.mjs";
+import { createTray, destroyTray, setTrayMenuExtras, windowImage } from "./lib/tray.mjs";
+export { setTrayMenuExtras }; // 16.3: insert menu items (Start with Windows, projects) into the background icon's menu
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const HUB_DIR = join(HERE, "..", ".."); // tools/app -> the Hub folder
@@ -20,8 +23,10 @@ const SERVER_LOG = join(HUB_DIR, "logs", "hub_app_server.log");
 // Page background while the page loads (matches --bg in tools/dashboard/public/style.css, light and dark).
 const BG = { light: "#f4f6fa", dark: "#111419" };
 
-// What this app owns right now. 16.2 (tray, hide on close) and 16.3 (projects as part of the app) read and extend this.
-export const state = { port: PORT, server: null, window: null, quitting: false, stopped: false };
+// What this app owns right now. 16.3 (projects as part of the app) reads and extends this.
+// quitting = the app is really quitting (the window may close for real); until then the X button only hides the window (D51).
+export const state = { port: PORT, server: null, window: null, quitting: false, stopped: false, openExternal: (url) => shell.openExternal(url) };
+export const events = new EventEmitter(); // "second-instance" (self-test listens)
 
 app.setName("Hub");
 app.setAppUserModelId("Hub");
@@ -38,7 +43,8 @@ export function lockDownSession(ses) {
 
 /**
  * The window may only show http://127.0.0.1:PORT. A navigation or new-window request to one of the three claude:// chat links
- * (lib/rules.mjs CHAT_LINK_PREFIXES) is handed to `openExternal` and the window stays on the Hub. Everything else is refused.
+ * (lib/rules.mjs CHAT_LINK_PREFIXES), or to another local program's page (http on 127.0.0.1/localhost, other port 1024-65535,
+ * no credentials), is handed to `openExternal` (the default browser) and the window stays on the Hub. Everything else is refused.
  * `openExternal` is injectable: the self-test passes a fake, so it never opens a real chat.
  */
 export function lockDownNavigation(contents, { port, openExternal }) {
@@ -47,12 +53,12 @@ export function lockDownNavigation(contents, { port, openExternal }) {
     const url = e.url;
     if (isHubOrigin(url, port)) return;
     e.preventDefault();
-    if (isAllowedChatLink(url)) handOff(url);
+    if (isAllowedChatLink(url) || isOtherLocalPortLink(url, port)) handOff(url);
   });
   contents.on("will-frame-navigate", (e) => { if (!e.isMainFrame && !isHubOrigin(e.url, port)) e.preventDefault(); });
   contents.on("will-redirect", (e) => { if (!isHubOrigin(e.url, port)) e.preventDefault(); });
   contents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedChatLink(url)) handOff(url);
+    if (isAllowedChatLink(url) || isOtherLocalPortLink(url, port)) handOff(url);
     return { action: "deny" }; // the Hub is one window: no new windows at all, not even Hub pages
   });
   contents.on("will-attach-webview", (e) => e.preventDefault());
@@ -63,6 +69,7 @@ export function createWindow({ port, openExternal, showInactive = false }) {
   const win = new BrowserWindow({
     width: 1360, height: 900, minWidth: 380, minHeight: 600,
     title: "Hub",
+    icon: windowImage(),
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? BG.dark : BG.light,
     autoHideMenuBar: true,
@@ -74,6 +81,9 @@ export function createWindow({ port, openExternal, showInactive = false }) {
   win.removeMenu();
   lockDownNavigation(win.webContents, { port, openExternal });
   win.once("ready-to-show", () => (showInactive ? win.showInactive() : win.show()));
+  // D51: the X button (and Alt+F4) only HIDES the window; the Hub keeps running in the background icon. Real quit: state.quitting.
+  win.on("close", (e) => { if (!state.quitting) { e.preventDefault(); win.hide(); } });
+  win.on("session-end", () => { state.quitting = true; }); // Windows is shutting down or logging off: let go
   win.on("closed", () => { if (state.window === win) state.window = null; });
   state.window = win;
   win.loadURL(hubUrl(port)).catch(() => {}); // a failed load shows Chromium's own error page inside the locked window
@@ -88,15 +98,35 @@ export async function stopOwnedServer() {
   return stopServer(s.child);
 }
 
-/** Quit hook: before the app quits, stop the dashboard it started, then quit for real. 16.2/16.3 add their own stops to stopOwnedServer's caller. */
+/** Show the Hub window: re-create it if destroyed, restore if minimized, show and focus. Used by the icon, a second start and 16.3. */
+export function showHub() {
+  let win = state.window;
+  if (!win || win.isDestroyed()) win = createWindow({ port: state.port, openExternal: state.openExternal });
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return win;
+}
+
+/** Quit for real (the icon's "Quit Hub"). */
+export function quitHub() { state.quitting = true; app.quit(); }
+
+/** The background icon (once). */
+export function installTray() { return createTray({ onOpen: () => showHub(), onQuit: () => quitHub() }); }
+
+/** Quit hook: before the app quits, stop the dashboard it started, then quit for real. 16.3 adds "stop every project the Hub started" here (D53). */
 function installQuitHooks() {
   app.on("before-quit", (e) => {
+    state.quitting = true; // from here the window may close for real
+    destroyTray();
     if (state.stopped || !state.server?.ownsServer) return;
     e.preventDefault();
     stopOwnedServer().finally(() => app.quit());
   });
-  // 16.1: closing the window quits. 16.2 replaces this with "hide to the background icon" (D51).
-  app.on("window-all-closed", () => app.quit());
+  // D51: no window left does NOT quit: the Hub keeps running in the background icon (only "Quit Hub" quits).
+  app.on("window-all-closed", () => {});
+  // a second start of the Hub: show and focus this one
+  app.on("second-instance", () => { if (state.server) showHub(); /* before start-up finished there is nothing to show yet */ if (SELFTEST) console.log("SECOND_INSTANCE shown"); events.emit("second-instance"); });
 }
 
 /** Start-up: find or start the dashboard, then open the window. Errors are plain-language dialogs, never a stack trace. */
@@ -106,13 +136,18 @@ async function startHub() {
   const result = await findOrStartServer({ port: PORT, hubDir: HUB_DIR, serverArgs: SERVER_ARGS, logFile: SERVER_LOG });
   if (!result.ok) { dialog.showErrorBox("Hub", result.message); app.quit(); return; }
   state.server = result;
-  createWindow({ port: PORT, openExternal: (url) => shell.openExternal(url) });
+  createWindow({ port: PORT, openExternal: state.openExternal });
+  installTray();
 }
 
-installQuitHooks();
-if (SELFTEST) {
+// only one Hub at a time (the lock is per profile folder, so the self-test's own profile never meets a real Hub)
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0); // the first Hub gets 'second-instance' and shows itself
+} else if (SELFTEST) {
+  installQuitHooks();
   const { runSelfTest } = await import("./selftest-inapp.mjs");
-  app.whenReady().then(() => runSelfTest({ state, lockDownSession, createWindow, stopOwnedServer, port: PORT, serverArgs: SERVER_ARGS, hubDir: HUB_DIR, serverLog: SERVER_LOG }));
+  app.whenReady().then(() => runSelfTest({ state, events, showHub, installTray, lockDownSession, createWindow, stopOwnedServer, port: PORT, serverArgs: SERVER_ARGS, hubDir: HUB_DIR, serverLog: SERVER_LOG }));
 } else {
+  installQuitHooks();
   app.whenReady().then(startHub).catch(() => { dialog.showErrorBox("Hub", "Something went wrong while starting the Hub."); app.quit(); });
 }

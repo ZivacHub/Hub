@@ -6,13 +6,14 @@ import { createServer } from "node:http";
 import { EventEmitter } from "node:events";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { hubUrl } from "./lib/rules.mjs";
+import { hubUrl, isHubOrigin as isHubUrl } from "./lib/rules.mjs";
+import { getTray, getTrayTemplate, setTrayMenuExtras, trayImage, windowImage } from "./lib/tray.mjs";
 import { findOrStartServer, pageAnswers } from "./lib/server.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SELFTEST_PORT = 4792;
 
-export async function runSelfTest({ state, lockDownSession, createWindow, stopOwnedServer, port, serverArgs, hubDir, serverLog }) {
+export async function runSelfTest({ state, events, showHub, installTray, lockDownSession, createWindow, stopOwnedServer, port, serverArgs, hubDir, serverLog }) {
   let pass = 0, fail = 0;
   const ok = (name, cond) => { if (cond) pass++; else fail++; console.log(`${cond ? "OK" : "FAIL"} ${name}`); };
   const finish = async (code) => {
@@ -60,7 +61,9 @@ export async function runSelfTest({ state, lockDownSession, createWindow, stopOw
 
     // ---- 4. the window
     const opened = [];
-    const win = createWindow({ port, openExternal: (url) => { opened.push(url); }, showInactive: true });
+    state.openExternal = (url) => { opened.push(url); }; // showHub() re-creates the window with this fake opener
+    const win = createWindow({ port, openExternal: state.openExternal, showInactive: true });
+    const tray = installTray();
     await new Promise((resolve) => { if (!win.webContents.isLoading()) resolve(); else win.webContents.once("did-finish-load", resolve); });
     const wc = win.webContents;
     const js = (code, gesture = false) => wc.executeJavaScript(code, gesture);
@@ -113,6 +116,16 @@ export async function runSelfTest({ state, lockDownSession, createWindow, stopOw
     await click(RESUME); await sleep(1000);
     ok("a click on a claude://resume?session= link goes to the opener", opened.length === 3 && opened[2] === RESUME && stays());
 
+    // other local programs' pages go to the default browser (fake opener), the Hub's own port and odd links stay denied
+    await click("http://127.0.0.1:5057/"); await sleep(900);
+    ok("a click on http://127.0.0.1:5057/ (another local port) goes to the opener once with that exact URL, window stays", opened.length === 4 && opened[3] === "http://127.0.0.1:5057/" && stays());
+    const w3 = await js("String(window.open('http://localhost:5058/x'))", true); await sleep(800);
+    ok("window.open of http://localhost:5058/x goes to the opener, no new window", w3 === "null" && opened.length === 5 && opened[4] === "http://localhost:5058/x" && stays());
+    for (const bad of ["http://example.com/", "https://127.0.0.1:1234/", "http://127.0.0.1:80/", "http://127.0.0.1/", "http://user@127.0.0.1:5000/", "http://user:pw@localhost:5000/", `http://localhost:${port}/`, "http://127.0.0.1:1023/"]) {
+      await click(bad); await sleep(600);
+      ok(`a click on ${bad} stays denied and the opener is not called`, opened.length === 5 && stays());
+    }
+
     // ---- 6. permissions
     const notif = await js("Notification.requestPermission()", true).catch(() => "error");
     ok("notification permission is denied", notif === "denied");
@@ -130,6 +143,52 @@ export async function runSelfTest({ state, lockDownSession, createWindow, stopOw
       writeFileSync(process.env.HUB_APP_SHOT, img.toPNG());
       ok(`screenshot saved (${img.getSize().width}x${img.getSize().height})`, !img.isEmpty());
     } else console.log("(no HUB_APP_SHOT set: screenshot skipped)");
+
+    // ---- 8. background icon and hide on close (16.2, D51)
+    const icon = windowImage(), tIcon = trayImage(false), tNeeds = trayImage(true);
+    ok("icons load: window icon 256 px, tray icon 16 px (+2x), amber-dot icon 32 px", !icon.isEmpty() && icon.getSize().width === 256 && !tIcon.isEmpty() && tIcon.getSize().width === 16 && !tNeeds.isEmpty() && tNeeds.getSize().width === 32);
+    ok("the tray icon exists (created, not destroyed)", !!getTray() && getTray() === tray && !tray.isDestroyed());
+    console.log(`(tray bounds as Windows reports them: ${JSON.stringify(tray.getBounds())}; the icon sits in the hidden-icons area, a test cannot see it)`);
+    const tpl = getTrayTemplate() || [];
+    const labels = tpl.filter((i) => i.type !== "separator").map((i) => i.label);
+    ok("the tray menu has exactly 'Open Hub' and 'Quit Hub' (a separator between)", JSON.stringify(labels) === JSON.stringify(["Open Hub", "Quit Hub"]) && tpl.length === 3 && tpl[1].type === "separator");
+    setTrayMenuExtras([{ label: "Extra item", type: "checkbox", checked: false }]);
+    ok("setTrayMenuExtras puts items between Open Hub and Quit Hub", JSON.stringify((getTrayTemplate() || []).filter((i) => i.type !== "separator").map((i) => i.label)) === JSON.stringify(["Open Hub", "Extra item", "Quit Hub"]));
+    setTrayMenuExtras([]);
+    ok("setTrayMenuExtras([]) gives the plain menu back", (getTrayTemplate() || []).length === 3);
+    ok("the window is visible before the close test and the app is not quitting", win.isVisible() && state.quitting === false);
+
+    win.close(); await sleep(400); // what the X button and Alt+F4 do
+    ok("closing the window (X / Alt+F4) HIDES it: not visible, not destroyed, still the one window, no dialog", !win.isDestroyed() && !win.isVisible() && state.window === win && BrowserWindow.getAllWindows().length === 1);
+    ok("after the close the tray icon is still there (app stays alive)", !tray.isDestroyed());
+    tray.emit("click"); await sleep(400);
+    ok("a click on the tray icon shows the window again", win.isVisible());
+    win.hide(); tray.emit("double-click"); await sleep(300);
+    ok("a double click on the tray icon shows it too", win.isVisible());
+    win.hide(); tpl[0].click(); await sleep(300);
+    ok("the menu item 'Open Hub' shows it", win.isVisible());
+    win.minimize(); await sleep(300); showHub(); await sleep(400);
+    ok("showHub restores a minimized window", !win.isMinimized() && win.isVisible());
+
+    // second start of the Hub: the OUTER runner starts a second electron.exe with the same profile when it sees the next line
+    win.hide();
+    const gotSecond = new Promise((resolve) => { const t = setTimeout(() => resolve(false), 25000); events.once("second-instance", () => { clearTimeout(t); resolve(true); }); });
+    console.log("READY_FOR_SECOND_INSTANCE");
+    const second = await gotSecond; await sleep(500);
+    ok("a second start of the Hub is reported to this one ('second-instance') and the hidden window is shown again", second === true && win.isVisible() && !win.isDestroyed());
+    console.log(`(window focused after the second start: ${win.isFocused()}; Windows may refuse focus to a background test)`);
+
+    // window destroyed (not just hidden): showHub re-creates it
+    win.destroy(); await sleep(300);
+    ok("after the window is destroyed state.window is empty and the tray is still there", state.window === null && !tray.isDestroyed());
+    const win2 = showHub();
+    for (let i = 0; i < 40 && !(win2.isVisible() && isHubUrl(win2.webContents.getURL(), port) && !win2.webContents.isLoading()); i++) await sleep(250);
+    ok("showHub re-creates the window on the Hub page and shows it", win2 !== win && win2.isVisible() && isHubUrl(win2.webContents.getURL(), port) && BrowserWindow.getAllWindows().length === 1);
+
+    // real quit: only when quitting is set does close really close
+    state.quitting = true; win2.close(); await sleep(500);
+    ok("with the app quitting, closing really closes the window (destroyed)", win2.isDestroyed() && BrowserWindow.getAllWindows().length === 0);
+    ok("with no window left the app is still alive (window-all-closed does not quit) and the tray is still there", !tray.isDestroyed());
   } catch (e) {
     ok(`self-test ran without an unexpected error (${e?.message || e})`, false);
   }
