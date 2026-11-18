@@ -1,0 +1,17 @@
+{
+  "name": "hub-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Hub as its own desktop window (Electron). It only wraps the local dashboard page at http://127.0.0.1:4780.",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "postinstall": "install-electron",
+    "start": "electron .",
+    "selftest": "node selftest.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "44.9.3"
+  }
+}

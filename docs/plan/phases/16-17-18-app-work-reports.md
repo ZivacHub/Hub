@@ -35,4 +35,37 @@ Phase 16: Edge window or Electron; closing the window hides or quits. Phase 17: 
 - Preview shown. Skills search: the skills catalogue has nothing for Electron or desktop apps; context7 for Electron 44 docs (Tray, minimize to tray via an empty window-all-closed listener, app.setLoginItemSettings, requestSingleInstanceLock). Repos looked at (search summaries only, nothing copied, licences unchecked): command-deck, EasyCC, ittop, AgentScope. Download size measured: electron-v44.9.3-win32-x64.zip 158,508,870 bytes; disk 28 GB free.
 - Decisions: D48 Electron, D50 download yes, D51 X hides to the icon, D52 programs hidden (no terminal panel), D53 .bat files folded into the Hub, projects stop with the Hub, start-up switch in the icon menu.
 - Hand-out list shown: 16.1 Opus (high), 16.2 Sonnet (medium; the icon file too), 16.3 Opus (high; touches start-up and starts programs), 16.4 Ivan. Real tests run one at a time (a window, the tray, start-up).
-- Ivan's go: not yet given.
+- Ivan's go: 2026-11-17, "Go, whole phase (Recommended)" (he also said: "We can continue to the next steps").
+
+## App contract (16.1)
+Written 2026-11-17 by the 16.1 helper. The Hub app is an Electron 44.9.3 program that only WRAPS the dashboard page; tools/dashboard/ is unchanged.
+
+**Files**
+- `tools/app/package.json` (+ `package-lock.json`): name hub-app, private, ESM, `main: main.mjs`, electron 44.9.3 exact (dev dependency). Scripts: `postinstall` = `install-electron` (Electron 44 no longer downloads its program by itself on `npm install`; this makes it do so), `start` = `electron .`, `selftest` = `node selftest.mjs`.
+- `tools/app/main.mjs`: the main process (functions below). `tools/app/lib/rules.mjs`: pure rules (port, server flags, Hub origin, claude:// allow-list). `tools/app/lib/server.mjs`: findOrStartServer, stopServer, pageAnswers (spawn and fetch injectable). `tools/app/selftest.mjs` (plain Node runner) and `tools/app/selftest-inapp.mjs` (runs inside the app in self-test mode only).
+- `Start Hub App.bat` (project root): opens the app (`start "" ...\electron.exe ...\tools\app`, console closes at once); if Electron is not installed it says "Run npm install in tools\app first." and waits.
+- Git-ignored: `tools/app/node_modules/` (about 383 MB, Electron program 369 MB), `tools/app/out/`, `logs/hub_app_server.log` (output of a dashboard the app started).
+
+**Environment variables** (nothing else from the environment or the command line reaches the server command)
+| Variable | Meaning |
+|---|---|
+| `HUB_PORT` | dashboard port, default 4780; not a whole number 1..65535 = plain error dialog. Passed on to a dashboard the app starts. |
+| `HUB_APP_ARGS` | extra dashboard flags, space separated; only `--word` or `--word=value` kept; `--open` and `--selftest` dropped. Example: `--demo`. |
+| `HUB_APP_SELFTEST` | `1` = self-test mode (only with HUB_PORT=4792 and HUB_APP_ARGS=--demo; own throw-away profile folder in the temp folder). |
+| `HUB_APP_DEVTOOLS` | `1` = developer tools allowed; otherwise they cannot be opened. |
+| `HUB_APP_SHOT` | self-test only: path of a PNG screenshot of the window. |
+
+**findOrStartServer** (lib/server.mjs) returns one of: `{ ok: true, ownsServer: false, child: null, url }` (GET http://127.0.0.1:PORT/ already answered 200 within 2 s: attach, start nothing); `{ ok: true, ownsServer: true, child, pid, url }` (started `node tools/dashboard/server.mjs <HUB_APP_ARGS>`, shell off, hidden, cwd = Hub folder, output to logs/hub_app_server.log, page answered; polled every 250 ms for up to 30 s); `{ ok: false, reason, message }` with reason `node-missing` ("Node.js was not found on this PC, so the Hub cannot start."), `no-server-file`, `exited`, `timeout`, `spawn-failed`; `message` is plain words shown in a dialog, never a stack trace. Quit stops the server ONLY when ownsServer is true, with `child.kill()` only (its own child processes are 16.3's business).
+
+**Security settings**: one window 1360x900 (smallest 380x600), title "Hub", no menu bar, background matching the page. webPreferences: contextIsolation true, nodeIntegration false, sandbox true, webSecurity true, no preload, webviewTag false, spellcheck false, devTools only with HUB_APP_DEVTOOLS=1. Navigation: the window only shows pages whose origin is exactly `http://127.0.0.1:PORT` (not localhost, not another port); will-navigate, will-redirect and sub-frame navigations elsewhere are refused; every new-window request is refused (also for Hub pages: one window). Webviews blocked. All permission requests and checks refused (notifications, microphone, camera, location, devices); downloads refused. The page's own Content-Security-Policy is untouched; normal mode injects no script or style (only the self-test runs checks inside the page).
+
+**claude:// allow-list**: a navigation or new-window request whose URL starts with exactly `claude://claude.ai/epitaxy/local_`, `claude://code/new?` or `claude://resume?session=` (with something after the prefix, no spaces or control characters, at most 4096 characters) is passed to `shell.openExternal` and the window stays on the Hub. Anything else that is not the Hub origin is refused and never opened. Known effect: the "Running · port N" link on a project card (opens another 127.0.0.1 port in a new tab in the browser) does nothing in the app; 16.2 or 16.3 decides whether such links go to the default browser.
+
+**Run**: double-click `Start Hub App.bat`, or `npm start` in tools/app. Install on a new PC: `npm install` in tools/app. Self-test: `node tools/app/selftest.mjs` (or `npm run selftest` in tools/app); exit code 0 = pass; a Hub window with sample data shows for about 20 s and closes itself; add `HUB_APP_SHOT=<path.png>` for a screenshot.
+
+**Hooks for 16.2 and 16.3** (all in main.mjs; `state` = `{ port, server, window, quitting, stopped }`)
+- `createWindow({ port, openExternal, showInactive })`: 16.2 adds the hide-on-close (D51) here, on the window's `close` event.
+- `installQuitHooks()`: today `window-all-closed` quits (16.1). 16.2 replaces that with "keep running in the tray"; the tray's Quit calls `app.quit()`, and `before-quit` then runs the stops.
+- `stopOwnedServer()`: the stop that runs on a real quit. 16.3 adds "stop every project the Hub started" (D53) next to it in the `before-quit` handler.
+- `startHub()`: start-up order (lock the session, findOrStartServer, createWindow). 16.2 adds `app.requestSingleInstanceLock()` before it and the tray after it; 16.3 adds the start-with-Windows switch (app.setLoginItemSettings) and the `--boot` behaviour.
+- `lockDownSession(session)` and `lockDownNavigation(webContents, { port, openExternal })`: reuse for any further window; do not loosen them.

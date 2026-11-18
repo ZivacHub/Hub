@@ -27,3 +27,7 @@ data/
 
 # helper-task records (D43): written by the Claude Code hooks, not for the public repo
 .claude/helpers/
+
+# Hub app (Electron, Phase 16): the 300+ MB program files and any build output stay off GitHub
+tools/app/node_modules/
+tools/app/out/
