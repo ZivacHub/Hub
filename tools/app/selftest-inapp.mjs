@@ -1,10 +1,12 @@
 // Runs INSIDE the Electron app when HUB_APP_SELFTEST=1 (started by tools/app/selftest.mjs; sample data on port 4792 only).
 // Prints one line per check, "OK name" or "FAIL name", then "SELFTEST DONE pass=N fail=M" and exits 0 (all passed) or 1.
 // It never opens a real chat: every claude:// hand-off goes to a fake opener that only records the link.
-import { app, BrowserWindow, screen, session } from "electron";
+// 16.3: the runner starts it with --hidden; the start-with-Windows switch uses a FAKE login item (the real setter is guarded);
+// it ends with a REAL quit (quitHub -> before-quit -> stop the projects the sample dashboard lists as started by the Hub -> stop the dashboard).
+import { app, BrowserWindow, screen } from "electron";
 import { createServer } from "node:http";
 import { EventEmitter } from "node:events";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { hubUrl, isHubOrigin as isHubUrl } from "./lib/rules.mjs";
 import { getTray, getTrayTemplate, setTrayMenuExtras, trayImage, windowImage } from "./lib/tray.mjs";
@@ -13,7 +15,8 @@ import { findOrStartServer, pageAnswers } from "./lib/server.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SELFTEST_PORT = 4792;
 
-export async function runSelfTest({ state, events, showHub, installTray, lockDownSession, createWindow, stopOwnedServer, port, serverArgs, hubDir, serverLog }) {
+export async function runSelfTest({ state, events, showHub, installTray, lockDownSession, createWindow, stopOwnedServer, port, serverArgs, hubDir, serverLog,
+  startHub, quitHub, plan, fakeLoginItems, appDir, appLog, oldEntryPath }) {
   let pass = 0, fail = 0;
   const ok = (name, cond) => { if (cond) pass++; else fail++; console.log(`${cond ? "OK" : "FAIL"} ${name}`); };
   const finish = async (code) => {
@@ -50,18 +53,38 @@ export async function runSelfTest({ state, events, showHub, installTray, lockDow
     const nm = await findOrStartServer({ port: 1, hubDir, spawnFn: enoentSpawn, fetchFn: deadFetch, pollMs: 20, waitMs: 3000 });
     ok("Node missing: plain message 'Node.js was not found on this PC, so the Hub cannot start.'", nm.ok === false && nm.reason === "node-missing" && nm.message === "Node.js was not found on this PC, so the Hub cannot start.");
 
-    // ---- 3. start the sample-data dashboard on 4792 (must not already be running there)
+    // ---- 3. start-up as the start-with-Windows entry does it (the runner passes --hidden): the real startHub() on 4792 with sample data
     ok(`port ${port} was free before the test`, !(await pageAnswers(port)));
-    lockDownSession(session.defaultSession);
-    const started = await findOrStartServer({ port, hubDir, serverArgs, logFile: serverLog });
-    state.server = started.ok ? started : null;
-    ok(`the app started the sample-data dashboard itself (ownsServer true, --demo, port ${port})`, started.ok === true && started.ownsServer === true && Number.isInteger(started.pid));
+    const opened = [];
+    state.openExternal = (url) => { opened.push(url); }; // every window (also the hidden one startHub makes) gets this fake opener
+    try { rmSync(appLog, { force: true }); } catch { /* none yet */ }
+    ok("the app was started with --hidden and read it from its command line (no visible window, server flags --demo --boot)", plan.hidden === true && plan.showWindow === false && JSON.stringify(plan.serverArgs) === '["--demo","--boot"]' && process.argv.includes("--hidden"));
+    const started = await startHub({ plan });
+    ok(`the app started the sample-data dashboard itself (ownsServer true, --demo, port ${port})`, started.ok === true && started.ownsServer === true && Number.isInteger(started.pid) && state.server === started);
     if (started.ok) console.log(`SERVER_PID ${started.pid}`);
     if (!started.ok) { console.log(`(reason: ${started.reason})`); clearTimeout(watchdog); return finish(1); }
+    ok("hidden start: the dashboard command carries --demo and --boot (sample data: --boot starts nothing there)", started.child.spawnargs.includes("--boot") && started.child.spawnargs.includes("--demo"));
+    const hw = state.window;
+    if (hw) { await new Promise((resolve) => { if (!hw.webContents.isLoading()) resolve(); else hw.webContents.once("did-finish-load", resolve); }); await sleep(1000); }
+    ok("hidden start: the Hub window exists (so Windows' session-end reaches it) but is NOT shown; the tray icon is there", !!hw && !hw.isDestroyed() && hw.isVisible() === false && BrowserWindow.getAllWindows().length === 1 && !!getTray() && !getTray().isDestroyed());
+
+    // ---- 3b. the icon menu (16.3) with the FAKE login item; the real setter is guarded and never reached
+    ok("self-test mode: the real app.setLoginItemSettings is replaced by a guard, and the menu read the FAKE login item", app.setLoginItemSettings?.selftestGuard === true && fakeLoginItems.gets.length > 0 && fakeLoginItems.sets.length === 0);
+    await state.startupMenu.refresh();
+    const menuLabels = () => (getTrayTemplate() || []).filter((i) => i.type !== "separator").map((i) => i.label);
+    const swItem = () => (getTrayTemplate() || []).find((i) => i.label === "Start with Windows");
+    ok("tray menu (16.3): Open Hub, Start with Windows (checkbox, unticked), Projects running: 3 (sample data), Quit Hub; no old-entry line", JSON.stringify(menuLabels()) === JSON.stringify(["Open Hub", "Start with Windows", "Projects running: 3", "Quit Hub"]) && swItem()?.type === "checkbox" && swItem().checked === false && !existsSync(oldEntryPath));
+    const wantArgs = [/\s/.test(appDir) ? `"${appDir}"` : appDir, "--hidden"];
+    swItem().click();
+    const s1 = fakeLoginItems.sets[0] || {};
+    ok("clicking 'Start with Windows' calls the FAKE setter once: openAtLogin true, path = this electron.exe, args = [app folder, --hidden], name Hub", fakeLoginItems.sets.length === 1 && s1.openAtLogin === true && s1.path === process.execPath && JSON.stringify(s1.args) === JSON.stringify(wantArgs) && s1.name === "Hub");
+    ok("after the click the menu shows it ticked; the app folder in args is the folder electron.exe runs", swItem()?.checked === true && wantArgs[0].replace(/"/g, "") === app.getAppPath());
+    swItem().click();
+    ok("a second click switches it off (fake): one more call, unticked", fakeLoginItems.sets.length === 2 && fakeLoginItems.sets[1].openAtLogin === false && swItem()?.checked === false);
+    console.log(`(the real start-up entry would be: "${process.execPath}" ${wantArgs.join(" ")} ; never written by this test)`);
+    hw?.destroy(); await sleep(300); // the rest of the test uses its own visible test window
 
     // ---- 4. the window
-    const opened = [];
-    state.openExternal = (url) => { opened.push(url); }; // showHub() re-creates the window with this fake opener
     const win = createWindow({ port, openExternal: state.openExternal, showInactive: true });
     const tray = installTray();
     await new Promise((resolve) => { if (!win.webContents.isLoading()) resolve(); else win.webContents.once("did-finish-load", resolve); });
@@ -151,11 +174,13 @@ export async function runSelfTest({ state, events, showHub, installTray, lockDow
     console.log(`(tray bounds as Windows reports them: ${JSON.stringify(tray.getBounds())}; the icon sits in the hidden-icons area, a test cannot see it)`);
     const tpl = getTrayTemplate() || [];
     const labels = tpl.filter((i) => i.type !== "separator").map((i) => i.label);
-    ok("the tray menu has exactly 'Open Hub' and 'Quit Hub' (a separator between)", JSON.stringify(labels) === JSON.stringify(["Open Hub", "Quit Hub"]) && tpl.length === 3 && tpl[1].type === "separator");
+    ok("the tray menu is 'Open Hub', separator, the 16.3 lines, separator, 'Quit Hub'", JSON.stringify(labels) === JSON.stringify(["Open Hub", "Start with Windows", "Projects running: 3", "Quit Hub"]) && tpl.length === 6 && tpl[1].type === "separator" && tpl[4].type === "separator");
     setTrayMenuExtras([{ label: "Extra item", type: "checkbox", checked: false }]);
     ok("setTrayMenuExtras puts items between Open Hub and Quit Hub", JSON.stringify((getTrayTemplate() || []).filter((i) => i.type !== "separator").map((i) => i.label)) === JSON.stringify(["Open Hub", "Extra item", "Quit Hub"]));
     setTrayMenuExtras([]);
     ok("setTrayMenuExtras([]) gives the plain menu back", (getTrayTemplate() || []).length === 3);
+    state.startupMenu.redraw();
+    ok("the 16.3 lines come back (redraw), still nothing written to the start-up entry beyond the two test clicks", (getTrayTemplate() || []).length === 6 && fakeLoginItems.sets.length === 2);
     ok("the window is visible before the close test and the app is not quitting", win.isVisible() && state.quitting === false);
 
     win.close(); await sleep(400); // what the X button and Alt+F4 do
@@ -189,6 +214,32 @@ export async function runSelfTest({ state, events, showHub, installTray, lockDow
     state.quitting = true; win2.close(); await sleep(500);
     ok("with the app quitting, closing really closes the window (destroyed)", win2.isDestroyed() && BrowserWindow.getAllWindows().length === 0);
     ok("with no window left the app is still alive (window-all-closed does not quit) and the tray is still there", !tray.isDestroyed());
+
+    // ---- 9. a REAL quit through the app (D53): before-quit -> stop the projects the dashboard started -> stop the own dashboard
+    // The sample dashboard lists clip-studio and manager as started by the Hub; it answers every POST that passed the Origin and
+    // token checks with "Sample data mode: the buttons are switched off." (so that answer also proves the guarded call got through).
+    clearTimeout(watchdog);
+    const quitWatch = setTimeout(() => { ok("the real quit finished within 40 seconds", false); console.log(`SELFTEST DONE pass=${pass} fail=${fail}`); app.exit(1); }, 40000);
+    const t0 = Date.now();
+    state.onQuitDone = async (r) => {
+      clearTimeout(quitWatch);
+      const ms = Date.now() - t0;
+      const p = r?.projects || {};
+      const SAMPLE = "Sample data mode: the buttons are switched off.";
+      ok("real quit: stopHubProjects asked to stop exactly the projects with startedByHub true (clip-studio, manager)", JSON.stringify(p.ids) === JSON.stringify(["clip-studio", "manager"]));
+      ok("real quit: the sample dashboard's refusal is handled (both counted as not stopped with its message, no error, no time-out)", p.stopped?.length === 0 && p.failed?.length === 2 && p.failed.every((f) => f.error === SAMPLE) && p.timedOut === false && r.timedOut === false);
+      let logText = ""; try { logText = readFileSync(appLog, "utf8"); } catch { /* none */ }
+      ok("real quit: one log line per project in the app log (self-test log in the temp folder)", logText.includes(`stop clip-studio failed: ${SAMPLE}`) && logText.includes(`stop manager failed: ${SAMPLE}`) && logText.includes("start hidden (--hidden), own dashboard with --boot"));
+      let gone = false;
+      for (let i = 0; i < 20 && !gone; i++) { gone = !(await pageAnswers(port, { timeoutMs: 500 })); if (!gone) await sleep(250); }
+      ok("the dashboard the app started is stopped when the app quits (port no longer answers)", r.serverStopped === true && gone);
+      ok(`real quit: projects first, then the dashboard, all within the limit (${ms} ms), the tray icon is gone`, ms < 30000 && !getTray() && state.quitting === true);
+      ok("real quit: the real start-up setter was never reached (only the 2 fake test clicks)", fakeLoginItems.sets.length === 2 && app.setLoginItemSettings?.selftestGuard === true);
+      console.log(`SELFTEST DONE pass=${pass} fail=${fail}`);
+      app.exit(fail ? 1 : 0);
+    };
+    quitHub(); // the tray's "Quit Hub": app.quit() -> before-quit runs the sequence, then calls onQuitDone
+    return;
   } catch (e) {
     ok(`self-test ran without an unexpected error (${e?.message || e})`, false);
   }

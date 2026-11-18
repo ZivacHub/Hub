@@ -69,7 +69,7 @@ export async function findOrStartServer({
 
 const nodeMissing = () => ({ ok: false, reason: "node-missing", message: "Node.js was not found on this PC, so the Hub cannot start." });
 
-/** Stop a dashboard process the app started itself (child.kill only; its own child processes are step 16.3's business). Resolves when it has exited or after waitMs. */
+/** Stop a dashboard process the app started itself (child.kill only; the projects it started are stopped before, through its own API: lib/projects.mjs). Resolves when it has exited or after waitMs. */
 export function stopServer(child, { waitMs = 5000 } = {}) {
   return new Promise((resolve) => {
     if (!child || child.exitCode !== null || child.signalCode !== null) return resolve(true);

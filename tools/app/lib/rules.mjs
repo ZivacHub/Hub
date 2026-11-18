@@ -12,7 +12,8 @@ export const CHAT_LINK_PREFIXES = Object.freeze([
 ]);
 
 // Server flags that make no sense inside the app: --open would open a browser tab, --selftest picks a random port.
-const DROPPED_FLAGS = new Set(["--open", "--selftest"]);
+// --boot (start the projects ticked "Start with PC") is added only by the app itself, in --hidden mode (lib/startup.mjs startPlan).
+const DROPPED_FLAGS = new Set(["--open", "--selftest", "--boot"]);
 const FLAG = /^--[a-z][a-z0-9-]*(=[A-Za-z0-9_-]+)?$/;
 
 /** HUB_PORT -> a port number (default 4780). Returns null for anything that is not a whole number 1..65535. */
@@ -24,7 +25,7 @@ export function parsePort(value) {
   return n >= 1 && n <= 65535 ? n : null;
 }
 
-/** HUB_APP_ARGS -> a list of server flags. Space separated; only "--word" or "--word=value" survive; --open and --selftest are dropped. */
+/** HUB_APP_ARGS -> a list of server flags. Space separated; only "--word" or "--word=value" survive; --open, --selftest and --boot are dropped. */
 export function parseServerArgs(value) {
   if (!value) return [];
   return String(value).split(/\s+/).filter((a) => a && FLAG.test(a) && !DROPPED_FLAGS.has(a.split("=")[0]));
