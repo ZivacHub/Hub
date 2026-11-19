@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 import { isAllowedChatLink, isHubOrigin, isOtherLocalPortLink, parsePort, parseServerArgs } from "./lib/rules.mjs";
 import { buildTrayTemplate } from "./lib/traymenu.mjs";
 import { findOrStartServer, pageAnswers } from "./lib/server.mjs";
-import { countRunning, quitSequence, stopHubProjects } from "./lib/projects.mjs";
-import { loginItemOptions, makeStartupMenu, oldStartupEntryPath, parseAppFlags, startPlan } from "./lib/startup.mjs";
+import { countRunning, countWaiting, quitSequence, stopHubProjects } from "./lib/projects.mjs";
+import { loginItemOptions, makeStartupMenu, oldStartupEntryPath, parseAppFlags, startPlan, waitingLabel } from "./lib/startup.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ELECTRON = join(HERE, "node_modules", "electron", "dist", "electron.exe");
@@ -177,6 +177,20 @@ ok("rules: the Hub's own port, wrong scheme, low or missing port, credentials, o
   count = null; await m.refresh();
   ok("menu: dashboard not answering -> 'Projects running: unknown (dashboard not answering)'", labels()[1] === "Projects running: unknown (dashboard not answering)");
   m.stop();
+  // "Waiting on you" line (Ivan 2026-11-19): decisions + chats that need him, from fake answers only
+  ok("waiting label: wording for nothing / one / many / unknown / no counter", waitingLabel({ decisions: 0, chats: 0 }) === "Waiting on you: nothing" && waitingLabel({ decisions: 1, chats: 0 }) === "Waiting on you: 1 decision" && waitingLabel({ decisions: 2, chats: 1 }) === "Waiting on you: 2 decisions, 1 chat" && waitingLabel({ decisions: 0, chats: 3 }) === "Waiting on you: 3 chats" && waitingLabel(null) === "Waiting on you: unknown (dashboard not answering)" && waitingLabel(undefined) === null);
+  const jsonRes = (o) => ({ status: 200, json: async () => o, body: null });
+  const fakeFetch = async (url) => jsonRes(String(url).endsWith("/api/projects") ? { projects: [{ decisionsWaiting: 2 }, { decisionsWaiting: 0 }, { decisionsWaiting: 1 }, { decisionsWaiting: "x" }] } : { items: [{}, {}] });
+  const w = await countWaiting({ port: 4780, fetchFn: fakeFetch });
+  ok("countWaiting: sums the decisions of every card and counts the chats that need him (fake dashboard)", w && w.decisions === 3 && w.chats === 2);
+  ok("countWaiting: a dashboard that does not answer -> null", (await countWaiting({ port: 4780, fetchFn: async () => { throw new Error("down"); } })) === null);
+  let wnow = { decisions: 1, chats: 2 }, extras2 = null;
+  const m2 = makeStartupMenu({ loginItems: fake, execPath: exe, appDir, oldEntryPath: null, exists: () => false, countFn: async () => 1, waitFn: async () => wnow, setExtras: (x) => { extras2 = x; }, refreshMs: 60 });
+  m2.start(); await sleep(40);
+  ok("menu with a counter: 'Waiting on you: 1 decision, 2 chats' is a greyed-out line under 'Projects running'", extras2?.map((i) => i.label).join("|") === "Start with Windows|Projects running: 1|Waiting on you: 1 decision, 2 chats" && extras2[2].enabled === false);
+  wnow = { decisions: 0, chats: 0 }; await sleep(150);
+  ok("menu with a counter: the line follows the timer (now 'nothing')", extras2?.at(-1).label === "Waiting on you: nothing");
+  m2.stop();
   ok("menu: a path with spaces is quoted on the Run line, the same for get and set", JSON.stringify(loginItemOptions({ execPath: exe, appDir: "C:\\My Hub\\tools\\app" }).args) === JSON.stringify(['"C:\\My Hub\\tools\\app"', "--hidden"]));
   ok("menu: the old entry is looked for at %APPDATA%\\...\\Startup\\Hub Dashboard.lnk (read-only check)", oldStartupEntryPath({ APPDATA: "C:\\Users\\x\\AppData\\Roaming" }) === "C:\\Users\\x\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Hub Dashboard.lnk" && oldStartupEntryPath({}) === null);
   // the real setter: in the code it is reached only from the non-self-test branch, and no helper file calls it

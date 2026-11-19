@@ -73,7 +73,7 @@ export async function runSelfTest({ state, events, showHub, installTray, lockDow
     await state.startupMenu.refresh();
     const menuLabels = () => (getTrayTemplate() || []).filter((i) => i.type !== "separator").map((i) => i.label);
     const swItem = () => (getTrayTemplate() || []).find((i) => i.label === "Start with Windows");
-    ok("tray menu (16.3): Open Hub, Start with Windows (checkbox, unticked), Projects running: 3 (sample data), Quit Hub; no old-entry line", JSON.stringify(menuLabels()) === JSON.stringify(["Open Hub", "Start with Windows", "Projects running: 3", "Quit Hub"]) && swItem()?.type === "checkbox" && swItem().checked === false && !existsSync(oldEntryPath));
+    ok("tray menu (16.3): Open Hub, Start with Windows (checkbox, unticked), Projects running: 3 (sample data), Waiting on you: <sample numbers>, Quit Hub; no old-entry line", menuLabels().length === 5 && JSON.stringify([menuLabels()[0], menuLabels()[1], menuLabels()[2], menuLabels()[4]]) === JSON.stringify(["Open Hub", "Start with Windows", "Projects running: 3", "Quit Hub"]) && /^Waiting on you: (nothing|\d+ (decision|chat))/.test(menuLabels()[3]) && swItem()?.type === "checkbox" && swItem().checked === false && !existsSync(oldEntryPath));
     const wantArgs = [/\s/.test(appDir) ? `"${appDir}"` : appDir, "--hidden"];
     swItem().click();
     const s1 = fakeLoginItems.sets[0] || {};
@@ -174,13 +174,13 @@ export async function runSelfTest({ state, events, showHub, installTray, lockDow
     console.log(`(tray bounds as Windows reports them: ${JSON.stringify(tray.getBounds())}; the icon sits in the hidden-icons area, a test cannot see it)`);
     const tpl = getTrayTemplate() || [];
     const labels = tpl.filter((i) => i.type !== "separator").map((i) => i.label);
-    ok("the tray menu is 'Open Hub', separator, the 16.3 lines, separator, 'Quit Hub'", JSON.stringify(labels) === JSON.stringify(["Open Hub", "Start with Windows", "Projects running: 3", "Quit Hub"]) && tpl.length === 6 && tpl[1].type === "separator" && tpl[4].type === "separator");
+    ok("the tray menu is 'Open Hub', separator, the 16.3 lines (incl. Waiting on you), separator, 'Quit Hub'", labels.length === 5 && labels[0] === "Open Hub" && labels[4] === "Quit Hub" && labels[2] === "Projects running: 3" && /^Waiting on you: /.test(labels[3]) && tpl.length === 7 && tpl[1].type === "separator" && tpl[5].type === "separator");
     setTrayMenuExtras([{ label: "Extra item", type: "checkbox", checked: false }]);
     ok("setTrayMenuExtras puts items between Open Hub and Quit Hub", JSON.stringify((getTrayTemplate() || []).filter((i) => i.type !== "separator").map((i) => i.label)) === JSON.stringify(["Open Hub", "Extra item", "Quit Hub"]));
     setTrayMenuExtras([]);
     ok("setTrayMenuExtras([]) gives the plain menu back", (getTrayTemplate() || []).length === 3);
     state.startupMenu.redraw();
-    ok("the 16.3 lines come back (redraw), still nothing written to the start-up entry beyond the two test clicks", (getTrayTemplate() || []).length === 6 && fakeLoginItems.sets.length === 2);
+    ok("the 16.3 lines come back (redraw), still nothing written to the start-up entry beyond the two test clicks", (getTrayTemplate() || []).length === 7 && fakeLoginItems.sets.length === 2);
     ok("the window is visible before the close test and the app is not quitting", win.isVisible() && state.quitting === false);
 
     win.close(); await sleep(400); // what the X button and Alt+F4 do

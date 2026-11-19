@@ -45,11 +45,24 @@ export function oldStartupEntryPath(env = process.env) {
 }
 
 /** The extra tray items (between "Open Hub" and "Quit Hub"). */
-export function buildStartupExtras({ startWithWindows, running, oldEntry, onToggle }) {
+/** "Waiting on you: 2 decisions, 1 chat" / "Waiting on you: nothing" / null (no line) when the menu has no counter for it. */
+export function waitingLabel(waiting) {
+  if (waiting === undefined) return null;
+  if (waiting === null) return "Waiting on you: unknown (dashboard not answering)";
+  const part = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  const bits = [];
+  if (waiting.decisions > 0) bits.push(part(waiting.decisions, "decision"));
+  if (waiting.chats > 0) bits.push(part(waiting.chats, "chat"));
+  return `Waiting on you: ${bits.length ? bits.join(", ") : "nothing"}`;
+}
+
+export function buildStartupExtras({ startWithWindows, running, waiting, oldEntry, onToggle }) {
   const items = [
     { id: "start-with-windows", label: "Start with Windows", type: "checkbox", checked: !!startWithWindows, click: () => onToggle() },
     { id: "projects-running", label: running === null || running === undefined ? "Projects running: unknown (dashboard not answering)" : `Projects running: ${running}`, enabled: false },
   ];
+  const wl = waitingLabel(waiting);
+  if (wl) items.push({ id: "waiting-on-you", label: wl, enabled: false });
   if (oldEntry) items.push({ id: "old-startup-entry", label: OLD_ENTRY_TEXT, enabled: false });
   return items;
 }
@@ -59,9 +72,9 @@ export function buildStartupExtras({ startWithWindows, running, oldEntry, onTogg
  * Electron calls in normal use, a fake in every test). countFn() -> number | null. exists(path) -> boolean. setExtras(items).
  * The switch is written ONLY by toggle() (a click by Ivan); refresh() only reads.
  */
-export function makeStartupMenu({ loginItems, execPath, appDir, oldEntryPath, exists, countFn, setExtras, log = () => {}, refreshMs = MENU_REFRESH_MS }) {
+export function makeStartupMenu({ loginItems, execPath, appDir, oldEntryPath, exists, countFn, waitFn, setExtras, log = () => {}, refreshMs = MENU_REFRESH_MS }) {
   const opts = loginItemOptions({ execPath, appDir });
-  let lastKey = null, timer = null, running = null, busy = null;
+  let lastKey = null, timer = null, running = null, waiting = waitFn ? null : undefined, busy = null;
 
   function isOn() {
     try {
@@ -72,14 +85,18 @@ export function makeStartupMenu({ loginItems, execPath, appDir, oldEntryPath, ex
   }
   function oldEntry() { try { return !!oldEntryPath && exists(oldEntryPath); } catch { return false; } }
   function render() {
-    const view = { startWithWindows: isOn(), running, oldEntry: oldEntry() };
+    const view = { startWithWindows: isOn(), running, waiting, oldEntry: oldEntry() };
     const key = JSON.stringify(view);
     if (key !== lastKey) { lastKey = key; setExtras(buildStartupExtras({ ...view, onToggle: () => toggle() })); }
     return view;
   }
   async function refresh() {
     if (busy) return busy;
-    busy = (async () => { try { running = await countFn(); } catch { running = null; } return render(); })();
+    busy = (async () => {
+      try { running = await countFn(); } catch { running = null; }
+      if (waitFn) { try { waiting = await waitFn(); } catch { waiting = null; } }
+      return render();
+    })();
     try { return await busy; } finally { busy = null; }
   }
   function toggle() {

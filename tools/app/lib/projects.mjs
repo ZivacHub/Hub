@@ -39,6 +39,20 @@ export async function countRunning({ port, fetchFn = globalThis.fetch, timeoutMs
 }
 
 /**
+ * What waits on Ivan right now: { decisions, chats } or null when the dashboard does not answer. Read-only.
+ * decisions = the "decisions waiting" of every project card (GET /api/projects), chats = chats that need him (GET /api/needs-you).
+ */
+export async function countWaiting({ port, fetchFn = globalThis.fetch, timeoutMs = 3000 }) {
+  try {
+    const origin = hubOrigin(port);
+    const [p, n] = await Promise.all([getJson(fetchFn, `${origin}/api/projects`, timeoutMs), getJson(fetchFn, `${origin}/api/needs-you`, timeoutMs)]);
+    const decisions = (Array.isArray(p?.projects) ? p.projects : []).reduce((s, x) => s + (Number.isInteger(x?.decisionsWaiting) && x.decisionsWaiting > 0 ? x.decisionsWaiting : 0), 0);
+    const chats = Array.isArray(n?.items) ? n.items.length : 0;
+    return { decisions, chats };
+  } catch { return null; }
+}
+
+/**
  * Stop every project the dashboard on PORT started (startedByHub true), one after the other, all within limitMs.
  * Never throws. log(text) gets one line per project (and one line when there is nothing to do or the dashboard is gone).
  * Returns { ok, reason, ids, stopped: [id], failed: [{ id, error }], timedOut }.

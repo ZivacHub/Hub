@@ -13,7 +13,7 @@ import { EventEmitter } from "node:events";
 import { hubUrl, isAllowedChatLink, isHubOrigin, isOtherLocalPortLink, parsePort, parseServerArgs } from "./lib/rules.mjs";
 import { findOrStartServer, stopServer } from "./lib/server.mjs";
 import { createTray, destroyTray, getTray, setTrayMenuExtras, windowImage } from "./lib/tray.mjs";
-import { appendAppLog, countRunning, quitSequence, stopHubProjects, STOP_LIMIT_MS } from "./lib/projects.mjs";
+import { appendAppLog, countRunning, countWaiting, quitSequence, stopHubProjects, STOP_LIMIT_MS } from "./lib/projects.mjs";
 import { makeStartupMenu, oldStartupEntryPath, parseAppFlags, startPlan } from "./lib/startup.mjs";
 export { setTrayMenuExtras }; // 16.3: insert menu items (Start with Windows, projects) into the background icon's menu
 
@@ -151,7 +151,7 @@ export function installStartupMenu() {
   if (state.startupMenu) return state.startupMenu;
   state.startupMenu = makeStartupMenu({
     loginItems, execPath: process.execPath, appDir: APP_DIR, oldEntryPath: OLD_ENTRY, exists: existsSync,
-    countFn: () => countRunning({ port: state.port }), setExtras: setTrayMenuExtras, log: (t) => appendAppLog(APP_LOG, t),
+    countFn: () => countRunning({ port: state.port }), waitFn: () => countWaiting({ port: state.port }), setExtras: setTrayMenuExtras, log: (t) => appendAppLog(APP_LOG, t),
   });
   state.startupMenu.start();
   getTray()?.on("mouse-enter", () => { state.startupMenu?.refresh(); }); // a fresh count just before the menu is opened
