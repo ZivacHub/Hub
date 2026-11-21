@@ -7,6 +7,11 @@
 // that stays alive for the phone. `--bg` reads nothing from standard input and ignores `--session-id` (real runs
 // 2026-11-16), so for these chats ONLY the task goes on the argument list, after `--` (still no shell), and the session id
 // is found in `claude agents --json` by the chat's unique name. Off = `claude stop`, then wait until the list shows no pid.
+// Phase 19 (19.9 fork, 19.10 pictures and files; contract docs/plan/phases/19-attachments-fork.md): an answer or a start may
+// carry upload ids from lib/uploads.mjs. Pictures and PDFs go as image / document blocks through the stream route (ONE JSON
+// line on standard input, `--input-format stream-json --output-format stream-json --verbose`, tests T26 / T29); text files go
+// as `@<path>` in the text on the normal route (T28). A fork (`--resume <old> --fork-session --session-id <new>`, T32) makes a
+// NEW Hub chat that starts as a copy; the old chat's saved file is only read by Claude, never written.
 //   node tools/dashboard/lib/chats.mjs --selftest            pretend claude: fast, uses no Claude allowance
 //   node tools/dashboard/lib/chats.mjs --selftest --real     also ONE real round trip (cheapest model, all tools off)
 //   node tools/dashboard/lib/chats.mjs --selftest --real-rc  also the real Remote Control checks (cheapest model, all tools off)
@@ -16,6 +21,7 @@ import { join, dirname, resolve, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir, homedir } from "node:os";
 import { randomBytes, randomUUID } from "node:crypto";
+import { makeUploads } from "./uploads.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HUB = join(HERE, "..", "..", "..");
@@ -32,6 +38,28 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const BG_ID_RE = /^[0-9a-f]{8}$/; // the short id `claude --bg` prints and `claude stop` takes (= the first 8 characters of the session id)
 export const RC_ANSWER_REFUSED = "Remote Control is on for this chat: answer it on your phone, or turn Remote Control off here first.";
 export const RC_ON_REFUSED = "Remote Control can only be switched on when the chat is started."; // kept for the page; not used while switching on is proven to work
+/** Phase 19: plain-words refusals and the fork's fixed first message (all in docs/plan/phases/19-attachments-fork.md). */
+export const ATTACH_MESSAGES = {
+  notList: "Attachments must be a list of attached files.",
+  readFailed: "One of the attached files could not be read, so nothing was sent. Attach it again.",
+  noRc: "Files can't be sent to a chat that starts with Remote Control. Start it without Remote Control, or send the files in a later message.",
+  workflow: "A new chat that starts with pick up (the project workflow) can't carry files in its first message. Start the chat first and attach the files to your next message, or tick \"Skip the project workflow\".",
+  slash: "Files can't go with a / command. Send the command and the files as two messages.",
+};
+export const FORK_MESSAGES = {
+  rc: "Remote Control is on for this chat. Turn it off first, then make the copy.",
+  working: "This chat is still working. Wait for it to finish before making a copy.",
+  closing: "The stopped chat is still closing. Try again in a few seconds.",
+  switching: "This chat is being switched. Try again in a few seconds.",
+  noSession: "This chat has no Claude session to copy.",
+  cantCheck: "Can't check whether the chat is open elsewhere, so no copy was made.",
+  open: "This chat is open somewhere else (the Claude app or a terminal), so no copy was made. Close it there first.",
+  name: "The name must be text.",
+  sameId: "Claude continued the old chat instead of making a copy, so this copy has no chat of its own.",
+};
+/** What a fork sends when no first message is given: `claude -p` needs one, and "Continue." could restart the old task. */
+export const FORK_FIRST_MESSAGE = "This chat is a copy of an earlier chat, made in the Hub. Reply with one short sentence saying you are ready. Do not do anything else yet.";
+const EXT_OF = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "application/pdf": "pdf", "text/plain": "txt", "text/markdown": "md", "text/csv": "csv", "application/json": "json" };
 
 const clip = (s, n) => { const t = String(s ?? ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 const pad = (n) => String(n).padStart(2, "0");
@@ -77,6 +105,8 @@ export function makeChats(opts = {}) {
   const statePath = join(dataDir, "hub_chats.json");
   const turnDir = join(dataDir, "chats");
   const image = (() => { const b = basename(prog[0]).toLowerCase(); return process.platform === "win32" && !extname(b) ? b + ".exe" : b; })();
+  const uploads = opts.uploads || makeUploads(); // Phase 19: the attached files (the server passes the same store it saves into)
+  try { uploads.cleanup(); } catch { /* an old file can wait for the next start */ }
 
   const listOpen = opts.listOpen || (() => new Promise((done, fail) => {
     execFile(prog[0], [...prog.slice(1), "agents", "--json"], { timeout: 5000, windowsHide: true, maxBuffer: 8 << 20 }, (err, stdout) => {
@@ -151,7 +181,12 @@ export function makeChats(opts = {}) {
   function applyTurn(c) {
     const { result: r, lines } = readResult(c.turnFile);
     c.lastTurnAt = new Date().toISOString();
+    const forkTurn = c.forkPending === true; delete c.forkPending;
     if (!r) { c.state = "failed"; c.lastError = clip(lines.length ? lines[lines.length - 1] : "The chat ended without a reply.", 600); c.refused = []; return false; }
+    if (forkTurn && r.session_id === c.forkedFromSession) { // never adopt the old chat's id: answering would write into the old chat
+      c.state = "failed"; c.lastError = FORK_MESSAGES.sameId; c.sessionId = null; c.refused = []; log("chat-fork", c.id, c.project, "failed: no copy was made");
+      return true;
+    }
     if (typeof r.session_id === "string" && UUID_RE.test(r.session_id)) {
       if (c.sessionId && r.session_id !== c.sessionId) log("chat-session", c.id, c.project, "Claude reported another session id; using it");
       c.sessionId = r.session_id;
@@ -183,20 +218,24 @@ export function makeChats(opts = {}) {
   const busyMessage = () => `${maxWorking === 2 ? "Two" : maxWorking} chats are already working. Wait for one to finish.`;
 
   // ---------- one turn ----------
-  function turnArgs(c, first) {
+  /** `o.stream`: the turn carries image / document blocks (T26: stream-json input needs stream-json output and --verbose).
+   *  `o.forkFrom`: the old session id this NEW chat starts as a copy of (T32: the old saved file is only read). */
+  function turnArgs(c, first, o = {}) {
     const a = ["-p", "--output-format", "json", "--permission-mode", PERMISSION_MODE, "--permission-prompts", "none"];
-    if (first) a.push("--session-id", c.sessionId, "--name", c.name); else a.push("--resume", c.sessionId);
+    if (o.stream) a.splice(1, 2, "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"); // lib/appanswer.mjs's self-test reads the line above
+    if (o.forkFrom) a.push("--resume", o.forkFrom, "--fork-session", "--session-id", c.sessionId, "--name", c.name);
+    else if (first) a.push("--session-id", c.sessionId, "--name", c.name); else a.push("--resume", c.sessionId);
     if (c.model) a.push("--model", c.model);
     if (c.noTools) a.push("--tools", ""); // last: --tools takes a list
     return a;
   }
-  function launch(c, text, first) {
+  function launch(c, text, first, o = {}) {
     mkdirSync(turnDir, { recursive: true });
     const file = join(turnDir, `${c.id}-t${(c.turns || 0) + 1}.log`);
     const fd = openSync(file, "w");
     let child;
     try {
-      child = spawn(prog[0], [...prog.slice(1), ...turnArgs(c, first)], { cwd: join(root, c.project), env: process.env, detached: true, windowsHide: true, shell: false, stdio: ["pipe", fd, fd] });
+      child = spawn(prog[0], [...prog.slice(1), ...turnArgs(c, first, o)], { cwd: join(root, c.project), env: process.env, detached: true, windowsHide: true, shell: false, stdio: ["pipe", fd, fd] });
     } catch (err) { closeSync(fd); return { error: "Could not start Claude: " + err.message }; }
     closeSync(fd);
     child.on("error", (err) => log("chat-error", c.id, c.project, logSafe(err.code || err.message, 60)));
@@ -206,6 +245,36 @@ export function makeChats(opts = {}) {
     child.unref();
     return { pid: child.pid, file };
   }
+  // ---------- attached files (Phase 19) ----------
+  /** The upload records of one message ({ files: [] } when there are none), or { error }. Only files saved for `chatKey`. */
+  function attachList(attachments, chatKey) {
+    if (attachments === undefined || attachments === null) return { files: [] };
+    if (!Array.isArray(attachments)) return { error: ATTACH_MESSAGES.notList };
+    if (!attachments.length) return { files: [] };
+    const r = uploads.resolve({ chatKey, uploadIds: attachments });
+    return r.ok ? { files: r.files } : { error: r.error };
+  }
+  const atRef = (p) => { const f = String(p).replace(/\\/g, "/"); return /\s/.test(f) ? `@"${f}"` : `@${f}`; };
+  /** What goes on standard input. No pictures / PDFs: the text (text files as `@<path>` lines, T28). Otherwise ONE JSON line
+   *  with the image / document blocks first and the text last (T26, T29). Every file is read here, right before sending. */
+  function buildMessage(text, files) {
+    const blocks = files.filter((f) => f.kind === "image" || f.kind === "pdf");
+    const texts = files.filter((f) => f.kind === "text");
+    for (const f of texts) { try { if (!statSync(f.path).isFile()) return { error: ATTACH_MESSAGES.readFailed }; } catch { return { error: ATTACH_MESSAGES.readFailed }; } }
+    const at = texts.map((f) => atRef(f.path)).join("\n");
+    const body = at ? (text ? text + "\n\n" + at : at) : text;
+    if (!blocks.length) return { input: body, stream: false };
+    const content = [];
+    for (const f of blocks) {
+      let data;
+      try { const b = readFileSync(f.path); if (b.length !== f.bytes || !b.length) throw new Error("changed"); data = b.toString("base64"); } catch { return { error: ATTACH_MESSAGES.readFailed }; }
+      content.push({ type: f.kind === "image" ? "image" : "document", source: { type: "base64", media_type: f.kind === "image" ? f.mediaType : "application/pdf", data } });
+    }
+    if (body) content.push({ type: "text", text: body });
+    return { input: JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n", stream: true };
+  }
+  const filesNote = (files) => (files.length ? ` files ${files.map((f) => EXT_OF[f.mediaType] || "file").join(",")}` : ""); // the log names extensions only
+
   function beginTurn(c, l) {
     c.state = "working"; c.pid = l.pid; c.turnFile = l.file; c.turns = (c.turns || 0) + 1;
     c.lastTurnAt = new Date().toISOString(); c.lastError = ""; c.refused = [];
@@ -389,14 +458,22 @@ export function makeChats(opts = {}) {
   }
 
   // ---------- the actions ----------
-  async function start({ project, task, model, remoteControl, workflow } = {}) {
+  async function start({ project, task, model, remoteControl, workflow, attachments } = {}) {
     const pe = projectError(project);
     if (pe) return fail("chat-start", "-", project, pe);
     const t = cleanText(task);
-    if (!textOk(t)) return fail("chat-start", "-", project, `The task must be 1 to ${MAX_TEXT} characters.`);
+    const hasFiles = Array.isArray(attachments) && attachments.length > 0; // then the task may be empty (Phase 19)
+    if (!(textOk(t) || (hasFiles && t.length === 0))) return fail("chat-start", "-", project, `The task must be 1 to ${MAX_TEXT} characters.`);
     const m = model === undefined || model === null || model === "" ? null : model;
     if (m !== null && !MODELS.includes(m)) return fail("chat-start", "-", project, `Unknown model. Pick one of: ${MODELS.join(", ")}.`);
     if (remoteControl !== undefined && remoteControl !== null && typeof remoteControl !== "boolean") return fail("chat-start", "-", project, "Remote Control must be on or off.");
+    const att = attachList(attachments, "new"); // files for a chat that does not exist yet are saved under the key "new"
+    if (att.error) return fail("chat-start", "-", project, att.error);
+    if (att.files.length) {
+      if (remoteControl === true) return fail("chat-start", "-", project, ATTACH_MESSAGES.noRc); // --bg takes the task on the argument list only (T17)
+      if (t.startsWith("/")) return fail("chat-start", "-", project, ATTACH_MESSAGES.slash);
+      if (workflow !== false) return fail("chat-start", "-", project, ATTACH_MESSAGES.workflow); // "/pickup" inside a stream message is not run as a command (real probe 2026-11-21)
+    }
     if (remoteControl === true && Object.values(readState().chats).some((x) => x.remoteControl && x.sessionId)) await refreshOpen(); // busy Remote Control chats count
     const st = settle(readState());
     if (working(st) >= maxWorking) return fail("chat-start", "-", project, busyMessage());
@@ -410,11 +487,13 @@ export function makeChats(opts = {}) {
     };
     while (st.chats[c.id]) c.id = newId();
     if (remoteControl === true) return startBg(st, c, first);
-    const l = launch(c, first, true);
+    const msg = buildMessage(first, att.files);
+    if (msg.error) return fail("chat-start", "-", project, msg.error);
+    const l = launch(c, msg.input, true, { stream: msg.stream });
     if (l.error) return fail("chat-start", c.id, project, l.error);
     beginTurn(c, l);
     st.chats[c.id] = c; writeState(st);
-    log("chat-start", c.id, project, `ok pid ${l.pid}${m ? " model " + m : ""}`);
+    log("chat-start", c.id, project, `ok pid ${l.pid}${m ? " model " + m : ""}${filesNote(att.files)}`);
     return { ok: true, id: c.id, message: `Started a chat in ${project}.` };
   }
 
@@ -425,13 +504,17 @@ export function makeChats(opts = {}) {
     return "";
   }
 
-  async function answer({ id, text } = {}) {
+  async function answer({ id, text, attachments } = {}) {
     if (typeof id !== "string" || !ID_RE.test(id)) return fail("chat-answer", id, "-", "Unknown chat.");
     let st = settle(readState()); let c = st.chats[id];
     if (!c) return fail("chat-answer", id, "-", "Unknown chat.");
     if (c.remoteControl || acting.has(id)) return fail("chat-answer", id, c.project, c.remoteControl ? RC_ANSWER_REFUSED : "This chat is being switched. Try again in a few seconds.");
     const t = cleanText(text);
-    if (!textOk(t)) return fail("chat-answer", id, c.project, `The answer must be 1 to ${MAX_TEXT} characters.`);
+    const hasFiles = Array.isArray(attachments) && attachments.length > 0; // then the answer may be empty (Phase 19)
+    if (!(textOk(t) || (hasFiles && t.length === 0))) return fail("chat-answer", id, c.project, `The answer must be 1 to ${MAX_TEXT} characters.`);
+    const att = attachList(attachments, id);
+    if (att.error) return fail("chat-answer", id, c.project, att.error);
+    if (att.files.length && t.startsWith("/")) return fail("chat-answer", id, c.project, ATTACH_MESSAGES.slash);
     let why = notAnswerable(c);
     if (why) return fail("chat-answer", id, c.project, why);
     if (working(st) >= maxWorking) return fail("chat-answer", id, c.project, busyMessage());
@@ -447,10 +530,12 @@ export function makeChats(opts = {}) {
     why = notAnswerable(c);
     if (why) return fail("chat-answer", id, c.project, why);
     if (working(st) >= maxWorking) return fail("chat-answer", id, c.project, busyMessage());
-    const l = launch(c, t, false);
+    const msg = buildMessage(t, att.files);
+    if (msg.error) return fail("chat-answer", id, c.project, msg.error);
+    const l = launch(c, msg.input, false, { stream: msg.stream });
     if (l.error) return fail("chat-answer", id, c.project, l.error);
     beginTurn(c, l); writeState(st);
-    log("chat-answer", id, c.project, `ok pid ${l.pid} turn ${c.turns}`);
+    log("chat-answer", id, c.project, `ok pid ${l.pid} turn ${c.turns}${filesNote(att.files)}`);
     return { ok: true, message: `Sent to the chat in ${c.project}.` };
   }
 
@@ -538,6 +623,84 @@ export function makeChats(opts = {}) {
     } finally { acting.delete(id); }
   }
 
+  // ---------- fork (Phase 19, step 19.9) ----------
+  /** Why this Hub chat can't be copied now ("" = it can): only a RESTING chat (idle / failed / stopped) with Remote Control off. */
+  function forkBlock(c) {
+    if (acting.has(c.id)) return FORK_MESSAGES.switching;
+    if (c.remoteControl) return FORK_MESSAGES.rc;
+    if (!c.sessionId) return FORK_MESSAGES.noSession;
+    if (c.state === "working") return FORK_MESSAGES.working;
+    if (c.state === "stopped" && ours(c.pid)) return FORK_MESSAGES.closing;
+    if (!["idle", "failed", "stopped"].includes(c.state)) return FORK_MESSAGES.working;
+    return "";
+  }
+  /** A clean chat name, the fallback when none is given, or { error }. */
+  function forkName(name, fallback) {
+    if (name !== undefined && name !== null && typeof name !== "string") return { error: FORK_MESSAGES.name };
+    const n = String(name ?? "").replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim();
+    return { name: clip(n || fallback, 120) };
+  }
+  /** Shared by fork() and forkSession(): the checks around the open-list look, then ONE turn that makes the copy. */
+  async function doFork({ sessionId, project, hubId, name, text, model, chatNoTools, workflow }) {
+    const A = "chat-fork";
+    const t = cleanText(text);
+    if (t.length > MAX_TEXT) return fail(A, hubId || "-", project, `The first message must be at most ${MAX_TEXT} characters.`);
+    const own = (st) => (hubId ? st.chats[hubId] : Object.values(st.chats).find((x) => x.sessionId === sessionId)) || null;
+    let st = settle(readState());
+    let o = own(st);
+    if (hubId && !o) return fail(A, hubId, "-", "Unknown chat.");
+    if (o) { const why = forkBlock(o); if (why) return fail(A, o.id, project, why); }
+    if (working(st) >= maxWorking) return fail(A, hubId || "-", project, busyMessage());
+    // Fork rule (CLAUDE_CONTROL.md): never copy a chat that is open anywhere else (a busy chat would be copied half-way).
+    const open = await readOpen();
+    if (!open) return fail(A, hubId || "-", project, FORK_MESSAGES.cantCheck);
+    if (open.some((e) => e && e.sessionId === sessionId)) return fail(A, hubId || "-", project, FORK_MESSAGES.open);
+    st = settle(readState()); o = own(st);
+    if (hubId && !o) return fail(A, hubId, "-", "Unknown chat.");
+    if (o) { const why = forkBlock(o); if (why) return fail(A, o.id, project, why); }
+    if (working(st) >= maxWorking) return fail(A, hubId || "-", project, busyMessage());
+    const d = new Date();
+    const c = {
+      id: newId(), project, workflow: workflow !== false, name, task: clip(t, 300), model: model || null, remoteControl: false, bg: false, noTools: noTools || chatNoTools === true,
+      state: "working", startedAt: d.toISOString(), lastTurnAt: d.toISOString(), turns: 0, sessionId: randomUUID(), lastReply: "", lastError: "", refused: [],
+      pid: null, turnFile: null, seq: ++st.seq, forkedFrom: o ? o.id : null, forkedFromSession: sessionId, forkPending: true,
+    };
+    while (st.chats[c.id]) c.id = newId();
+    const l = launch(c, t || FORK_FIRST_MESSAGE, false, { forkFrom: sessionId });
+    if (l.error) return fail(A, c.id, project, l.error);
+    beginTurn(c, l);
+    st.chats[c.id] = c; writeState(st);
+    log(A, c.id, project, `ok pid ${l.pid} copy of ${o ? o.id : "session " + sessionId.slice(0, 8)}${c.model ? " model " + c.model : ""}`);
+    return { ok: true, id: c.id, message: `Made a copy of the chat in ${project}. The old chat stays as it was.` };
+  }
+  /** Copy a resting Hub chat into a NEW Hub chat of the same project (same model, Remote Control off, forkedFrom = the old id). */
+  async function fork({ id, name, text } = {}) {
+    if (typeof id !== "string" || !ID_RE.test(id)) return fail("chat-fork", id, "-", "Unknown chat.");
+    const c = settle(readState()).chats[id];
+    if (!c) return fail("chat-fork", id, "-", "Unknown chat.");
+    const why = forkBlock(c);
+    if (why) return fail("chat-fork", id, c.project, why);
+    const n = forkName(name, `Fork of ${c.name}`);
+    if (n.error) return fail("chat-fork", id, c.project, n.error);
+    return doFork({ sessionId: c.sessionId, project: c.project, hubId: id, name: n.name, text, model: c.model, chatNoTools: c.noTools, workflow: c.workflow });
+  }
+  /** Copy a session the CALLER has checked (the server: a closed app chat that passes the D49 rule). The engine still refuses a
+   *  session in the open list or when that list can't be read, a session with no saved file in that project's folder, and a
+   *  session of its own Hub chats that is not resting. */
+  async function forkSession({ sourceSessionId, project, name, text, model } = {}) {
+    const pe = projectError(project);
+    if (pe) return fail("chat-fork", "-", project, pe);
+    if (typeof sourceSessionId !== "string" || !UUID_RE.test(sourceSessionId)) return fail("chat-fork", "-", project, "Unknown chat.");
+    try { if (!statSync(join(sessionsDir, encodeCwd(join(root, project)), sourceSessionId + ".jsonl")).isFile()) throw new Error("not a file"); }
+    catch { return fail("chat-fork", "-", project, "Unknown chat."); }
+    const m = model === undefined || model === null || model === "" ? null : model;
+    if (m !== null && !MODELS.includes(m)) return fail("chat-fork", "-", project, `Unknown model. Pick one of: ${MODELS.join(", ")}.`);
+    const n = forkName(name, `Fork of a ${project} chat · ${sourceSessionId.slice(0, 8)}`);
+    if (n.error) return fail("chat-fork", "-", project, n.error);
+    const mine = Object.values(readState().chats).find((x) => x.sessionId === sourceSessionId);
+    return doFork({ sessionId: sourceSessionId, project, hubId: mine ? mine.id : null, name: n.name, text, model: m ?? (mine ? mine.model : null), chatNoTools: mine ? mine.noTools : false, workflow: true });
+  }
+
   function list() {
     const st = settle(readState());
     kick(st);
@@ -546,6 +709,7 @@ export function makeChats(opts = {}) {
       state: c.state, startedAt: c.startedAt, lastTurnAt: c.lastTurnAt, turns: c.turns || 0, sessionId: c.sessionId || null,
       lastReply: clip(redact(c.lastReply || ""), 1400), lastError: clip(redact(c.lastError || ""), 600),
       refused: (c.refused || []).slice(0, 10).map((r) => clip(redact(r), 160)),
+      forkedFrom: c.forkedFrom || null, forkedFromSession: c.forkedFromSession || null,
     }));
   }
 
@@ -568,7 +732,7 @@ export function makeChats(opts = {}) {
     return out;
   }
 
-  return { start, answer, stop, list, workingPids, appLink, setRemoteControl };
+  return { start, answer, stop, list, workingPids, appLink, setRemoteControl, fork, forkSession, uploads };
 }
 
 // ---------- self-test ----------
@@ -643,16 +807,40 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (d) => { input += d; });
 process.stdin.on("end", () => {
   record(input);
-  const wait = input.includes("SLOWEST") ? 30000 : input.includes("SLOW") ? 2500 : 200;
+  // Phase 19: the stream route (like the real one, T26c: stream input needs stream output and --verbose; ONE user line)
+  const stream = get("--input-format") === "stream-json";
+  let probe = input, echo = "ECHO: " + input;
+  if (stream) {
+    if (get("--output-format") !== "stream-json") { process.stderr.write("Error: --input-format=stream-json requires output-format=stream-json\\n"); process.exitCode = 1; return; }
+    if (!argv.includes("--verbose")) { process.stderr.write("Error: --output-format=stream-json requires --verbose\\n"); process.exitCode = 1; return; }
+    const rows = input.split("\\n").filter(Boolean);
+    let msg = null; try { msg = rows.length === 1 ? JSON.parse(rows[0]) : null; } catch { /* not JSON */ }
+    const content = msg && msg.type === "user" && msg.message && msg.message.role === "user" && Array.isArray(msg.message.content) ? msg.message.content : null;
+    if (!content) { process.stdout.write("bad stream input\\n"); process.exitCode = 1; return; }
+    probe = content.filter((b) => b.type === "text").map((b) => b.text).join(" ");
+    echo = "STREAM: " + content.map((b) => b.type === "text" ? "text=" + b.text : b.type + "=" + b.source.media_type + "/" + Buffer.from(b.source.data, "base64").length).join(" | ");
+    process.stdout.write(JSON.stringify({ type: "system", subtype: "init", session_id: get("--session-id") || get("--resume") }) + "\\n");
+    process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: false, session_id: "not-the-last-line", result: "NOT THE LAST RESULT LINE" }) + "\\n");
+    process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "thinking" }] } }) + "\\n");
+  }
+  const wait = probe.includes("SLOWEST") ? 30000 : probe.includes("SLOW") ? 2500 : 200;
   setTimeout(() => {
-    if (input.includes("NOISE")) process.stderr.write("a warning on standard error\\n");
-    if (input.includes("NOJSON")) { process.stdout.write("Something broke before any result.\\n"); process.exitCode = 1; return; }
+    if (probe.includes("NOISE")) process.stderr.write("a warning on standard error\\n");
+    if (probe.includes("NOJSON")) { process.stdout.write("Something broke before any result.\\n"); process.exitCode = 1; return; }
     const running = get("--resume") && readReg().find((x) => x.sessionId === get("--resume") && showsPid(x));
     if (running) { process.stdout.write(JSON.stringify({ type: "result", subtype: "error", is_error: true, session_id: get("--resume"), result: "That session is running in the background (T5)." }) + "\\n"); process.exitCode = 1; return; }
-    const failed = input.includes("FAIL");
-    const denials = input.includes("DENY") ? [{ tool_name: "Bash", tool_use_id: "t1", tool_input: { command: "rm -rf build" } }, { tool_name: "Write", tool_use_id: "t2", tool_input: { file_path: "C:\\\\x\\\\notes.txt" } }] : [];
-    process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: failed, session_id: get("--session-id") || get("--resume"),
-      result: failed ? "Pretend failure: the model is unavailable." : "ECHO: " + input, permission_denials: denials }) + "\\n");
+    const failed = probe.includes("FAIL");
+    const denials = probe.includes("DENY") ? [{ tool_name: "Bash", tool_use_id: "t1", tool_input: { command: "rm -rf build" } }, { tool_name: "Write", tool_use_id: "t2", tool_input: { file_path: "C:\\\\x\\\\notes.txt" } }] : [];
+    const sid = probe.includes("SAMEID") ? get("--resume") : get("--session-id") || get("--resume"); // SAMEID: a fork that did not fork
+    // saved chat files (only with HUB_FAKE_PSAVE): a fork copies the old file to the new id first, like the real one (T32b)
+    if (process.env.HUB_FAKE_PSAVE && process.env.HUB_FAKE_SESSIONS && sid && !failed) {
+      const d = join(process.env.HUB_FAKE_SESSIONS, process.cwd().replace(/[^A-Za-z0-9]/g, "-")); mkdirSync(d, { recursive: true });
+      const f = join(d, sid + ".jsonl");
+      if (argv.includes("--fork-session") && sid !== get("--resume")) { const old = join(d, get("--resume") + ".jsonl"); if (existsSync(old)) writeFileSync(f, readFileSync(old)); }
+      appendFileSync(f, JSON.stringify({ type: "user", message: { content: probe } }) + "\\n" + JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: echo }] } }) + "\\n");
+    }
+    process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: failed, session_id: sid,
+      result: failed ? "Pretend failure: the model is unavailable." : echo, permission_denials: denials }) + "\\n");
     process.exitCode = failed ? 1 : 0;
   }, wait);
 });
@@ -970,6 +1158,173 @@ process.stdin.on("end", () => {
   for (const e of reg()) { try { process.kill(e.pid); } catch { /* gone */ } }
   try { process.kill(foreignKid.pid); } catch { /* gone */ }
   await waitFor(() => Object.keys(rce.workingPids()).length === 0, 10000);
+
+  // ===== E. pictures, files and fork (Phase 19) with pretend claude: no real chat is touched =====
+  process.env.HUB_FAKE_PSAVE = "1";
+  const eDir = join(base, "att"); const sess = join(base, "att-sessions");
+  process.env.HUB_FAKE_SESSIONS = sess;
+  let eOpen = [];
+  const eList = async () => { if (eOpen === "throw") throw new Error("agents list failed"); return eOpen; };
+  const up = makeUploads({ dir: join(eDir, "uploads") });
+  const eOpts = { root: projects, dataDir: join(eDir, "data"), logDir: join(eDir, "logs"), claude: [process.execPath, fake], listOpen: eList, redact, sessionsDir: sess };
+  const ee = makeChats({ ...eOpts, uploads: up });
+  const eget = (id) => ee.list().find((x) => x.id === id);
+  const esettled = (id) => waitFor(() => { const x = eget(id); return x && x.state !== "working"; });
+  const eState = () => JSON.parse(readFileSync(join(eDir, "data", "hub_chats.json"), "utf8"));
+  const setRec = (id, fields) => { const s = eState(); Object.assign(s.chats[id], fields); writeFileSync(join(eDir, "data", "hub_chats.json"), JSON.stringify(s, null, 2)); };
+  const savedFile = (sid) => join(sess, encodeCwd(join(projects, "Fake")), sid + ".jsonl");
+  const fwd = (p) => p.replace(/\\/g, "/");
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(30, 9)]);
+  const PDF = Buffer.from("%PDF-1.4\n%%EOF\n", "latin1");
+  const nCalls = () => calls().length;
+  try {
+    // a new chat with a picture (stream route)
+    const p1 = up.save({ chatKey: "new", bytes: PNG, originalName: "Blue Photo.png" });
+    const s1 = await ee.start({ project: "Fake", task: "ATT-MARK-1 what colour?", workflow: false, model: "haiku", attachments: [p1.uploadId] });
+    ok("E: start with a picture ok, becomes idle", s1.ok === true && (await esettled(s1.id)) && eget(s1.id).state === "idle");
+    const S1 = eget(s1.id); const k1 = call("ATT-MARK-1");
+    ok("E: stream flags, then the usual Hub flags, --session-id and --name, model", !!k1 && k1.argv.join(" ").startsWith("-p --input-format stream-json --output-format stream-json --verbose --permission-mode auto --permission-prompts none --session-id " + S1.sessionId + " --name ")
+      && k1.argv.includes("haiku") && !/--output-format json/.test(k1.argv.join(" ")) && !k1.argv.includes("--resume"));
+    const L1 = k1 && JSON.parse(k1.input);
+    ok("E: standard input is ONE JSON line: image block (base64, image/png, the same bytes) first, then the text", !!k1 && k1.input.endsWith("\n") && k1.input.trim().split("\n").length === 1
+      && L1.type === "user" && L1.message.role === "user" && L1.message.content.length === 2 && L1.message.content[0].type === "image" && L1.message.content[0].source.type === "base64"
+      && L1.message.content[0].source.media_type === "image/png" && Buffer.from(L1.message.content[0].source.data, "base64").equals(PNG) && L1.message.content[1].type === "text" && L1.message.content[1].text === "ATT-MARK-1 what colour?");
+    ok("E: no text, file name or path on the command line", !!k1 && !k1.argv.some((a, i) => k1.argv[i - 1] !== "--name" && /ATT-MARK|Blue Photo|uploads/.test(a)));
+    ok("E: the result is read from the LAST result line of the stream", S1.lastReply === "STREAM: image=image/png/38 | text=ATT-MARK-1 what colour?" && S1.turns === 1 && S1.lastError === "");
+
+    // an answer with a PDF, a text file and a picture
+    const a1 = up.save({ chatKey: s1.id, bytes: PDF, originalName: "doc.pdf" });
+    const a2 = up.save({ chatKey: s1.id, bytes: Buffer.from("note"), originalName: "my note.txt" });
+    const a3 = up.save({ chatKey: s1.id, bytes: PNG, originalName: "p.png" });
+    const r2 = await ee.answer({ id: s1.id, text: "ATT-MARK-2", attachments: [a1.uploadId, a2.uploadId, a3.uploadId] });
+    ok("E: answer with a PDF, a text file and a picture ok", r2.ok === true && (await esettled(s1.id)) && eget(s1.id).state === "idle");
+    const k2 = call("ATT-MARK-2"); const L2 = k2 && JSON.parse(k2.input); const notePath = fwd(up.get(a2.uploadId).path);
+    ok("E: answer: --resume <the same session>, stream flags, no --session-id", !!k2 && k2.argv.join(" ").startsWith("-p --input-format stream-json --output-format stream-json --verbose --permission-mode auto --permission-prompts none --resume " + S1.sessionId) && !k2.argv.includes("--session-id"));
+    ok("E: answer: document block (application/pdf), image block, then the text with '@<path>' of the text file", !!L2 && L2.message.content.length === 3
+      && L2.message.content[0].type === "document" && L2.message.content[0].source.type === "base64" && L2.message.content[0].source.media_type === "application/pdf" && Buffer.from(L2.message.content[0].source.data, "base64").equals(PDF)
+      && L2.message.content[1].type === "image" && L2.message.content[2].type === "text" && L2.message.content[2].text === "ATT-MARK-2\n\n@" + notePath);
+    ok("E: the '@' path is the store's own random file (inside the upload folder, not the person's name)", notePath.startsWith(fwd(join(eDir, "uploads", s1.id))) && !notePath.includes("my note") && !/\s/.test(notePath));
+    ok("E: answer reply from the last result line, same session", eget(s1.id).lastReply.startsWith("STREAM: document=application/pdf/15 | image=image/png/38 | text=ATT-MARK-2") && eget(s1.id).sessionId === S1.sessionId && eget(s1.id).turns === 2);
+
+    // only text files: the normal route with '@<path>' (T28)
+    const t1 = up.save({ chatKey: s1.id, bytes: Buffer.from("# x"), originalName: "a.md" });
+    const r3 = await ee.answer({ id: s1.id, text: "ATT-MARK-3", attachments: [t1.uploadId] });
+    const r3ok = r3.ok === true && (await esettled(s1.id));
+    const k3 = call("ATT-MARK-3"); const tPath = fwd(up.get(t1.uploadId).path);
+    ok("E: text file only: normal route (json output, no stream flags), '@<path>' after the text", r3ok && !!k3 && k3.input === "ATT-MARK-3\n\n@" + tPath
+      && k3.argv.join(" ").includes("-p --output-format json --permission-mode auto") && !k3.argv.includes("--input-format") && eget(s1.id).lastReply === "ECHO: ATT-MARK-3\n\n@" + tPath);
+    const t2 = up.save({ chatKey: s1.id, bytes: Buffer.from("y"), originalName: "b.txt" });
+    const r4 = await ee.answer({ id: s1.id, text: "   ", attachments: [t2.uploadId] });
+    ok("E: empty text is fine when a file is attached (the message is only '@<path>')", r4.ok === true && (await esettled(s1.id)) && eget(s1.id).lastReply === "ECHO: @" + fwd(up.get(t2.uploadId).path));
+    const p5 = up.save({ chatKey: s1.id, bytes: PNG, originalName: "only.png" });
+    const r5 = await ee.answer({ id: s1.id, text: "", attachments: [p5.uploadId] });
+    ok("E: a picture with no text: one image block and no text block", r5.ok === true && (await esettled(s1.id)) && eget(s1.id).lastReply === "STREAM: image=image/png/38");
+
+    // refusals: nothing reaches claude
+    let before = nCalls();
+    const empty1 = await ee.answer({ id: s1.id, text: "  " }); const empty2 = await ee.answer({ id: s1.id, text: "", attachments: [] });
+    ok("E: empty text without files is refused with the old sentence", empty1.error === "The answer must be 1 to 4000 characters." && empty2.error === empty1.error);
+    const five = [0, 1, 2, 3, 4].map(() => up.save({ chatKey: s1.id, bytes: PNG, originalName: "x.png" }).uploadId);
+    ok("E: five files refused", (await ee.answer({ id: s1.id, text: "ATT-NO-1", attachments: five })).error === "At most 4 files per message.");
+    ok("E: a file saved for another chat refused", (await ee.answer({ id: s1.id, text: "ATT-NO-2", attachments: [p1.uploadId] })).error === "One of the attached files is no longer there. Attach it again.");
+    ok("E: an unknown or path-like id refused", (await ee.answer({ id: s1.id, text: "ATT-NO-3", attachments: ["../../secret.png"] })).error === "One of the attached files is no longer there. Attach it again.");
+    ok("E: attachments that are not a list refused", (await ee.answer({ id: s1.id, text: "ATT-NO-4", attachments: "abc" })).error === ATTACH_MESSAGES.notList);
+    ok("E: a / command with files refused", (await ee.answer({ id: s1.id, text: "/handoff ATT-NO-5", attachments: [five[0]] })).error === ATTACH_MESSAGES.slash);
+    const nw = up.save({ chatKey: "new", bytes: PNG, originalName: "n.png" }).uploadId;
+    ok("E: a new chat with files and the project workflow on refused (pick up can't carry files)", (await ee.start({ project: "Fake", task: "ATT-NO-6", attachments: [nw] })).error === ATTACH_MESSAGES.workflow);
+    ok("E: a new chat with files and Remote Control refused", (await ee.start({ project: "Fake", task: "ATT-NO-7", attachments: [nw], remoteControl: true, workflow: false })).error === ATTACH_MESSAGES.noRc);
+    ok("E: a new chat with a / task and files refused", (await ee.start({ project: "Fake", task: "/info ATT-NO-8", attachments: [nw], workflow: false })).error === ATTACH_MESSAGES.slash);
+    ok("E: a new chat with an upload of another chat refused", (await ee.start({ project: "Fake", task: "ATT-NO-9", attachments: [five[0]], workflow: false })).error === "One of the attached files is no longer there. Attach it again.");
+    const stub = (kind) => ({ cleanup() { return {}; }, resolve: () => ({ ok: true, files: [{ uploadId: "0".repeat(32), path: join(eDir, "missing-file." + (kind === "text" ? "txt" : "png")), kind, mediaType: kind === "text" ? "text/plain" : "image/png", bytes: 38 }] }) });
+    ok("E: a picture that can't be read: refused plainly, nothing sent", (await makeChats({ ...eOpts, uploads: stub("image") }).answer({ id: s1.id, text: "ATT-NO-10", attachments: ["x"] })).error === ATTACH_MESSAGES.readFailed);
+    ok("E: a text file that is gone: refused plainly, nothing sent", (await makeChats({ ...eOpts, uploads: stub("text") }).answer({ id: s1.id, text: "ATT-NO-11", attachments: ["x"] })).error === ATTACH_MESSAGES.readFailed);
+    setRec(s1.id, { remoteControl: true });
+    const rcA = await ee.answer({ id: s1.id, text: "ATT-NO-12", attachments: [five[0]] }); const rcF = await ee.fork({ id: s1.id, text: "ATT-NO-13" });
+    setRec(s1.id, { remoteControl: false });
+    ok("E: Remote Control on: an answer with files and a fork are refused", rcA.error === RC_ANSWER_REFUSED && rcF.error === FORK_MESSAGES.rc);
+    ok("E: none of the refused messages reached claude", nCalls() === before && !calls().some((k) => /ATT-NO-/.test(k.input + k.argv.join(" "))));
+    const sl = up.save({ chatKey: s1.id, bytes: PNG, originalName: "s.png" }).uploadId;
+    ok("E: a slow answer with a picture ok", (await ee.answer({ id: s1.id, text: "SLOW ATT-MARK-6", attachments: [sl] })).ok === true);
+    const busyA = await ee.answer({ id: s1.id, text: "ATT-NO-14", attachments: [five[1]] });
+    const busyF = await ee.fork({ id: s1.id, text: "ATT-NO-15" });
+    ok("E: while it works: another answer with files and a fork are refused", /still working/.test(busyA.error) && busyF.error === FORK_MESSAGES.working && !call("ATT-NO-14") && !call("ATT-NO-15"));
+    ok("E: the slow picture turn settles", await esettled(s1.id));
+    const elog = readFileSync(join(eDir, "logs", "hub_actions.log"), "utf8");
+    ok("E: the log names file extensions only", /chat-start \S+ Fake ok pid \d+ model haiku files png/.test(elog) && /chat-answer \S+ Fake ok pid \d+ turn 2 files pdf,txt,png/.test(elog) && /chat-answer \S+ Fake ok pid \d+ turn 3 files md/.test(elog));
+    ok("E: the log has no text, no file names, no paths", !/ATT-MARK|ATT-NO|Blue|Photo|note|only\.png|uploads|[0-9a-f]{24}\./.test(elog));
+
+    // fork of a resting Hub chat
+    const oldSid = eget(s1.id).sessionId; const oldName = eget(s1.id).name;
+    const oldRec = JSON.stringify(eState().chats[s1.id]); const oldFile = readFileSync(savedFile(oldSid));
+    const f1 = await ee.fork({ id: s1.id, text: "FORK-MARK-1" });
+    ok("E: fork ok: a new Hub id", f1.ok === true && ID_RE.test(f1.id) && f1.id !== s1.id && (await esettled(f1.id)));
+    const F1 = eget(f1.id); const kf = call("FORK-MARK-1");
+    ok("E: fork flags: Hub flags, --resume <old> --fork-session --session-id <new> --name <name>, same model", !!kf && kf.argv.join(" ").startsWith(`-p --output-format json --permission-mode auto --permission-prompts none --resume ${oldSid} --fork-session --session-id ${F1.sessionId} --name `)
+      && kf.argv[kf.argv.indexOf("--name") + 1] === "Fork of " + oldName && kf.argv[kf.argv.indexOf("--model") + 1] === "haiku" && kf.input === "FORK-MARK-1");
+    ok("E: fork record: forkedFrom = the old Hub id, own new session, same project and model, Remote Control off, idle", F1.forkedFrom === s1.id && F1.forkedFromSession === oldSid && UUID_RE.test(F1.sessionId) && F1.sessionId !== oldSid
+      && F1.project === "Fake" && F1.model === "haiku" && F1.remoteControl === false && F1.state === "idle" && F1.name === "Fork of " + oldName && F1.lastReply === "ECHO: FORK-MARK-1" && F1.turns === 1);
+    ok("E: the old chat's record and saved file are untouched", JSON.stringify(eState().chats[s1.id]) === oldRec && readFileSync(savedFile(oldSid)).equals(oldFile));
+    ok("E: the fork's saved file starts as a copy of the old one", readFileSync(savedFile(F1.sessionId)).subarray(0, oldFile.length).equals(oldFile));
+    ok("E: old chats show forkedFrom null", eget(s1.id).forkedFrom === null && eget(s1.id).forkedFromSession === null);
+    const fa = await ee.answer({ id: f1.id, text: "FORK-MARK-2" });
+    const faok = fa.ok === true && (await esettled(f1.id));
+    const kfa = call("FORK-MARK-2");
+    ok("E: answering the fork continues the FORK's session, the old file stays the same", faok && !!kfa && kfa.argv[kfa.argv.indexOf("--resume") + 1] === F1.sessionId && !kfa.argv.includes("--fork-session") && readFileSync(savedFile(oldSid)).equals(oldFile));
+    before = nCalls();
+    const f2 = await ee.fork({ id: s1.id, name: "  My \n copy  " });
+    ok("E: fork without text sends the fixed first message; a given name is cleaned", f2.ok === true && (await esettled(f2.id)) && eget(f2.id).name === "My copy" && calls().some((k) => k.input === FORK_FIRST_MESSAGE && k.argv.includes("--fork-session")) && nCalls() === before + 1);
+    const f3 = await ee.fork({ id: f1.id, text: "FORK-MARK-3" });
+    ok("E: a fork of a fork points to its own parent", f3.ok === true && (await esettled(f3.id)) && eget(f3.id).forkedFrom === f1.id && eget(f3.id).forkedFromSession === F1.sessionId);
+    const fs = await ee.fork({ id: s1.id, text: "SAMEID FORK-MARK-4" });
+    ok("E: a fork where Claude kept the OLD id is marked failed and gets no session (never writes into the old chat)", fs.ok === true && (await esettled(fs.id)) && eget(fs.id).state === "failed" && eget(fs.id).lastError === FORK_MESSAGES.sameId && eget(fs.id).sessionId === null);
+    ok("E: ...and it can't be answered", (await ee.answer({ id: fs.id, text: "FORK-NO-0" })).error === "This chat has no Claude session to continue.");
+
+    // fork refusals
+    before = nCalls();
+    ok("E: fork: unknown or bad ids refused", (await ee.fork({ id: "h-20990101-000000-zzzz" })).error === "Unknown chat." && (await ee.fork({ id: "../x" })).error === "Unknown chat." && (await ee.fork({ id: oldSid })).error === "Unknown chat.");
+    eOpen = [{ sessionId: oldSid, kind: "interactive", status: "idle" }];
+    ok("E: fork: refused when the old chat is open elsewhere", (await ee.fork({ id: s1.id, text: "FORK-NO-1" })).error === FORK_MESSAGES.open);
+    eOpen = "throw";
+    ok("E: fork: refused when the open list can't be read", (await ee.fork({ id: s1.id, text: "FORK-NO-2" })).error === FORK_MESSAGES.cantCheck);
+    eOpen = [];
+    ok("E: fork: a name that is not text refused; a too long first message refused", (await ee.fork({ id: s1.id, name: 5 })).error === FORK_MESSAGES.name && (await ee.fork({ id: s1.id, text: "x".repeat(4001) })).error === "The first message must be at most 4000 characters.");
+    setRec(s1.id, { state: "working", pid: process.pid });
+    ok("E: fork: a chat marked working refused", (await ee.fork({ id: s1.id, text: "FORK-NO-3" })).error === FORK_MESSAGES.working);
+    setRec(s1.id, { state: "idle" });
+    const w1 = await ee.answer({ id: f1.id, text: "SLOW FORK-BUSY-1" }); const w2 = await ee.answer({ id: f2.id, text: "SLOW FORK-BUSY-2" });
+    const lim = await ee.fork({ id: s1.id, text: "FORK-NO-4" });
+    ok("E: fork: refused at the limit of 2 working turns", w1.ok && w2.ok && lim.error === "Two chats are already working. Wait for one to finish.");
+    await esettled(f1.id); await esettled(f2.id);
+    ok("E: fork: none of the refusals started anything (only the 2 slow answers ran)", !calls().some((k) => /FORK-NO-/.test(k.input)) && nCalls() === before + 2);
+
+    // forkSession: a session the caller checked (a closed app chat)
+    const appSid = randomUUID(); mkdirSync(dirname(savedFile(appSid)), { recursive: true });
+    writeFileSync(savedFile(appSid), JSON.stringify({ type: "user", message: { content: "app chat" } }) + "\n");
+    const appFile = readFileSync(savedFile(appSid));
+    ok("E: forkSession: bad id, unknown saved file, bad project refused", (await ee.forkSession({ sourceSessionId: "nope", project: "Fake" })).error === "Unknown chat."
+      && (await ee.forkSession({ sourceSessionId: randomUUID(), project: "Fake" })).error === "Unknown chat." && (await ee.forkSession({ sourceSessionId: appSid, project: "Nope" })).error === "Unknown project folder.");
+    eOpen = [{ sessionId: appSid, kind: "interactive", pid: 4242, status: "idle" }];
+    ok("E: forkSession: refused when the session is in the open list", (await ee.forkSession({ sourceSessionId: appSid, project: "Fake", text: "FORK-NO-5" })).error === FORK_MESSAGES.open);
+    eOpen = "throw";
+    ok("E: forkSession: refused when the open list can't be read", (await ee.forkSession({ sourceSessionId: appSid, project: "Fake", text: "FORK-NO-6" })).error === FORK_MESSAGES.cantCheck);
+    eOpen = [];
+    const fa1 = await ee.forkSession({ sourceSessionId: appSid, project: "Fake", name: "Copy of the app chat", text: "FORK-MARK-APP", model: "sonnet" });
+    const fa1ok = fa1.ok === true && (await esettled(fa1.id));
+    const kapp = call("FORK-MARK-APP");
+    ok("E: forkSession ok: --resume <session> --fork-session --session-id <new>, own record with forkedFromSession", fa1ok && !!kapp && kapp.argv.includes("--fork-session") && kapp.argv[kapp.argv.indexOf("--resume") + 1] === appSid
+      && eget(fa1.id).forkedFrom === null && eget(fa1.id).forkedFromSession === appSid && eget(fa1.id).name === "Copy of the app chat" && eget(fa1.id).model === "sonnet" && kapp.argv[kapp.argv.indexOf("--session-id") + 1] === eget(fa1.id).sessionId);
+    ok("E: forkSession: the source file is untouched", readFileSync(savedFile(appSid)).equals(appFile));
+    const fh = await ee.forkSession({ sourceSessionId: oldSid, project: "Fake", text: "FORK-MARK-HUB" });
+    ok("E: forkSession of a Hub chat's session points forkedFrom to that Hub chat", fh.ok === true && (await esettled(fh.id)) && eget(fh.id).forkedFrom === s1.id && eget(fh.id).model === "haiku");
+    setRec(s1.id, { state: "working", pid: process.pid });
+    ok("E: forkSession of a Hub chat that is not resting refused", (await ee.forkSession({ sourceSessionId: oldSid, project: "Fake", text: "FORK-NO-7" })).error === FORK_MESSAGES.working && !call("FORK-NO-7"));
+    setRec(s1.id, { state: "idle" });
+    const flog = readFileSync(join(eDir, "logs", "hub_actions.log"), "utf8");
+    ok("E: log has chat-fork lines without text", /chat-fork \S+ Fake ok pid \d+ copy of h-/.test(flog) && /chat-fork \S+ Fake ok pid \d+ copy of session [0-9a-f]{8}/.test(flog) && /chat-fork \S+ Fake refused: /.test(flog) && !/FORK-MARK|FORK-NO|My copy|app chat/.test(flog));
+    ok("E: log lines have action, id, project, result", flog.trim().split(/\n/).every((l) => /^\S+ chat-[\w-]+ \S+ \S+ .+/.test(l)));
+  } catch (err) { ok("E self-test crashed: " + (err && err.stack), false); }
+  await waitFor(() => Object.keys(ee.workingPids()).length === 0, 15000);
+  delete process.env.HUB_FAKE_PSAVE;
   await pause(300);
   try { rmSync(base, { recursive: true, force: true }); } catch { /* temp only */ }
 

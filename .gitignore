@@ -28,6 +28,9 @@ data/
 # helper-task records (D43): written by the Claude Code hooks, not for the public repo
 .claude/helpers/
 
+# files Ivan attaches to Hub chat messages (Phase 19, lib/uploads.mjs): private, deleted after 7 days
+.claude/hub-uploads/
+
 # Hub app (Electron, Phase 16): the 300+ MB program files and any build output stay off GitHub
 tools/app/node_modules/
 tools/app/out/

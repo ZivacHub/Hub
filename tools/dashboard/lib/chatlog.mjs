@@ -101,7 +101,33 @@ function toolSummary(name, input, cwd) {
 function resultText(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content.map((b) => (b && b.type === "text" ? String(b.text ?? "") : b && b.type === "image" ? "[image]" : b && b.type === "tool_reference" ? `[tool loaded: ${b.tool_name || b.name || "?"}]` : "")).filter(Boolean).join("\n");
+  return content.map((b) => (b && b.type === "text" ? String(b.text ?? "") : b && b.type === "image" ? (imageData(b) ? "" : "[image]") : b && b.type === "tool_reference" ? `[tool loaded: ${b.tool_name || b.name || "?"}]` : "")).filter(Boolean).join("\n");
+}
+
+// ---------- pictures and files (Phase 19, docs/plan/phases/19-pictures-pins.md) ----------
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** { data, mediaType } of a picture block ({source:{data,media_type}} or an attachment's {file:{base64,type}}), or null when the data is missing. */
+export function imageData(b) {
+  if (!b || typeof b !== "object") return null;
+  const src = b.source && typeof b.source === "object" ? { data: b.source.data, mediaType: b.source.media_type } : b.file && typeof b.file === "object" ? { data: b.file.base64, mediaType: b.file.type } : null;
+  if (!src || typeof src.data !== "string" || !src.data) return null;
+  return { data: src.data, mediaType: String(src.mediaType || "").toLowerCase() };
+}
+const b64Bytes = (s) => Math.max(0, Math.floor((s.length * 3) / 4) - (s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0));
+const baseName = (p) => { const x = normP(p).split("/").filter(Boolean); return x.length ? x[x.length - 1] : ""; };
+/** The block the feed shows for a picture; `_src` says where the data lives (removed when m and b are known). null = no usable picture. */
+function imageBlock(b, path, line, name, red) {
+  const d = imageData(b);
+  if (!d || !IMAGE_TYPES.includes(d.mediaType)) return null;
+  const out = { type: "image", mediaType: d.mediaType, bytes: b64Bytes(d.data) };
+  const n = name ? red(baseName(name), 120) : ""; if (n) out.name = n;
+  out._src = { line, path };
+  return out;
+}
+function fileBlock(mediaType, bytes, name, red) {
+  const out = { type: "file", mediaType: /^[a-z]+\/[a-z0-9.+-]{1,60}$/i.test(String(mediaType || "")) ? String(mediaType).toLowerCase() : "application/octet-stream", bytes: bytes || 0 };
+  const n = name ? red(baseName(name), 120) : ""; if (n) out.name = n;
+  return out;
 }
 
 const usageTokens = (u) => (u ? (Number(u.input_tokens) || 0) + (Number(u.cache_read_input_tokens) || 0) + (Number(u.cache_creation_input_tokens) || 0) : null);
@@ -112,10 +138,12 @@ const usageTokens = (u) => (u ? (Number(u.input_tokens) || 0) + (Number(u.cache_
  * messages = every shown message, oldest first, each with its index `i`. Redaction and clipping happen here.
  */
 export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" } = {}) {
-  const rows = []; let badLines = 0;
-  for (const line of String(text ?? "").split("\n")) {
+  const rows = []; const lineOf = new Map(); let badLines = 0;
+  const rawLines = String(text ?? "").split("\n");
+  for (let n = 0; n < rawLines.length; n++) {
+    const line = rawLines[n];
     if (!line.trim()) continue;
-    try { const j = JSON.parse(line); if (j && typeof j === "object" && !Array.isArray(j)) rows.push(j); else badLines++; } catch { badLines++; }
+    try { const j = JSON.parse(line); if (j && typeof j === "object" && !Array.isArray(j)) { rows.push(j); lineOf.set(j, n); } else badLines++; } catch { badLines++; }
   }
   const main = (r) => r.isSidechain !== true;
   let cwd = cwdHint || "", model = null, permissionMode = null, title = null, firstAt = null, lastAt = null;
@@ -131,13 +159,20 @@ export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" 
   const results = new Map();
   for (const r of rows) {
     if (r.type !== "user" || !main(r) || !Array.isArray(r.message?.content)) continue;
-    for (const b of r.message.content) if (b && b.type === "tool_result" && b.tool_use_id) results.set(String(b.tool_use_id), b);
+    r.message.content.forEach((b, bi) => { if (b && b.type === "tool_result" && b.tool_use_id) results.set(String(b.tool_use_id), { ...b, _line: lineOf.get(r), _bi: bi }); });
   }
   const red = (s, n) => clip(redact(String(s ?? "")), n);
   const messages = []; const outputs = [];
-  let lastUsage = null, afterUsage = false, compactions = 0, lastCompact = null;
+  let lastUsage = null, afterUsage = false, compactions = 0, lastCompact = null, lastUser = null;
   for (const r of rows) {
     if (!main(r)) continue;
+    if (r.type === "attachment" && lastUser && r.attachment && r.attachment.type === "file" && r.attachment.content && typeof r.attachment.content === "object") {
+      // "@path" in Ivan's text: the saved file has a separate line right after his message; it belongs to that message
+      const at = r.attachment, c = at.content, nm = at.displayPath || at.filename || "";
+      if (c.type === "image") { const ib = imageBlock(c, ["attachment", "content"], lineOf.get(r), nm, red); if (ib) lastUser.blocks.push(ib); }
+      else if (c.type === "pdf") lastUser.blocks.push(fileBlock("application/pdf", Number(c.file && c.file.originalSize) || 0, nm, red));
+      continue;
+    }
     if (r.type === "system" && r.subtype === "compact_boundary") { compactions++; lastCompact = { at: r.timestamp || null, postTokens: Number(r.compactMetadata?.postTokens) || null }; afterUsage = true; continue; }
     if (r.type === "assistant") {
       const msg = r.message || {};
@@ -152,11 +187,16 @@ export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" 
           const status = res ? (res.is_error === true ? "error" : "ok") : "unknown";
           const out = res ? cleanUserText(resultText(res.content)) || resultText(res.content).trim() : "";
           blocks.push({ type: "tool", name: String(b.name || "tool"), summary: red(toolSummary(b.name, b.input, cwd), LIMITS.summary), status, output: red(out, LIMITS.output) });
+          if (res && Array.isArray(res.content)) {
+            const nm = b.name === "Read" && b.input ? b.input.file_path : "";
+            res.content.forEach((x, k) => { if (x && x.type === "image") { const ib = imageBlock(x, ["message", "content", res._bi, "content", k], res._line, nm, red); if (ib) blocks.push(ib); } });
+          }
           const fp = b.input && (b.input.file_path || b.input.notebook_path);
           if (["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(b.name) && typeof fp === "string" && fp && status !== "error") outputs.push({ raw: fp, tool: b.name, at: r.timestamp || null });
         }
         // thinking / redacted_thinking: never shown
       }
+      lastUser = null;
       if (!blocks.length) continue;
       const prev = messages[messages.length - 1];
       if (prev && prev.role === "assistant" && msg.id && prev._mid === msg.id) prev.blocks.push(...blocks);
@@ -169,15 +209,24 @@ export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" 
       const c = r.message?.content;
       const parts = typeof c === "string" ? [{ type: "text", text: c }] : Array.isArray(c) ? c : [];
       const blocks = [];
-      for (const b of parts) {
-        if (!b) continue;
+      parts.forEach((b, bi) => {
+        if (!b) return;
         if (b.type === "text") { const t = cleanUserText(b.text); if (t) blocks.push({ type: "text", text: red(t, LIMITS.text) }); }
-        else if (b.type === "image") blocks.push({ type: "text", text: "[image]" });
-      }
-      if (blocks.length) messages.push({ role: "user", at: r.timestamp || null, blocks });
+        else if (b.type === "image") blocks.push(imageBlock(b, ["message", "content", bi], lineOf.get(r), "", red) || { type: "text", text: "[image]" });
+        else if (b.type === "document") {
+          const d = b.source && typeof b.source === "object" ? b.source : {};
+          blocks.push(fileBlock(d.media_type || (d.type === "text" ? "text/plain" : ""), typeof d.data === "string" ? (d.type === "text" ? d.data.length : b64Bytes(d.data)) : 0, typeof b.title === "string" ? b.title : "", red));
+        }
+      });
+      lastUser = null;
+      if (blocks.length) { const msg = { role: "user", at: r.timestamp || null, blocks }; messages.push(msg); lastUser = msg; }
     }
   }
-  messages.forEach((m, i) => { m.i = i; delete m._mid; });
+  const blockSources = new Map(); // "m:b" -> { line, path }: where the picture data sits in the file (chatimage.mjs reads it)
+  messages.forEach((m, i) => {
+    m.i = i; delete m._mid;
+    m.blocks.forEach((b, j) => { if (b._src) { blockSources.set(i + ":" + j, b._src); delete b._src; } if (b.type === "image" || b.type === "file") { b.m = i; b.b = j; } });
+  });
 
   // how full the chat is now
   let context;
@@ -201,7 +250,7 @@ export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" 
     outs.push({ path: red(sp.path, 400), outside: sp.outside, tool: o.tool, at: o.at });
     if (outs.length >= LIMITS.outputs) break;
   }
-  return { messages, context, outputs: outs, file: { cwd, model, permissionMode, title, firstAt, lastAt, compactions, badLines } };
+  return { messages, context, outputs: outs, blockSources, file: { cwd, model, permissionMode, title, firstAt, lastAt, compactions, badLines } };
 }
 
 // ---------- reading the real file (read-only, cached per file) ----------
@@ -223,6 +272,40 @@ export function parseFile(file, opts = {}) {
   parseCache.set(file, { m: st.mtimeMs, size: st.size, redact: opts.redact, parsed });
   if (parseCache.size > 4) parseCache.delete(parseCache.keys().next().value);
   return parsed;
+}
+
+// Where is picture m:b? Own small cache (only the places, never the picture data); the redaction setting does not matter here.
+const sourceCache = new Map(); // file -> { m, size, sources }
+/** { line, path } of the picture/file block `m`:`b` in a saved chat file (same message and block numbers as the feed), or null. Read-only. */
+export function blockSourceOf(file, m, b) {
+  try {
+    const st = statSync(file);
+    let hit = sourceCache.get(file);
+    if (!hit || hit.m !== st.mtimeMs || hit.size !== st.size) {
+      const { text } = readText(file);
+      hit = { m: st.mtimeMs, size: st.size, sources: parseChat(text).blockSources };
+      sourceCache.set(file, hit);
+      if (sourceCache.size > 4) sourceCache.delete(sourceCache.keys().next().value);
+    }
+    return hit.sources.get(m + ":" + b) || null;
+  } catch { return null; }
+}
+/** The parsed JSON of line number `line` (0-based, counted like parseChat does) of a saved chat file, or null. */
+export function readLineAt(file, line) {
+  try {
+    const { text } = readText(file);
+    let from = 0;
+    for (let n = 0; n < line; n++) { const k = text.indexOf("\n", from); if (k < 0) return null; from = k + 1; }
+    let to = text.indexOf("\n", from); if (to < 0) to = text.length;
+    const j = JSON.parse(text.slice(from, to));
+    return j && typeof j === "object" ? j : null;
+  } catch { return null; }
+}
+
+/** The saved chat file of a chat id (same lookup as the feed: only through the chat list), or null. For the picture route. */
+export function resolveChatFile(id, opts = {}) {
+  const hit = resolveChat(id, opts);
+  return hit && hit.file ? hit.file : null;
 }
 
 /** Saved chat files of one project folder (and its sub-folders' chats): [{ name, file, m }] newest first. Same rule as projectpage.mjs. */
@@ -462,6 +545,35 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   const d1 = demoChatLog({ id: "h-20261120-1", demoJson: dj, chatList, now: Date.parse("2026-11-20T12:00:00Z") });
   check("demo: sample conversation with times, percent and outputs", d1.status === 200 && d1.body.demo === true && d1.body.messages.length === 2 && d1.body.messages[0].at === "2026-11-20T11:55:00.000Z" && d1.body.context.percent === 25 && d1.body.meta.outputs[0].at === "2026-11-20T11:57:00.000Z");
   check("demo: a sample chat without a log is empty; an unknown id is 404", demoChatLog({ id: "s-55667788", demoJson: dj, chatList }).body.messages.length === 0 && demoChatLog({ id: "h-x", demoJson: dj, chatList }).status === 404 && demoChatLog({ id: "..\\x", demoJson: dj, chatList }).status === 404);
+  // pictures and files in the feed
+  {
+    const pngB = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(300, 1)]).toString("base64");
+    const rr = [
+      U(0, [{ type: "image", source: { type: "base64", media_type: "image/png", data: pngB } }, { type: "text", text: "what is this?" }]),
+      { type: "attachment", attachment: { type: "file", filename: "C:\\Elsewhere\\secret-folder\\yellow.png", displayPath: "..\\..\\yellow.png", content: { type: "image", file: { base64: pngB, type: "image/png", originalSize: 308 } } } },
+      { type: "attachment", attachment: { type: "file", filename: "C:\\a\\LICENSE", displayPath: "LICENSE", content: { type: "text", file: { content: "MIT" } } } },
+      { type: "attachment", attachment: { type: "file", filename: "C:\\a\\p.pdf", displayPath: "p.pdf", content: { type: "pdf", file: { base64: "", originalSize: 900 } } } },
+      A(1, "p1", [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "C:\\a\\red.png" } }]),
+      U(1, [{ type: "tool_result", tool_use_id: "r1", content: [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: pngB } }] }]),
+      A(2, "p2", [{ type: "text", text: "It is red." }]),
+      U(3, [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: Buffer.from("%PDF-1.4 abc").toString("base64") } }, { type: "text", text: "the file" }]),
+      U(4, [{ type: "image", source: { type: "base64", media_type: "image/png", data: "" } }]),
+      U(5, [{ type: "image", source: { type: "base64", media_type: "image/svg+xml", data: "PHN2Zz4=" } }, { type: "text", text: "svg" }]),
+      { type: "attachment", attachment: { type: "file", filename: "x", displayPath: "x", content: { type: "image", file: { base64: pngB, type: "image/png" } } } },
+    ];
+    const pp = parseChat(rr.map((r) => JSON.stringify(r)).join("\n"), { redact });
+    const pj = JSON.stringify(pp.messages);
+    const m0 = pp.messages[0].blocks, m1 = pp.messages[1], m3 = pp.messages[3];
+    check("pictures: image block in Ivan's message = {type, m, b, mediaType, bytes} without data", m0[0].type === "image" && m0[0].m === 0 && m0[0].b === 0 && m0[0].mediaType === "image/png" && m0[0].bytes === 308 && !("name" in m0[0]) && !pj.includes(pngB.slice(0, 20)), JSON.stringify(m0[0]));
+    check("pictures: an @path picture is a block of the same user message, after his text, named by its file only", m0.length === 4 && m0[1].type === "text" && m0[2].type === "image" && m0[2].b === 2 && m0[2].name === "yellow.png" && !pj.includes("secret-folder"), JSON.stringify(m0));
+    check("pictures: a text-file attachment adds nothing; a PDF attachment is a file chip", !pj.includes("MIT") && pp.messages[0].blocks.length === 4 && m0[3].type === "file" && m0[3].m === 0 && m0[3].b === 3 && m0[3].mediaType === "application/pdf" && m0[3].bytes === 900 && m0[3].name === "p.pdf", JSON.stringify(m0[3]));
+    check("pictures: a Read result picture sits right after its tool block with the file's name; the tool output has no '[image]'", m1.role === "assistant" && m1.blocks[0].type === "tool" && m1.blocks[0].output === "" && m1.blocks[1].type === "image" && m1.blocks[1].m === 1 && m1.blocks[1].b === 1 && m1.blocks[1].name === "red.png" && m1.blocks[1].mediaType === "image/jpeg", JSON.stringify(m1.blocks));
+    check("pictures: a document block is a file chip with size", m3.role === "user" && m3.blocks[0].type === "file" && m3.blocks[0].mediaType === "application/pdf" && m3.blocks[0].bytes === 12 && m3.blocks[1].text === "the file", JSON.stringify(m3.blocks));
+    check("pictures: data missing = old '[image]' text; an unsafe type (svg) = '[image]' too", pp.messages[4].blocks[0].text === "[image]" && pp.messages[5].blocks[0].text === "[image]" && pp.messages[5].blocks[1].text === "svg");
+    check("pictures: an attachment line after the last user message joins it (the svg one gets the picture at b2); message indexes unchanged", pp.messages.length === 6 && pp.messages.every((m, i) => m.i === i) && pp.blockSources.size === 4, String(pp.blockSources.size));
+    check("pictures: sources point at lines and paths, never hold data", [...pp.blockSources.values()].every((s) => Number.isInteger(s.line) && Array.isArray(s.path)) && !JSON.stringify([...pp.blockSources]).includes(pngB.slice(0, 20)));
+    check("paging keeps picture blocks whole", (() => { const q = pageOf(pp.messages, { before: 1, limit: 1 }).messages[0]; return q.i === 0 && q.blocks[0].type === "image" && q.blocks[0].m === 0; })());
+  }
   // read-only: no writes in the module; the only process is git
   const src = fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("// ---------- self-test")[0];
   check("module source has no file writes; the only process started is git rev-parse", !/writeFile|appendFile|mkdirSync|rmSync|unlinkSync|renameSync|spawn|execSync|fork\(/.test(src) && /import \{ execFile \} from "node:child_process"/.test(src) && (src.match(/execFile\(/g) || []).length === 1 && /execFile\("git", \["rev-parse", "--abbrev-ref", "HEAD"\]/.test(src));
