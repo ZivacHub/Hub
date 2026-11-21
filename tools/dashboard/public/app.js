@@ -527,28 +527,49 @@ document.addEventListener("change", (e) => {
 });
 
 // ---------- cards ----------
+// A card is a short, visual summary and one big link to the project page (/project.html?name=...). Start / Stop stay on the card as small
+// buttons that do not open the page. The chats list, the New chat form and "Claude last said" sit in the folded "Chats and more" part.
+const SVG = "http://www.w3.org/2000/svg";
+function ring(pct) {
+  const R = 20, C = 2 * Math.PI * R;
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 48 48"); svg.setAttribute("class", "ring"); svg.setAttribute("aria-hidden", "true");
+  const mk = (cls, extra) => { const c = document.createElementNS(SVG, "circle"); c.setAttribute("cx", "24"); c.setAttribute("cy", "24"); c.setAttribute("r", String(R)); c.setAttribute("fill", "none"); c.setAttribute("class", cls); for (const [k, v] of Object.entries(extra || {})) c.setAttribute(k, v); return c; };
+  svg.append(mk("ring-track"), mk("ring-fill", { "stroke-dasharray": `${(C * Math.max(0, Math.min(100, pct))) / 100} ${C}`, transform: "rotate(-90 24 24)" }));
+  return svg;
+}
+const moreOpen = new Set();          // projects whose "Chats and more" fold is open
+
 function card(p, answer) {
-  const needs = p.decisionsWaiting > 0;
-  const stale = (p.handoffDaysOld ?? 0) >= 7;
+  const decs = p.decisionsWaiting || 0;
+  const entry = chatsData ? chatsData.projects.find((x) => x.project === p.name) : null;
+  const chatsNeed = entry ? entry.chats.filter((c) => c.needsYou).length : needsFor(p.name).length;
+  const needs = decs > 0 || chatsNeed > 0;
   const done = p.phase === null && p.percent === 100;
+  const pct = p.percent ?? 0;
+  const forceOpen = (form && form.project === p.name) || (asking && asking.name === chatKey(p.name));
+  const chatCount = entry ? entry.chats.length : 0;
+  const more = h("details", { class: "more", open: moreOpen.has(p.name) || forceOpen },
+    h("summary", {}, "Chats and more", chatCount ? h("span", { class: "count" }, String(chatCount)) : null),
+    h("div", { class: "more-body" },
+      chatsArea(p.name),
+      answer ? h("details", { class: "said" },
+        h("summary", {}, h("span", { class: "when" }, `Claude last said · ${ago(answer.at)}${answer.chat ? " · " + answer.chat : ""}`), h("span", { class: "short" }, answer.short)),
+        answer.long && answer.long !== answer.short ? h("p", { class: "long" }, answer.long) : null) : null));
+  more.addEventListener("toggle", () => { if (more.open) moreOpen.add(p.name); else moreOpen.delete(p.name); });
+  const ctl = controls(p.name);
   return h("article", { class: "card" + (needs ? " needs" : "") },
-    h("div", { class: "card-head" }, h("h3", { class: "name" }, p.name), h("span", { class: "pct" }, `${p.percent ?? 0}%`)),
-    h("p", { class: "phase" }, done ? "Every phase finished" : p.phase ? `Phase ${p.phase.number} of ${p.phase.of} · ${p.phase.title}` : "No phase in progress"),
-    h("div", { class: "bar", role: "progressbar", "aria-valuenow": p.percent ?? 0, "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": `${p.name} progress` }, fill(p.percent ?? 0)),
-    h("div", { class: "steps" }, h("span", {}, `${p.stepsDone} of ${p.stepsTotal} steps`), h("span", {}, `${p.phasesDone} of ${p.phasesTotal} phases`)),
+    h("div", { class: "card-top" },
+      h("div", { class: "card-id" },
+        h("h3", { class: "name" }, h("a", { class: "card-link", href: "/project.html?name=" + encodeURIComponent(p.name) }, p.name)),
+        h("p", { class: "phase" }, done ? "Every phase finished" : p.phase ? `Phase ${p.phase.number} of ${p.phase.of} · ${p.phase.title}` : "No phase in progress")),
+      h("div", { class: "ring-wrap", role: "img", "aria-label": `${p.name} is ${pct} percent done` }, ring(pct), h("span", { class: "ring-pct", "aria-hidden": "true" }, `${pct}%`))),
     p.nextStep ? h("p", { class: "next" }, h("span", {}, "Next: "), p.nextStep) : null,
-    h("div", { class: "meta" },
-      needs ? h("span", { class: "pill" }, `${p.decisionsWaiting} waiting on you`) : h("span", { class: "pill quiet" }, "nothing waiting"),
-      h("span", { class: stale ? "stale" : "" }, saved(p.handoffDaysOld))),
-    needsFor(p.name).slice(0, 1).map((n) => h("div", { class: "asking" },
-      h("div", { class: "asking-top" }, h("span", { class: "pill" }, n.state === "permission" ? "Maybe waiting for permission" : "Claude is asking you"), h("span", {}, `waiting ${waited(n.since)}`)),
-      h("p", { class: "asking-q" }, n.snippet),
-      openThis(n.openLink) ? h("div", { class: "w-act" }, openThis(n.openLink)) : null)),
-    controls(p.name),
-    chatsArea(p.name),
-    answer ? h("details", { class: "said" },
-      h("summary", {}, h("span", { class: "when" }, `Claude last said · ${ago(answer.at)}${answer.chat ? " · " + answer.chat : ""}`), h("span", { class: "short" }, answer.short)),
-      answer.long && answer.long !== answer.short ? h("p", { class: "long" }, answer.long) : null) : null);
+    h("div", { class: "marks" },
+      h("span", { class: "mark" + (decs ? " on" : "") }, h("b", {}, String(decs)), decs === 1 ? " decision waiting" : " decisions waiting"),
+      h("span", { class: "mark" + (chatsNeed ? " on" : "") }, h("b", {}, String(chatsNeed)), chatsNeed === 1 ? " chat needs you" : " chats need you")),
+    ctl ? h("div", { class: "card-ctl" }, ctl) : null,
+    h("div", { class: "card-more" }, more));
 }
 
 function render(data) {
