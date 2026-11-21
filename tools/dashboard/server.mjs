@@ -93,6 +93,29 @@ const demoChats = () => {
   return { generatedAt: new Date().toISOString(), demo: true, max: 2, working: projects.flatMap((p) => p.chats).filter((c) => c.kind === "hub" && c.state === "working").length, openListOk: true, projects };
 };
 
+// Project page (Phase 17.4, read only): GET /api/project?name=<project name>. The name is only compared with the known project names;
+// it never becomes part of a file path. Unknown name -> 404.
+const projectPageLib = await import("./lib/projectpage.mjs");
+const projectPageSample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "project-page.json"), "utf8")) : null;
+async function projectApi(rawName) {
+  const notFound = { status: 404, body: { error: "unknown project" } };
+  if (DEMO) {
+    const known = sample.projects.map((p) => p.name);
+    const name = projectPageLib.resolveName(rawName, known);
+    if (!name) return notFound;
+    const group = demoChats().projects.find((p) => p.project === name);
+    return { status: 200, body: projectPageLib.demoPage({ card: sample.projects.find((p) => p.name === name), chatGroup: group, demoJson: projectPageSample }) };
+  }
+  const cards = real.projects().projects;
+  const name = projectPageLib.resolveName(rawName, cards.map((p) => p.name));
+  if (!name) return notFound;
+  const hub = chats.list();
+  const cl = await chatlist.readChats({ hubChats: hub, redact: real.redact });
+  const root = await projectPageLib.projectRoot(name, { known: cards.map((p) => p.name) });
+  const body = await projectPageLib.buildProjectPage({ name, card: cards.find((p) => p.name === name), root, chatGroup: cl.projects.find((p) => String(p.project).toLowerCase() === name.toLowerCase()), hubChats: hub, redact: real.redact });
+  return { status: 200, body };
+}
+
 const api = {
   "/api/chats": () => (DEMO ? demoChats() : chatlist.readChats({ hubChats: chats.list(), redact: real.redact })),
   "/api/projects": () => (DEMO ? demoProjects() : real.projects()),
@@ -215,6 +238,7 @@ const server = createServer(async (req, res) => {
     const path = new URL(req.url, "http://x").pathname;
     if (req.method === "POST" && path === "/api/action") return await handleAction(req, send);
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, '{"error":"method not allowed"}');
+    if (path === "/api/project") { const r = await projectApi(new URL(req.url, "http://x").searchParams.get("name")); return send(r.status, JSON.stringify(r.body)); }
     if (api[path]) return send(200, JSON.stringify(await api[path]()));
     const rel = path === "/" ? "index.html" : normalize(decodeURIComponent(path)).replace(/^[/\\]+/, "");
     const file = join(PUBLIC, rel);
@@ -252,6 +276,13 @@ server.listen(PORT, HOST, async () => {
   const rh = await fetch(base + "/api/helpers"); const jh = await rh.json();
   ok("GET /api/helpers returns totals and projects", rh.status === 200 && Array.isArray(jh.projects) && ["running", "stuck", "review", "parked", "failed", "done"].every((k) => Number.isFinite(jh.totals?.[k])));
   ok("POST to /api/helpers is refused", (await fetch(base + "/api/helpers", { method: "POST" })).status === 405);
+  // project page (17.4): known name -> the page object; anything else -> 404; no write method works; nothing from the query becomes a path
+  const firstName = j.projects[0].name;
+  const rp = await fetch(base + "/api/project?name=" + encodeURIComponent(firstName)); const jp = await rp.json();
+  ok("GET /api/project?name=<known> returns project, decisions, chats, handoff", rp.status === 200 && jp.project?.name === firstName && Array.isArray(jp.decisions) && Array.isArray(jp.chats) && "handoff" in jp && typeof jp.generatedAt === "string");
+  ok("GET /api/project with an unknown name is 404", (await fetch(base + "/api/project?name=NoSuchProject")).status === 404);
+  ok("GET /api/project with a path trick, an empty or missing name is 404", (await Promise.all(["..%5C..%5CWindows", "..%2F..", "C%3A%5CWindows", "", firstName.toLowerCase() === firstName ? firstName.toUpperCase() : firstName.toLowerCase()].map((n) => fetch(base + "/api/project?name=" + n).then((r) => r.status)))).every((s) => s === 404) && (await fetch(base + "/api/project")).status === 404);
+  ok("POST and PUT to /api/project are refused", (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName), { method: "POST" })).status === 405 && (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName), { method: "PUT" })).status === 405);
   ok("PUT is refused", (await fetch(base + "/api/projects", { method: "PUT" })).status === 405);
   ok("POST to a data route is refused", (await fetch(base + "/api/projects", { method: "POST" })).status === 405);
   ok("path tricks refused", (await fetch(base + "/..%2f..%2fserver.mjs")).status === 404);

@@ -1,0 +1,48 @@
+{
+  "_note": "Made-up sample data for the project page (--demo). Minutes-ago numbers become real times when served. Chats come from demo/chats.json.",
+  "projects": {
+    "Clip Studio": {
+      "decisions": [
+        {
+          "id": "D7", "title": "Which caption style?", "status": "open",
+          "question": "Should captions be word-by-word highlighted, or whole sentences at the bottom of the frame?",
+          "options": [
+            { "key": "A", "text": "Word-by-word highlight: lively, like short-video apps. Takes longer to export." },
+            { "key": "B", "text": "Whole sentences: calm and easy to read. Fast to export." }
+          ],
+          "ownerSaid": "", "recommendation": "A, because most viewers watch without sound.", "date": "2026-11-05"
+        },
+        {
+          "id": "D9", "title": "Where do finished clips go?", "status": "proposed",
+          "question": "Proposal: a local folder first, upload to the channel only after a spoken or typed yes.",
+          "options": [],
+          "ownerSaid": "Sounds fine, but ask me before anything goes online.", "recommendation": "", "date": "2026-11-06"
+        }
+      ],
+      "lastSaid": {
+        "h-20261116-091000-q7w2": { "text": "Working on the caption timing now. The first 3 of 9 clips are done.", "agoMinutes": 2 },
+        "h-20261116-101500-k3x9": { "text": "The caption export now handles empty captions. Tests pass: 9 of 9.\n\nWhich caption style should I burn in: word-by-word highlight or whole sentences?", "agoMinutes": 40 },
+        "s-1a2b3c4d": { "text": "Step 4.3 is half built: the vertical cut works, captions are next.", "agoMinutes": 6 }
+      },
+      "handoff": "1. Step 4.3: burn captions into the vertical cut (waits on D7).\n2. Then 4.4: export presets.\n3. Phase 4 close: show Ivan the three sample clips."
+    },
+    "Job Applier": {
+      "decisions": [
+        {
+          "id": "D4", "title": "How strict is the match score?", "status": "open",
+          "question": "Show only listings above 70 percent, or show everything sorted by score?",
+          "options": [
+            { "key": "A", "text": "Only above 70 percent: a short, clean list. You might miss odd good ones." },
+            { "key": "B", "text": "Everything, best first: nothing is hidden, but a long list." }
+          ],
+          "ownerSaid": "", "recommendation": "B, with a filter you can switch.", "date": "2026-11-04"
+        }
+      ],
+      "lastSaid": {
+        "s-9c0d1e2f": { "text": "Scoring works on the 12 sample listings. I need the CV file path to go further.", "agoMinutes": 300 },
+        "h-20261115-164000-b2n8": { "text": "The run stopped: the listings site did not answer.", "agoMinutes": 1200 }
+      },
+      "handoff": "1. Step 2.2: score a listing against the CV.\n2. Needs Ivan: where the CV file lives."
+    }
+  }
+}
