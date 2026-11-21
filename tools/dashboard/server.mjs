@@ -117,6 +117,18 @@ async function projectApi(rawName) {
   return { status: 200, body };
 }
 
+// Chat log (Phase 19, read only): GET /api/chat-log?id=<chat id>[&before=<index>][&limit=<n>]. The id is only compared with the ids of the
+// live chat list; the saved file comes from the Hub's own records. Unknown id -> 404. Shape: docs/plan/phases/19-claude-in-the-hub.md
+const chatLogLib = await import("./lib/chatlog.mjs");
+const chatLogSample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "chat-log.json"), "utf8")) : null;
+async function chatLogApi(sp) {
+  const q = { id: sp.get("id"), before: sp.get("before"), limit: sp.get("limit") };
+  if (DEMO) return chatLogLib.demoChatLog({ ...q, demoJson: chatLogSample, chatList: demoChats() });
+  const hub = chats.list();
+  const cl = await chatlist.readChats({ hubChats: hub, redact: real.redact });
+  return chatLogLib.readChatLog({ ...q, chatList: cl, hubChats: hub, appRecords: chatlist.readAppRecords(), redact: real.redact });
+}
+
 const api = {
   "/api/chats": () => (DEMO ? demoChats() : chatlist.readChats({ hubChats: chats.list(), redact: real.redact })),
   "/api/projects": () => (DEMO ? demoProjects() : real.projects()),
@@ -253,6 +265,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/api/action") return await handleAction(req, send);
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, '{"error":"method not allowed"}');
     if (path === "/api/project") { const r = await projectApi(new URL(req.url, "http://x").searchParams.get("name")); return send(r.status, JSON.stringify(r.body)); }
+    if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (api[path]) return send(200, JSON.stringify(await api[path]()));
     const rel = path === "/" ? "index.html" : normalize(decodeURIComponent(path)).replace(/^[/\\]+/, "");
     const file = join(PUBLIC, rel);
@@ -396,6 +409,29 @@ server.listen(PORT, HOST, async () => {
   })());
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
   ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
+  // chat log (Phase 19): a known id from the live list returns the conversation; anything else is 404; no write method works
+  const firstChat = jc.projects.flatMap((p) => p.chats)[0];
+  if (firstChat) {
+    const rl = await fetch(base + "/api/chat-log?id=" + encodeURIComponent(firstChat.id)); const jl = await rl.json();
+    ok("GET /api/chat-log?id=<known> returns messages, context and meta", rl.status === 200 && jl.chatId === firstChat.id && Array.isArray(jl.messages) && Number.isInteger(jl.messagesTotal) && typeof jl.hasMore === "boolean" && "percent" in jl.context && jl.meta.kind === firstChat.kind && Array.isArray(jl.meta.outputs));
+  } else ok("GET /api/chat-log?id=<known> (no chats on this PC: skipped)", true);
+  const rlu = await fetch(base + "/api/chat-log?id=h-20260101-000000-abcd");
+  ok("GET /api/chat-log with an unknown id is 404 {error:'unknown chat'}", rlu.status === 404 && (await rlu.json()).error === "unknown chat");
+  ok("GET /api/chat-log with a path trick, a Claude session id, an empty or missing id is 404", (await Promise.all(["..%5C..%5Cx", "..%2F..%2Fx", "18ec7052-3a6a-46cc-ade3-7ff857195e3d", "C%3A%5CWindows", ""].map((n) => fetch(base + "/api/chat-log?id=" + n).then((r) => r.status)))).every((s) => s === 404) && (await fetch(base + "/api/chat-log")).status === 404);
+  ok("POST and PUT to /api/chat-log are refused", (await fetch(base + "/api/chat-log?id=x", { method: "POST" })).status === 405 && (await fetch(base + "/api/chat-log?id=x", { method: "PUT" })).status === 405);
+  ok("chat log in --demo mode: a sample chat returns its sample conversation, an unknown one 404", await (async () => {
+    const { createServer: cs } = await import("node:net");
+    const spare = await new Promise((d) => { const s = cs(); s.listen(0, HOST, () => { const p = s.address().port; s.close(() => d(p)); }); });
+    const kid = spawn(process.execPath, [fileURLToPath(import.meta.url), "--demo"], { env: { ...process.env, HUB_PORT: String(spare) }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    try {
+      await new Promise((d, no) => { let t = ""; const to = setTimeout(() => no(new Error("demo server did not start")), 15000); kid.stdout.on("data", (x) => { t += x; if (t.includes("Ready.")) { clearTimeout(to); d(); } }); });
+      const db = `http://${HOST}:${spare}`;
+      const r = await fetch(db + "/api/chat-log?id=h-20261116-101500-k3x9"); const j = await r.json();
+      const p = await (await fetch(db + "/api/chat-log?id=h-20261116-101500-k3x9&before=2&limit=1")).json();
+      return r.status === 200 && j.demo === true && j.messages.length >= 4 && j.messages.some((m) => m.blocks.some((b) => b.type === "tool")) && j.context.percent === 64 && j.meta.outputs.length > 0
+        && p.messages.length === 1 && p.messages[0].i === 1 && p.hasMore === true && (await fetch(db + "/api/chat-log?id=h-nope")).status === 404;
+    } catch { return false; } finally { kid.kill(); }
+  })());
   // game-mode buttons (13.4): with no game running every one of them is refused, and none can be reached without the token
   for (const a of [{ action: "game-off" }, { action: "game-on" }, { action: "game-ignore", app: "opera" }, { action: "game-unignore", app: "opera" }]) {
     const r = await raw("/api/action", json, JSON.stringify({ ...a, confirm: true }), "POST");

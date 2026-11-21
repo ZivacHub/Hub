@@ -19,6 +19,8 @@ Every document with "read when". Keep this list current: new doc => new row, sam
 | docs/plan/phases/14-run-chats-from-the-hub.md | working on Phase 14 (start, see and answer Claude chats from the Hub page) |
 | docs/plan/phases/16-17-18-app-work-reports.md | working on Phases 16 (Hub as its own app), 17 (work from the Hub) or 18 (phase reports): Ivan's words and open questions |
 | docs/plan/phases/17-project-page.md | building or changing the project page (17.4) or its feed (GET /api/project) |
+| docs/plan/phases/19-claude-in-the-hub.md | building or changing the Hub chat view (Phase 19) or its feeds (GET /api/chat-log: messages, context bar, meta, outputs) |
+| docs/plan/phases/19-claude-in-the-hub-handoff.md | building or changing the hand-off round of Phase 19 ("Hand off and pick up": API, steps, exact messages) |
 | docs/plan/phases/10-dashboard-always-on.md | working on Phase 10 (dashboard starts with Windows, security pass) |
 | docs/plan/phases/04-answer-decisions-by-voice.md | working on Phase 4 |
 | docs/plan/phases/05-always-on-safely.md | working on Phase 5 |

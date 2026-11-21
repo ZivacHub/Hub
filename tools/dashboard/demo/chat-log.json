@@ -1,0 +1,50 @@
+{
+  "_about": "Made-up sample conversations for --demo (GET /api/chat-log). agoMinutes become real times. Ids must exist in demo/chats.json. Shape: docs/plan/phases/19-claude-in-the-hub.md",
+  "chats": {
+    "h-20261116-101500-k3x9": {
+      "context": { "usedTokens": 642310, "windowTokens": 1000000, "estimated": false, "basis": "last reply's size (input + cache read + cache write tokens)" },
+      "meta": {
+        "model": "claude-sonnet-5-5",
+        "permissionMode": "auto",
+        "compactions": 0,
+        "outputs": [
+          { "path": "src/captions/export.mjs", "outside": false, "tool": "Edit", "agoMinutes": 41 },
+          { "path": "docs/plan/BOARD.md", "outside": false, "tool": "Edit", "agoMinutes": 40 },
+          { "path": "src/captions/export.test.mjs", "outside": false, "tool": "Write", "agoMinutes": 44 },
+          { "path": "…/scratchpad/sample-clip.srt", "outside": true, "tool": "Write", "agoMinutes": 47 }
+        ]
+      },
+      "messages": [
+        { "role": "user", "agoMinutes": 95, "blocks": [ { "type": "text", "text": "/pickup Clip Studio" } ] },
+        { "role": "assistant", "agoMinutes": 94, "blocks": [
+          { "type": "tool", "name": "Read", "summary": "Read docs/plan/BOARD.md", "status": "ok", "output": "# Board\n- [x] Phase 3 Cutting\n- [~] Phase 4 Captions\n  - [x] 4.1 Find speech\n  - [x] 4.2 Caption style\n  - [ ] 4.3 Burn captions into the clip" },
+          { "type": "tool", "name": "Read", "summary": "Read .claude/handoff.md", "status": "ok", "output": "Next steps: 1. Step 4.3, burn captions. 2. Check empty captions." },
+          { "type": "text", "text": "## Where we are\n\nPhase 4 (captions) is on step **4.3: burn the captions into the clip**.\n\n- 4.1 and 4.2 are done.\n- The handoff says empty captions still break the export.\n\nShall I start with the empty-caption fix?" }
+        ] },
+        { "role": "user", "agoMinutes": 60, "blocks": [ { "type": "text", "text": "Yes, fix the empty captions first, then do 4.3." } ] },
+        { "role": "assistant", "agoMinutes": 50, "blocks": [
+          { "type": "text", "text": "I will add a test first, so we can see it fail." },
+          { "type": "tool", "name": "Write", "summary": "Write src/captions/export.test.mjs", "status": "ok", "output": "File created successfully." },
+          { "type": "tool", "name": "Bash", "summary": "Bash: node src/captions/export.test.mjs", "status": "error", "output": "FAIL empty caption line\n  TypeError: Cannot read properties of undefined (reading 'start')\n    at toSrt (src/captions/export.mjs:42:18)" },
+          { "type": "tool", "name": "Edit", "summary": "Edit src/captions/export.mjs", "status": "ok", "output": "The file src/captions/export.mjs has been updated." },
+          { "type": "tool", "name": "Bash", "summary": "Bash: node src/captions/export.test.mjs", "status": "ok", "output": "OK  empty caption line\nOK  normal lines\nOK  long lines wrap\n3/3" }
+        ] },
+        { "role": "assistant", "agoMinutes": 40, "blocks": [
+          { "type": "tool", "name": "Edit", "summary": "Edit docs/plan/BOARD.md", "status": "ok", "output": "The file docs/plan/BOARD.md has been updated." },
+          { "type": "text", "text": "### Done\n\nEmpty captions no longer break the export. The fix skips a caption with no words:\n\n```js\nconst lines = captions.filter((c) => c.words.length > 0);\n```\n\n1. The new test shows the bug and now passes (3 of 3).\n2. Step 4.3 is next: burning the captions into the clip.\n\n> The chat is at about 64% full. After 4.3 I suggest a handoff and a fresh chat.\n\nShould I go on with 4.3 now?" }
+        ] }
+      ]
+    },
+    "s-7a8b9c0d": {
+      "context": { "usedTokens": 38250, "windowTokens": 1000000, "estimated": false, "basis": "last reply's size (input + cache read + cache write tokens)" },
+      "meta": { "model": "claude-opus-5-5", "permissionMode": "default", "compactions": 0, "outputs": [] },
+      "messages": [
+        { "role": "user", "agoMinutes": 4950, "blocks": [ { "type": "text", "text": "Why does the listing parser skip the salary?" } ] },
+        { "role": "assistant", "agoMinutes": 4948, "blocks": [
+          { "type": "tool", "name": "Grep", "summary": "Grep: salary in src", "status": "ok", "output": "src/parse/listing.mjs:88:  // salary: TODO" },
+          { "type": "text", "text": "The parser never reads the salary: line 88 of `src/parse/listing.mjs` is still a *TODO*. Nothing is broken; it was simply not built yet." }
+        ] }
+      ]
+    }
+  }
+}
