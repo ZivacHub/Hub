@@ -16,6 +16,10 @@ const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n
 const noMd = (s) => String(s ?? "").replace(/```[\s\S]*?```/g, " ").replace(/[*_`#>]+/g, "").replace(/\s+/g, " ").trim();
 const isoOrNull = (v) => { const t = typeof v === "number" ? v : Date.parse(v); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 const msOf = (s) => Date.parse(s || "") || 0;
+// 17.5 (D54): a CLOSED app chat with Remote Control off and a real "open in the app" link gets an answer box. A cheap first look only:
+// the full D49 rule (lib/appanswer.mjs) is checked by the server right before anything is sent.
+const APP_LINK_RE = /^claude:\/\/claude\.ai\/epitaxy\/local_[0-9a-f-]{8,64}$/i;
+export const canAnswerApp = (c) => !!c && c.kind === "app" && c.state === "closed" && c.remoteControl === false && typeof c.openLink === "string" && APP_LINK_RE.test(c.openLink);
 
 let libPromise = null; // the shared BUSNUS helper library (same one data.mjs uses), loaded only when real data is needed
 const busnusLib = () => (libPromise ??= import(pathToFileURL(join(homedir(), ".claude", "hooks", "lib", "busnus.mjs")).href));
@@ -155,7 +159,7 @@ export async function buildProjectPage({ name, card, root, chatGroup, hubChats =
     const text = said ? tidy(said.text) : (c.kind === "hub" && c.lastReply ? String(c.lastReply) : "");
     return {
       id: c.id, kind: c.kind, state: c.state, title: c.name, needsYou: c.needsYou === true, why: c.why || "", snippet: c.snippet || "",
-      lastActive: c.lastActive ?? null, since: c.since ?? null, openLink: c.openLink ?? null, remoteControl: c.remoteControl ?? null, canAnswer: c.canAnswer === true,
+      lastActive: c.lastActive ?? null, since: c.since ?? null, openLink: c.openLink ?? null, remoteControl: c.remoteControl ?? null, canAnswer: c.canAnswer === true, canAnswerApp: canAnswerApp(c),
       lastSaid: clip(redact(text), MAX_SAID), lastSaidAt: said ? said.at : null,
     };
   });
@@ -175,7 +179,7 @@ export function demoPage({ card, chatGroup, demoJson, now = Date.now() }) {
     chats: list.slice(0, MAX_CHATS).map((c) => {
       const s = said[c.id];
       return { id: c.id, kind: c.kind, state: c.state, title: c.name, needsYou: c.needsYou === true, why: c.why || "", snippet: c.snippet || "", lastActive: c.lastActive ?? null, since: c.since ?? null,
-        openLink: c.openLink ?? null, remoteControl: c.remoteControl ?? null, canAnswer: c.canAnswer === true, lastSaid: s ? clip(s.text, MAX_SAID) : (c.lastReply || ""), lastSaidAt: s ? ago(s.agoMinutes) : null };
+        openLink: c.openLink ?? null, remoteControl: c.remoteControl ?? null, canAnswer: c.canAnswer === true, canAnswerApp: canAnswerApp(c), lastSaid: s ? clip(s.text, MAX_SAID) : (c.lastReply || ""), lastSaidAt: s ? ago(s.agoMinutes) : null };
     }),
     handoff: d.handoff ? { nextSteps: String(d.handoff) } : null,
   };
@@ -252,10 +256,22 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   })());
   check("projectRoot: a registered home wins", (await projectRoot("Alpha", { known: ["Alpha"], busnusDir: tmp, registry: [{ name: "Alpha", home: root2 }] })) === resolve(root2));
 
+  // 17.5: canAnswerApp only for a closed app chat with Remote Control off and a real app link
+  check("canAnswerApp: closed app chat, Remote Control off -> true; Remote Control on, open, Hub, terminal -> false", (() => {
+    const base = { kind: "app", state: "closed", remoteControl: false, openLink: "claude://claude.ai/epitaxy/local_0bac1d2e-0001" };
+    return canAnswerApp(base) === true && canAnswerApp({ ...base, remoteControl: true }) === false && canAnswerApp({ ...base, remoteControl: null }) === false
+      && canAnswerApp({ ...base, state: "idle" }) === false && canAnswerApp({ ...base, state: "working" }) === false && canAnswerApp({ ...base, kind: "hub" }) === false
+      && canAnswerApp({ ...base, kind: "terminal" }) === false && canAnswerApp({ ...base, openLink: null }) === false && canAnswerApp({ ...base, openLink: "claude://claude.ai/epitaxy/local_x1234567" }) === false && canAnswerApp({ ...base, openLink: "claude://resume?session=x" }) === false;
+  })());
+  check("canAnswerApp in the page: the closed app chat with Remote Control on gets false; every chat has the field", page.chats.every((c) => typeof c.canAnswerApp === "boolean") && appC.canAnswerApp === false && hubC.canAnswerApp === false);
+  { const g2 = { project: "Alpha", chats: [{ ...group.chats[1], remoteControl: false, openLink: "claude://claude.ai/epitaxy/local_0bac1d2e-0001" }] };
+    const p3 = await buildProjectPage({ name: "Alpha", card, root: root3, chatGroup: g2, hubChats: [], redact, chatsBase: base });
+    check("canAnswerApp in the page: closed app chat with Remote Control off -> true", p3.chats[0].canAnswerApp === true); }
+
   // demo shape
   const dj = { projects: { Alpha: { decisions: [{ id: "D1", title: "t", status: "open", question: "q", options: [], ownerSaid: "", recommendation: "", date: null }], lastSaid: { "h-1": { text: "Demo said", agoMinutes: 3 } }, handoff: "1. Demo step" } } };
   const dp = demoPage({ card, chatGroup: group, demoJson: dj, now: Date.parse("2026-11-20T12:00:00Z") });
-  check("demoPage: same shape, minutes-ago turned into times, unknown project gets empty lists", dp.demo === true && dp.decisions.length === 1 && dp.chats.find((c) => c.id === "h-1").lastSaid === "Demo said" && dp.chats.find((c) => c.id === "h-1").lastSaidAt === "2026-11-20T11:57:00.000Z" && dp.handoff.nextSteps === "1. Demo step" && demoPage({ card: { name: "Q" }, chatGroup: undefined, demoJson: dj }).chats.length === 0);
+  check("demoPage: same shape, minutes-ago turned into times, unknown project gets empty lists", dp.demo === true && dp.decisions.length === 1 && dp.chats.find((c) => c.id === "h-1").lastSaid === "Demo said" && dp.chats.find((c) => c.id === "h-1").lastSaidAt === "2026-11-20T11:57:00.000Z" && dp.handoff.nextSteps === "1. Demo step" && dp.chats.every((c) => typeof c.canAnswerApp === "boolean") && demoPage({ card: { name: "Q" }, chatGroup: undefined, demoJson: dj }).chats.length === 0);
 
   // read-only: the module has no write calls
   const src = fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("// ---------- self-test")[0];

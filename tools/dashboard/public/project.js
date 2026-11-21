@@ -1,6 +1,8 @@
 // Hub project page (step 17.4). One project: what waits on Ivan, its chats, the handoff's next steps.
-// Reads GET /api/project?name=... every 30 s. The only things that change anything: the answer box (Send) and "Open this chat",
-// both using the SAME requests the dashboard already uses (POST /api/action with the per-run token), and both ask "...?" first.
+// Reads GET /api/project?name=... every 30 s. The only things that change anything: the answer boxes (Send) and "Open this chat",
+// all using the SAME request route the dashboard already uses (POST /api/action with the per-run token), and Send asks "...?" first.
+// 17.5 (D54): a CLOSED app chat (canAnswerApp) gets an answer box too. The page sends only { action: "chat-answer-app", appId, text, confirm: true };
+// the server checks the whole safety rule (D49) right before sending and answers in words. Never for open app chats (D40).
 // All text goes in with textContent (via h()), never as HTML, because it comes from project files.
 const REFRESH_MS = 30_000;
 const $ = (id) => document.getElementById(id);
@@ -39,6 +41,7 @@ const drafts = new Map();          // chat id -> half-typed answer
 const sending = new Set();
 const expanded = new Set();        // chat ids whose "Show more" is open
 let noteText = "";
+const appResults = new Map();      // chat id -> { ok, text } the last answer box result of a closed app chat, shown on its card
 
 function setNote(text, bad = false) { noteText = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
 
@@ -150,15 +153,43 @@ function chatItem(c, i) {
       kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "open-hub", "data-id": c.id }, "Open in the app")));
     } else if (appId) kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat")));
   } else if (c.kind === "app") {
-    kids.push(h("p", { class: "cp-note" }, c.state === "closed" ? "This chat is closed. Open it in the Claude app and answer it there." : "This chat is open in the Claude app. Answer it there so it does not split."));
-    // FUTURE (D40/D54): answering app chats from this page is NOT built. It waits for the safety test. Do not add a writing box here before that.
     const appId = appIdOf(c.openLink);
+    // 17.5 (D54): a closed app chat with Remote Control off can be answered from here; open app chats never (D40/D46)
+    const canApp = c.canAnswerApp === true && c.state === "closed" && c.remoteControl === false && !!appId;
+    if (canApp) {
+      const busy = sending.has(c.id);
+      const draft = drafts.get(c.id) || "";
+      kids.push(h("p", { class: "cp-note" }, "This chat is closed. You can answer it here: Claude continues in the same chat. Or open it in the Claude app."));
+      const ta = h("textarea", { id: "ans-" + i, class: "chat-text", rows: "3", maxlength: String(ANSWER_MAX), "data-id": c.id, "aria-describedby": "cnt-" + i, disabled: busy });
+      ta.value = draft;
+      kids.push(h("div", { class: "cf-field" }, h("label", { for: "ans-" + i }, "Your answer"), ta, h("span", { class: "cf-count", id: "cnt-" + i }, `${draft.length} / ${ANSWER_MAX}`)));
+      if (busy) kids.push(h("p", { class: "app-busy", role: "status" }, h("span", { class: "dot", "aria-hidden": "true" }), "Answering from the Hub. Don't type in this chat in the app until it is done."));
+      const res = appResults.get(c.id);
+      if (res && !busy) kids.push(appResultBlock(res));
+      kids.push(asking && asking.id === c.id ? askRow()
+        : h("div", { class: "actions" },
+          h("button", { class: "btn primary", type: "button", "data-act": "ask-send-app", "data-id": c.id, disabled: busy || !draft.trim() }, busy ? "Answering…" : "Send"),
+          h("button", { class: "btn open-this", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat"),
+          h("span", { class: "cp-rc" }, "Remote Control: off")));
+      return h("li", { class: "chat-card" + (c.needsYou ? " needs" : "") }, kids);
+    }
+    kids.push(h("p", { class: "cp-note" }, c.state === "closed" ? (c.remoteControl === true ? "This chat is closed and Remote Control is on. Answer it on your phone, or open it in the Claude app." : "This chat is closed. Open it in the Claude app and answer it there.") : "This chat is open in the Claude app. Answer it there so it does not split."));
     const rc = c.remoteControl === true ? "Remote Control: on" : c.remoteControl === false ? "Remote Control: off" : null;
     if (appId || rc) kids.push(h("div", { class: "actions" }, appId ? h("button", { class: "btn open-this", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat") : null, rc ? h("span", { class: "cp-rc" }, rc) : null));
   } else {
     kids.push(h("p", { class: "cp-note" }, "This chat is open in a terminal. Answer it there."));
   }
   return h("li", { class: "chat-card" + (c.needsYou ? " needs" : "") }, kids);
+}
+
+// the result of an answer to a closed app chat, in words: Claude's reply, or why nothing was sent, or "may be split"
+function appResultBlock(res) {
+  if (res.ok && res.reply) {
+    return h("div", { class: "said-wrap app-result" + (res.warn ? " warn" : "") },
+      h("span", { class: "cp-label" }, res.warn ? res.text : "Claude replied"),
+      h("div", { class: "said-text" }, res.reply));
+  }
+  return h("p", { class: "app-result-line" + (res.ok && !res.warn ? "" : " bad") }, res.text);
 }
 
 function chatsSection(chats) {
@@ -225,7 +256,40 @@ document.addEventListener("click", async (e) => {
     const y = document.querySelector(".actions.ask .btn.primary"); if (y) y.focus();
     return;
   }
+  if (act === "ask-send-app") {
+    const c = findChat(id);
+    const text = (drafts.get(id) || "").trim();
+    if (!text || !c || c.canAnswerApp !== true || sending.has(id)) return;
+    asking = { id, app: true, text: "Send this answer into the chat in the Claude app?", extra: "Don't type in that chat while it works." };
+    setNote(""); render();
+    const y = document.querySelector(".actions.ask .btn.primary"); if (y) y.focus();
+    return;
+  }
   if (act === "cancel") { asking = null; setNote(""); render(); return; }
+  if (act === "yes" && asking && asking.app) {
+    const a = asking; asking = null;
+    const c = findChat(a.id);
+    const appId = c ? appIdOf(c.openLink) : null;
+    const text = (drafts.get(a.id) || "").trim();
+    if (!c || c.kind !== "app" || c.canAnswerApp !== true || !appId || !text || sending.has(a.id)) { render(); return; }
+    sending.add(a.id); appResults.delete(a.id); setNote("Answering from the Hub. Don't type in this chat in the app until it is done."); render();
+    let r;
+    try { r = await send({ action: "chat-answer-app", appId, text }); }
+    catch { r = { ok: false, error: "The Hub did not answer. Look at the chat in the app before you try again." }; }
+    finally { sending.delete(a.id); }
+    if (r.ok) {
+      const warn = r.status !== "done";
+      const msg = r.message || (warn ? "Claude replied, but the chat may be split: check it in the app." : "Done.");
+      appResults.set(a.id, { ok: true, warn, text: r.reply ? (warn ? msg : "Claude replied") : msg, reply: r.reply || "" });
+      setNote(r.message || "Done.", warn);
+      drafts.delete(a.id);
+    } else {
+      appResults.set(a.id, { ok: false, text: r.error || "That did not work." });
+      setNote(r.error || "That did not work.", true);
+    }
+    await load(true);
+    return;
+  }
   if (act === "yes") {
     const a = asking; asking = null;
     const c = a && findChat(a.id);
@@ -252,7 +316,7 @@ document.addEventListener("input", (e) => {
   if (!(t instanceof HTMLTextAreaElement) || !t.dataset.id) return;
   drafts.set(t.dataset.id, t.value);
   const cnt = t.parentElement.querySelector(".cf-count"); if (cnt) cnt.textContent = `${t.value.length} / ${ANSWER_MAX}`;
-  const btn = t.closest(".chat-card").querySelector('button[data-act="ask-send"]'); if (btn) btn.disabled = !t.value.trim() || sending.has(t.dataset.id);
+  const btn = t.closest(".chat-card").querySelector('button[data-act="ask-send"], button[data-act="ask-send-app"]'); if (btn) btn.disabled = !t.value.trim() || sending.has(t.dataset.id);
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && asking) { asking = null; render(); } });
 

@@ -47,6 +47,13 @@
 .said-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9375rem; line-height: 1.5; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .said-text.folded { max-height: 7.5rem; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
 .chat-card .actions.ask { background: var(--surface); }
+/* 17.5: answering a closed app chat from the Hub */
+.app-busy { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; font-weight: 600; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 6px 10px; }
+.app-busy .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.app-result .cp-label { color: var(--ink); }
+.app-result.warn .cp-label { color: var(--warn); }
+.app-result-line { font-size: 0.9375rem; border-radius: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); }
+.app-result-line.bad { color: var(--warn); border-color: color-mix(in oklab, var(--warn) 35%, var(--line)); background: var(--warn-bg); }
 
 .handoff { margin: 0; font: inherit; font-size: 0.9375rem; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; max-height: 24rem; overflow: auto; }
 

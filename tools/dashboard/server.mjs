@@ -32,6 +32,7 @@ import { makeDoneTracker } from "./lib/done.mjs";
 import { loadGamesConfig, makeGameDetector, makeIgnoreStore, normName, startProbe } from "./lib/game.mjs";
 import { loadThrottleConfig, makeThrottle } from "./lib/throttle.mjs";
 import { makePauses } from "./lib/pauses.mjs";
+import { makeAppAnswer } from "./lib/appanswer.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
@@ -139,7 +140,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -198,8 +199,21 @@ async function openApp(body) {
   return done ? { ok: true, message: "Opening in the Claude app." } : { ok: false, error: "Windows did not open the Claude app." };
 }
 
+// "Answer a closed app chat" (17.5, D54): the page sends ONLY the app id and the text; the engine (lib/appanswer.mjs) looks up the chat's saved-file id
+// and folder in the app's own records and checks the whole D49 rule right before it runs `claude -p --resume`. Replaceable so the self-test only uses fakes.
+const appAnswerHooks = { engine: DEMO ? null : makeAppAnswer({ redact: real.redact, log: (...a) => gameLog(...a), hubChats: () => chats.list() }), log: (...a) => gameLog(...a) };
+const APP_ANSWER_KEYS = new Set(["action", "appId", "text", "confirm"]);
+async function appAnswer(body) {
+  if (Object.keys(body).some((k) => !APP_ANSWER_KEYS.has(k)) || typeof body.appId !== "string" || typeof body.text !== "string") {
+    appAnswerHooks.log("chat-answer-app", String(typeof body.appId === "string" ? body.appId : "-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) || "-", "refused: wrong request shape");
+    return { ok: false, status: "refused", error: "The Hub can not answer that chat. Look at the page again." };
+  }
+  return appAnswerHooks.engine.answer({ appId: body.appId, text: body.text });
+}
+
 async function chatAction(body) {
   if (body.action === "chat-open-app") return openApp(body);
+  if (body.action === "chat-answer-app") return appAnswer(body);
   // workflow (D44): the chat first runs /pickup, unless the page says exactly false (the "Skip the project workflow" tick)
   if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true, workflow: body.workflow !== false });
   if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
@@ -339,6 +353,47 @@ server.listen(PORT, HOST, async () => {
   const goodHub = await oa({ hubId: "h-rest" });
   ok("chat-open-app with a resting Hub chat opens the resume link built by the server", JSON.parse(goodHub.text).ok === true && opened.length === 2 && opened[1] === "claude://resume?session=" + U1);
   ok("chat-open-app logs action, id and result only", logged.some((l) => l === "chat-open-app local_abcdef12-3456 ok") && logged.some((l) => l.startsWith("chat-open-app") && l.endsWith("refused")) && logged.every((l) => !l.includes("claude://")));
+  // 17.5 "answer a closed app chat": a FAKE engine (fake records, open list, file times and run), so no real claude runs and no real chat is touched
+  const aaRuns = [], aaLogs = [];
+  const AA = "local_abcdef12-3456", AU = "abcdef12-1111-4222-8333-444455556666";
+  const aaRoot = join(HERE, "..", "..", "..");   // the projects folder; the fake record says the chat is in the Hub folder
+  let aaOpen = [];
+  appAnswerHooks.log = (...a) => aaLogs.push(a.join(" "));
+  appAnswerHooks.engine = makeAppAnswer({
+    root: aaRoot, now: () => 1_000_000_000, log: (...a) => aaLogs.push(a.join(" ")), redact: (s) => String(s).replace(/SECRET\w*/g, "[hidden]"), hubChats: () => [],
+    appRecords: () => [{ sessionId: AA, cliSessionId: AU, cwd: join(aaRoot, "Hub"), isArchived: false, remoteControlUserEnabled: false }],
+    listOpen: async () => aaOpen, fileMtime: () => 1_000_000_000 - 120_000,
+    run: async (o) => { aaRuns.push(o); return { code: 0, out: JSON.stringify({ type: "result", subtype: "success", session_id: o.sessionId, result: "Fake reply SECRET7" }), err: "" }; },
+  });
+  const aa = (o, h = json) => raw("/api/action", h, cj({ action: "chat-answer-app", ...o }), "POST");
+  const aaNo = async (o, h) => { const n = aaRuns.length; const r = await aa(o, h); return r.status === 200 && JSON.parse(r.text).ok === false && aaRuns.length === n; };
+  ok("chat-answer-app without the token / with a wrong token is refused, nothing run", (await aa({ appId: AA, text: "x" }, { ...json, "X-Hub-Token": "" })).status === 403 && (await aa({ appId: AA, text: "x" }, { ...json, "X-Hub-Token": "y".repeat(tok.length) })).status === 403 && aaRuns.length === 0);
+  ok("chat-answer-app from another Origin or with no Origin is refused, nothing run", (await aa({ appId: AA, text: "x" }, { ...json, Origin: "http://evil.example" })).status === 403 && (await aa({ appId: AA, text: "x" }, { "Content-Type": "application/json", "X-Hub-Token": tok })).status === 403 && aaRuns.length === 0);
+  ok("chat-answer-app without confirm, or not JSON, is refused, nothing run", (await raw("/api/action", json, JSON.stringify({ action: "chat-answer-app", appId: AA, text: "x" }), "POST")).status === 400 && (await raw("/api/action", { ...json, "Content-Type": "text/plain" }, cj({ action: "chat-answer-app", appId: AA, text: "x" }), "POST")).status === 415 && aaRuns.length === 0);
+  ok("chat-answer-app refuses an unknown, a malformed and a link-shaped app id", await aaNo({ appId: "local_00000000-0000", text: "x" }) && await aaNo({ appId: "local_../x", text: "x" }) && await aaNo({ appId: "claude://claude.ai/epitaxy/" + AA, text: "x" }) && await aaNo({ appId: 5, text: "x" }) && await aaNo({ text: "x" }));
+  ok("chat-answer-app refuses an empty and an over-long text (4001), and a body over the size limit", await aaNo({ appId: AA, text: " " }) && await aaNo({ appId: AA, text: "x".repeat(4001) }) && (await aa({ appId: AA, text: "x".repeat(15000) })).status === 413 && aaRuns.length === 0);
+  ok("chat-answer-app refuses extra fields (only appId and text): no cliSessionId, cwd or id from the page", await aaNo({ appId: AA, text: "x", cliSessionId: AU }) && await aaNo({ appId: AA, text: "x", cwd: "C:\\Windows" }) && await aaNo({ appId: AA, text: "x", id: "h-1" }));
+  aaOpen = [{ sessionId: AU, kind: "interactive", pid: 1 }];
+  const aaOpenR = await aa({ appId: AA, text: "x" });
+  ok("chat-answer-app refuses a chat that is open in the app, in words", JSON.parse(aaOpenR.text).error === "This chat is open in the app: answer it there, so it does not split in two." && aaRuns.length === 0);
+  aaOpen = [];
+  const aaGood = await aa({ appId: AA, text: "Hello" }); const aaJ = JSON.parse(aaGood.text);
+  ok("chat-answer-app with a known closed chat runs once with the saved-file id and folder from the record; reply redacted", aaJ.ok === true && aaJ.status === "done" && aaJ.reply === "Fake reply [hidden]" && aaRuns.length === 1 && aaRuns[0].sessionId === AU && aaRuns[0].cwd === join(aaRoot, "Hub") && aaRuns[0].text === "Hello");
+  ok("chat-answer-app logs one line per request, never the text", aaLogs.length >= 1 && aaLogs.every((l) => l.startsWith("chat-answer-app ") && !l.includes("Hello")) && aaLogs.some((l) => l === "chat-answer-app " + AA + " ok done"));
+  // the real route in --demo mode: a separate sample-data server on a spare port answers "buttons off" (its engine does not even exist there)
+  ok("chat-answer-app in --demo mode: 'Sample data mode: the buttons are switched off.' and nothing starts", await (async () => {
+    const { createServer: cs } = await import("node:net");
+    const spare = await new Promise((d) => { const s = cs(); s.listen(0, HOST, () => { const p = s.address().port; s.close(() => d(p)); }); });
+    const kid = spawn(process.execPath, [fileURLToPath(import.meta.url), "--demo"], { env: { ...process.env, HUB_PORT: String(spare) }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    try {
+      await new Promise((d, no) => { let t = ""; const to = setTimeout(() => no(new Error("demo server did not start")), 15000); kid.stdout.on("data", (x) => { t += x; if (t.includes("Ready.")) { clearTimeout(to); d(); } }); });
+      const db = `http://${HOST}:${spare}`;
+      const dt = (await (await fetch(db + "/api/session")).json()).token;
+      const r = await fetch(db + "/api/action", { method: "POST", headers: { "Content-Type": "application/json", Origin: db, "X-Hub-Token": dt }, body: JSON.stringify({ action: "chat-answer-app", appId: "local_0bac1d2e-0000-4000-8000-000000000004", text: "Hello", confirm: true }) });
+      const j = await r.json();
+      return r.status === 200 && j.ok === false && j.error === "Sample data mode: the buttons are switched off.";
+    } catch { return false; } finally { kid.kill(); }
+  })());
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
   ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
   // game-mode buttons (13.4): with no game running every one of them is refused, and none can be reached without the token

@@ -40,6 +40,7 @@
       ],
       "lastSaid": {
         "s-9c0d1e2f": { "text": "Scoring works on the 12 sample listings. I need the CV file path to go further.", "agoMinutes": 300 },
+        "s-7a8b9c0d": { "text": "The cover-letter template is ready in three tones: formal, friendly, short. Which one should be the default?", "agoMinutes": 95 },
         "h-20261115-164000-b2n8": { "text": "The run stopped: the listings site did not answer.", "agoMinutes": 1200 }
       },
       "handoff": "1. Step 2.2: score a listing against the CV.\n2. Needs Ivan: where the CV file lives."
