@@ -2,48 +2,369 @@
   "_about": "Made-up sample conversations for --demo (GET /api/chat-log). agoMinutes become real times. Ids must exist in demo/chats.json. Shape: docs/plan/phases/19-claude-in-the-hub.md",
   "chats": {
     "h-20261116-101500-k3x9": {
-      "context": { "usedTokens": 642310, "windowTokens": 1000000, "estimated": false, "basis": "last reply's size (input + cache read + cache write tokens)" },
+      "context": {
+        "usedTokens": 642310,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
       "meta": {
         "model": "claude-sonnet-5-5",
         "permissionMode": "auto",
         "compactions": 0,
         "outputs": [
-          { "path": "src/captions/export.mjs", "outside": false, "tool": "Edit", "agoMinutes": 41 },
-          { "path": "docs/plan/BOARD.md", "outside": false, "tool": "Edit", "agoMinutes": 40 },
-          { "path": "src/captions/export.test.mjs", "outside": false, "tool": "Write", "agoMinutes": 44 },
-          { "path": "…/scratchpad/sample-clip.srt", "outside": true, "tool": "Write", "agoMinutes": 47 }
+          {
+            "path": "src/captions/export.mjs",
+            "outside": false,
+            "tool": "Edit",
+            "agoMinutes": 41
+          },
+          {
+            "path": "docs/plan/BOARD.md",
+            "outside": false,
+            "tool": "Edit",
+            "agoMinutes": 40
+          },
+          {
+            "path": "src/captions/export.test.mjs",
+            "outside": false,
+            "tool": "Write",
+            "agoMinutes": 44
+          },
+          {
+            "path": "…/scratchpad/sample-clip.srt",
+            "outside": true,
+            "tool": "Write",
+            "agoMinutes": 47
+          }
         ]
       },
       "messages": [
-        { "role": "user", "agoMinutes": 95, "blocks": [ { "type": "text", "text": "/pickup Clip Studio" } ] },
-        { "role": "assistant", "agoMinutes": 94, "blocks": [
-          { "type": "tool", "name": "Read", "summary": "Read docs/plan/BOARD.md", "status": "ok", "output": "# Board\n- [x] Phase 3 Cutting\n- [~] Phase 4 Captions\n  - [x] 4.1 Find speech\n  - [x] 4.2 Caption style\n  - [ ] 4.3 Burn captions into the clip" },
-          { "type": "tool", "name": "Read", "summary": "Read .claude/handoff.md", "status": "ok", "output": "Next steps: 1. Step 4.3, burn captions. 2. Check empty captions." },
-          { "type": "text", "text": "## Where we are\n\nPhase 4 (captions) is on step **4.3: burn the captions into the clip**.\n\n- 4.1 and 4.2 are done.\n- The handoff says empty captions still break the export.\n\nShall I start with the empty-caption fix?" }
-        ] },
-        { "role": "user", "agoMinutes": 60, "blocks": [ { "type": "text", "text": "Yes, fix the empty captions first, then do 4.3." } ] },
-        { "role": "assistant", "agoMinutes": 50, "blocks": [
-          { "type": "text", "text": "I will add a test first, so we can see it fail." },
-          { "type": "tool", "name": "Write", "summary": "Write src/captions/export.test.mjs", "status": "ok", "output": "File created successfully." },
-          { "type": "tool", "name": "Bash", "summary": "Bash: node src/captions/export.test.mjs", "status": "error", "output": "FAIL empty caption line\n  TypeError: Cannot read properties of undefined (reading 'start')\n    at toSrt (src/captions/export.mjs:42:18)" },
-          { "type": "tool", "name": "Edit", "summary": "Edit src/captions/export.mjs", "status": "ok", "output": "The file src/captions/export.mjs has been updated." },
-          { "type": "tool", "name": "Bash", "summary": "Bash: node src/captions/export.test.mjs", "status": "ok", "output": "OK  empty caption line\nOK  normal lines\nOK  long lines wrap\n3/3" }
-        ] },
-        { "role": "assistant", "agoMinutes": 40, "blocks": [
-          { "type": "tool", "name": "Edit", "summary": "Edit docs/plan/BOARD.md", "status": "ok", "output": "The file docs/plan/BOARD.md has been updated." },
-          { "type": "text", "text": "### Done\n\nEmpty captions no longer break the export. The fix skips a caption with no words:\n\n```js\nconst lines = captions.filter((c) => c.words.length > 0);\n```\n\n1. The new test shows the bug and now passes (3 of 3).\n2. Step 4.3 is next: burning the captions into the clip.\n\n> The chat is at about 64% full. After 4.3 I suggest a handoff and a fresh chat.\n\nShould I go on with 4.3 now?" }
-        ] }
+        {
+          "role": "user",
+          "agoMinutes": 95,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "/pickup Clip Studio"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 94,
+          "blocks": [
+            {
+              "type": "tool",
+              "name": "Read",
+              "summary": "Read docs/plan/BOARD.md",
+              "status": "ok",
+              "output": "# Board\n- [x] Phase 3 Cutting\n- [~] Phase 4 Captions\n  - [x] 4.1 Find speech\n  - [x] 4.2 Caption style\n  - [ ] 4.3 Burn captions into the clip"
+            },
+            {
+              "type": "tool",
+              "name": "Read",
+              "summary": "Read .claude/handoff.md",
+              "status": "ok",
+              "output": "Next steps: 1. Step 4.3, burn captions. 2. Check empty captions."
+            },
+            {
+              "type": "text",
+              "text": "## Where we are\n\nPhase 4 (captions) is on step **4.3: burn the captions into the clip**.\n\n- 4.1 and 4.2 are done.\n- The handoff says empty captions still break the export.\n\nShall I start with the empty-caption fix?"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "agoMinutes": 60,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Yes, fix the empty captions first, then do 4.3."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 50,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "I will add a test first, so we can see it fail."
+            },
+            {
+              "type": "tool",
+              "name": "Write",
+              "summary": "Write src/captions/export.test.mjs",
+              "status": "ok",
+              "output": "File created successfully."
+            },
+            {
+              "type": "tool",
+              "name": "Bash",
+              "summary": "Bash: node src/captions/export.test.mjs",
+              "status": "error",
+              "output": "FAIL empty caption line\n  TypeError: Cannot read properties of undefined (reading 'start')\n    at toSrt (src/captions/export.mjs:42:18)"
+            },
+            {
+              "type": "tool",
+              "name": "Edit",
+              "summary": "Edit src/captions/export.mjs",
+              "status": "ok",
+              "output": "The file src/captions/export.mjs has been updated."
+            },
+            {
+              "type": "tool",
+              "name": "Bash",
+              "summary": "Bash: node src/captions/export.test.mjs",
+              "status": "ok",
+              "output": "OK  empty caption line\nOK  normal lines\nOK  long lines wrap\n3/3"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 40,
+          "blocks": [
+            {
+              "type": "tool",
+              "name": "Edit",
+              "summary": "Edit docs/plan/BOARD.md",
+              "status": "ok",
+              "output": "The file docs/plan/BOARD.md has been updated."
+            },
+            {
+              "type": "text",
+              "text": "### Done\n\nEmpty captions no longer break the export. The fix skips a caption with no words:\n\n```js\nconst lines = captions.filter((c) => c.words.length > 0);\n```\n\n1. The new test shows the bug and now passes (3 of 3).\n2. Step 4.3 is next: burning the captions into the clip.\n\n> The chat is at about 64% full. After 4.3 I suggest a handoff and a fresh chat.\n\nShould I go on with 4.3 now?"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "agoMinutes": 22,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Before you start 4.3: which export formats do we support today, and how fast is each?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 20,
+          "blocks": [
+            {
+              "type": "tool",
+              "name": "Grep",
+              "summary": "Grep: export format in src/captions",
+              "status": "ok",
+              "output": "src/captions/export.mjs:12:  const FORMATS = [\"srt\", \"vtt\", \"burn\"];\nsrc/captions/export.mjs:58:  // burn: not built yet"
+            },
+            {
+              "type": "tool",
+              "name": "Bash",
+              "summary": "Bash: node tools/time-export.mjs sample-clip",
+              "status": "error",
+              "output": "Error: ENOENT: no such file or directory, open 'sample-clip.json'\n    at readFileSync (node:fs:441:20)\n    at main (tools/time-export.mjs:7:14)"
+            },
+            {
+              "type": "text",
+              "text": "## Export formats today\n\nI read the code instead of timing it, because the timing script could not find its sample file. So the speeds below are **estimates** from the code, not measurements.\n\n| Format | Works today | Speed (estimate) | Notes |\n|---|---|---|---|\n| `srt` | yes | instant | plain text, one file per clip |\n| `vtt` | yes | instant | same as srt, web style |\n| `burn` | not yet | slow (about 1 min per clip) | this is step 4.3 |\n\n### What I suggest\n\n1. Keep `srt` and `vtt` as they are.\n2. Build `burn` next, with the vertical cut first.\n3. Time all three on the real sample clips once `burn` exists.\n\nSee the plan in `docs/plan/BOARD.md` for where this fits. A very long line without spaces must not break the layout: `src/captions/export-with-a-very-long-file-name-that-keeps-going-and-going-and-going.mjs`."
+            }
+          ]
+        }
       ]
     },
     "s-7a8b9c0d": {
-      "context": { "usedTokens": 38250, "windowTokens": 1000000, "estimated": false, "basis": "last reply's size (input + cache read + cache write tokens)" },
-      "meta": { "model": "claude-opus-5-5", "permissionMode": "default", "compactions": 0, "outputs": [] },
+      "context": {
+        "usedTokens": 38250,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
+      "meta": {
+        "model": "claude-opus-5-5",
+        "permissionMode": "default",
+        "compactions": 0,
+        "outputs": []
+      },
       "messages": [
-        { "role": "user", "agoMinutes": 4950, "blocks": [ { "type": "text", "text": "Why does the listing parser skip the salary?" } ] },
-        { "role": "assistant", "agoMinutes": 4948, "blocks": [
-          { "type": "tool", "name": "Grep", "summary": "Grep: salary in src", "status": "ok", "output": "src/parse/listing.mjs:88:  // salary: TODO" },
-          { "type": "text", "text": "The parser never reads the salary: line 88 of `src/parse/listing.mjs` is still a *TODO*. Nothing is broken; it was simply not built yet." }
-        ] }
+        {
+          "role": "user",
+          "agoMinutes": 4950,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Why does the listing parser skip the salary?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 4948,
+          "blocks": [
+            {
+              "type": "tool",
+              "name": "Grep",
+              "summary": "Grep: salary in src",
+              "status": "ok",
+              "output": "src/parse/listing.mjs:88:  // salary: TODO"
+            },
+            {
+              "type": "text",
+              "text": "The parser never reads the salary: line 88 of `src/parse/listing.mjs` is still a *TODO*. Nothing is broken; it was simply not built yet."
+            }
+          ]
+        }
+      ]
+    },
+    "h-20261116-091000-q7w2": {
+      "context": {
+        "usedTokens": 310400,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
+      "meta": {
+        "model": "claude-opus-5-5",
+        "permissionMode": "auto",
+        "compactions": 0,
+        "outputs": [
+          {
+            "path": "src/captions/timing.mjs",
+            "outside": false,
+            "tool": "Edit",
+            "agoMinutes": 3
+          }
+        ]
+      },
+      "messages": [
+        {
+          "role": "user",
+          "agoMinutes": 130,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "/pickup Clip Studio"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 128,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Picked up. The next step is the caption timing: **9 clips** need their words lined up with the sound."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "agoMinutes": 20,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Go ahead with the timing. Tell me when the first three are done."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 4,
+          "blocks": [
+            {
+              "type": "tool",
+              "name": "Edit",
+              "summary": "Edit src/captions/timing.mjs",
+              "status": "ok",
+              "output": "The file src/captions/timing.mjs has been updated."
+            },
+            {
+              "type": "tool",
+              "name": "Bash",
+              "summary": "Bash: node src/captions/timing.mjs clip-04",
+              "status": "unknown",
+              "output": ""
+            },
+            {
+              "type": "text",
+              "text": "Working on the caption timing now. The first 3 of 9 clips are done."
+            }
+          ]
+        }
+      ]
+    },
+    "s-2b3c4d5e": {
+      "context": {
+        "usedTokens": 118000,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
+      "meta": {
+        "model": "claude-sonnet-5-5",
+        "permissionMode": "default",
+        "compactions": 0,
+        "outputs": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "agoMinutes": 320,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Draft export presets for the three platforms we use."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 300,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Three presets are drafted: **vertical**, **wide** and **square**.\n\nShould the square one be included in the export list?"
+            }
+          ]
+        }
+      ]
+    },
+    "h-20261116-084500-n5r1": {
+      "context": {
+        "usedTokens": 832000,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
+      "meta": {
+        "model": "claude-sonnet-5-5",
+        "permissionMode": "auto",
+        "compactions": 1,
+        "outputs": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "agoMinutes": 250,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "The intro clip feels slow. Can you check it?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 180,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "I checked the intro clip. The logo fades in too slowly, so I cut it from 3 seconds to 1."
+            }
+          ]
+        }
       ]
     }
   }

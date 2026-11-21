@@ -33,6 +33,7 @@ import { loadGamesConfig, makeGameDetector, makeIgnoreStore, normName, startProb
 import { loadThrottleConfig, makeThrottle } from "./lib/throttle.mjs";
 import { makePauses } from "./lib/pauses.mjs";
 import { makeAppAnswer } from "./lib/appanswer.mjs";
+import { makeHandoffRound } from "./lib/handoffround.mjs";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
@@ -152,7 +153,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app", "chat-handoff-round"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -223,7 +224,42 @@ async function appAnswer(body) {
   return appAnswerHooks.engine.answer({ appId: body.appId, text: body.text });
 }
 
+// "Hand off and pick up" (19.3): the page sends ONLY the Hub chat id; the engine (lib/handoffround.mjs) sends /handoff, checks handoff.md really changed,
+// then starts a new /pickup chat. It uses the same chat engine object as every other chat button. Replaceable so the self-test only uses fakes.
+const handoffHooks = { engine: DEMO ? null : makeHandoffRound({ chats, log: (...a) => gameLog(...a) }), log: (...a) => gameLog(...a), redact: DEMO ? (s) => s : real.redact };
+const HANDOFF_KEYS = new Set(["action", "id", "confirm"]);
+const HUB_CHAT_ID = /^h-[A-Za-z0-9_-]{1,60}$/, ROUND_ID = /^r-[A-Za-z0-9_-]{1,60}$/;
+async function handoffRound(body) {
+  const logId = String(typeof body.id === "string" ? body.id : "-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) || "-";
+  if (Object.keys(body).some((k) => !HANDOFF_KEYS.has(k)) || typeof body.id !== "string" || !HUB_CHAT_ID.test(body.id)) {
+    handoffHooks.log("chat-handoff-round", logId, "refused: wrong request shape");
+    return { ok: false, error: "The Hub can not hand off that chat. Look at the page again." };
+  }
+  const r = await handoffHooks.engine.start({ id: body.id });
+  handoffHooks.log("chat-handoff-round", logId, r && r.ok ? "accepted " + r.roundId : "refused");
+  if (!r || r.ok !== true) return { ok: false, error: handoffHooks.redact(String(r?.error || "The hand-off did not start.")) };
+  return { ok: true, roundId: r.roundId, note: "The hand-off is running. The new chat starts only after handoff.md is saved." };
+}
+// GET /api/chat-handoff?round=<round id> or ?chat=<Hub chat id>: read only, the round's status (or null for a chat that has none). Ids are only compared, never used as paths.
+function handoffApi(sp) {
+  const notFound = { status: 404, body: { error: "unknown round" } };
+  const round = sp.get("round"), chat = sp.get("chat");
+  const clean = (r) => {
+    if (!r) return r;
+    const red = (s) => (typeof s === "string" ? handoffHooks.redact(s) : s);
+    return { ...r, error: red(r.error), next: red(r.next), steps: Array.isArray(r.steps) ? r.steps.map((s) => ({ ...s, text: red(s.text) })) : r.steps };
+  };
+  if (round !== null) {
+    if (DEMO || !ROUND_ID.test(round)) return notFound;
+    const r = handoffHooks.engine.status(round);
+    return r ? { status: 200, body: clean(r) } : notFound;
+  }
+  if (chat !== null && HUB_CHAT_ID.test(chat)) return { status: 200, body: DEMO ? null : clean(handoffHooks.engine.forChat(chat) || null) };
+  return notFound;
+}
+
 async function chatAction(body) {
+  if (body.action === "chat-handoff-round") return handoffRound(body);
   if (body.action === "chat-open-app") return openApp(body);
   if (body.action === "chat-answer-app") return appAnswer(body);
   // workflow (D44): the chat first runs /pickup, unless the page says exactly false (the "Skip the project workflow" tick)
@@ -265,6 +301,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/api/action") return await handleAction(req, send);
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, '{"error":"method not allowed"}');
     if (path === "/api/project") { const r = await projectApi(new URL(req.url, "http://x").searchParams.get("name")); return send(r.status, JSON.stringify(r.body)); }
+    if (path === "/api/chat-handoff") { const r = handoffApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (api[path]) return send(200, JSON.stringify(await api[path]()));
     const rel = path === "/" ? "index.html" : normalize(decodeURIComponent(path)).replace(/^[/\\]+/, "");
@@ -405,6 +442,53 @@ server.listen(PORT, HOST, async () => {
       const r = await fetch(db + "/api/action", { method: "POST", headers: { "Content-Type": "application/json", Origin: db, "X-Hub-Token": dt }, body: JSON.stringify({ action: "chat-answer-app", appId: "local_0bac1d2e-0000-4000-8000-000000000004", text: "Hello", confirm: true }) });
       const j = await r.json();
       return r.status === 200 && j.ok === false && j.error === "Sample data mode: the buttons are switched off.";
+    } catch { return false; } finally { kid.kill(); }
+  })());
+  // 19.3 "Hand off and pick up": a FAKE rounds object, so no real round starts and no real chat is touched
+  const hoStarts = [], hoLogs = [];
+  const HO_ROUND = { roundId: "r-20261121-100000-ab12", chatId: "h-rest", project: "Hub", state: "done", step: 6, steps: [{ step: 6, at: "2026-11-21T10:00:00.000Z", text: "Done SECRET1", ok: true }], startedAt: "2026-11-21T10:00:00.000Z", finishedAt: "2026-11-21T10:01:00.000Z", error: "bad SECRET2", next: null, handoffChanged: true, result: { oldId: "h-rest", newId: "h-new", newName: "N", handoffChanged: true } };
+  handoffHooks.log = (...a) => hoLogs.push(a.join(" "));
+  handoffHooks.redact = (s) => String(s).replace(/SECRET\w*/g, "[hidden]");
+  handoffHooks.engine = {
+    start: async (o) => { hoStarts.push(o); return o.id === "h-busy" ? { ok: false, error: "Still working SECRET3" } : { ok: true, roundId: HO_ROUND.roundId }; },
+    status: (id) => (id === HO_ROUND.roundId ? HO_ROUND : null),
+    forChat: (id) => (id === "h-rest" ? HO_ROUND : null),
+    active: () => [],
+  };
+  const ho = (o, h = json) => raw("/api/action", h, cj({ action: "chat-handoff-round", ...o }), "POST");
+  const hoNo = async (o) => { const n = hoStarts.length; const r = await ho(o); return r.status === 200 && JSON.parse(r.text).ok === false && hoStarts.length === n; };
+  ok("chat-handoff-round without / with a wrong token is refused, nothing started", (await ho({ id: "h-rest" }, { ...json, "X-Hub-Token": "" })).status === 403 && (await ho({ id: "h-rest" }, { ...json, "X-Hub-Token": "y".repeat(tok.length) })).status === 403 && hoStarts.length === 0);
+  ok("chat-handoff-round from another Origin or with no Origin is refused, nothing started", (await ho({ id: "h-rest" }, { ...json, Origin: "http://evil.example" })).status === 403 && (await ho({ id: "h-rest" }, { "Content-Type": "application/json", "X-Hub-Token": tok })).status === 403 && hoStarts.length === 0);
+  ok("chat-handoff-round without confirm, or not JSON, is refused, nothing started", (await raw("/api/action", json, JSON.stringify({ action: "chat-handoff-round", id: "h-rest" }), "POST")).status === 400 && (await raw("/api/action", { ...json, "Content-Type": "text/plain" }, cj({ action: "chat-handoff-round", id: "h-rest" }), "POST")).status === 415 && hoStarts.length === 0);
+  ok("chat-handoff-round refuses extra fields (only the id): no project, text, model or folder from the page", await hoNo({ id: "h-rest", project: "Hub" }) && await hoNo({ id: "h-rest", text: "/handoff" }) && await hoNo({ id: "h-rest", cwd: "C:\\Windows" }));
+  ok("chat-handoff-round refuses a missing, non-string, path-like, session-like or link-shaped id", await hoNo({}) && await hoNo({ id: 5 }) && await hoNo({ id: "..\\..\\x" }) && await hoNo({ id: "h-../x" }) && await hoNo({ id: "18ec7052-3a6a-46cc-ade3-7ff857195e3d" }) && await hoNo({ id: "local_abcdef12-3456" }) && await hoNo({ id: "claude://resume?session=x" }) && await hoNo({ id: "h-" + "x".repeat(80) }));
+  const hoGood = JSON.parse((await ho({ id: "h-rest" })).text);
+  ok("chat-handoff-round with a good id passes only the id and returns the round id at once", hoGood.ok === true && hoGood.roundId === HO_ROUND.roundId && typeof hoGood.note === "string" && hoStarts.length === 1 && JSON.stringify(hoStarts[0]) === '{"id":"h-rest"}');
+  const hoBusy = JSON.parse((await ho({ id: "h-busy" })).text);
+  ok("chat-handoff-round shows the engine's refusal in words (redacted)", hoBusy.ok === false && hoBusy.error === "Still working [hidden]" && hoBusy.roundId === undefined);
+  ok("chat-handoff-round logs one line per request, never text", hoLogs.length === 13 && hoLogs.every((l) => l.startsWith("chat-handoff-round ") && !l.includes("/handoff") && !l.includes("SECRET")) && hoLogs.some((l) => l === "chat-handoff-round h-rest accepted " + HO_ROUND.roundId));
+  const hg = async (q) => { const r = await fetch(base + "/api/chat-handoff" + q); return { status: r.status, body: await r.json() }; };
+  const hr = await hg("?round=" + HO_ROUND.roundId);
+  ok("GET /api/chat-handoff?round=<known> returns the round object, error texts redacted", hr.status === 200 && hr.body.roundId === HO_ROUND.roundId && hr.body.state === "done" && Array.isArray(hr.body.steps) && hr.body.result.newId === "h-new" && hr.body.error === "bad [hidden]" && hr.body.steps[0].text === "Done [hidden]");
+  const hc = await hg("?chat=h-rest"), hc0 = await hg("?chat=h-other");
+  ok("GET /api/chat-handoff?chat=<id> returns that chat's newest round, or null", hc.status === 200 && hc.body.roundId === HO_ROUND.roundId && hc0.status === 200 && hc0.body === null);
+  const hu = await hg("?round=r-20200101-000000-zzzz");
+  ok("GET /api/chat-handoff with an unknown round is 404 {error:'unknown round'}", hu.status === 404 && hu.body.error === "unknown round");
+  ok("GET /api/chat-handoff with a path trick, a bad id, or no id is 404", (await Promise.all(["?round=..%5C..%5Cx", "?round=..%2F..", "?round=", "?chat=..%5Cx", "?chat=18ec7052-3a6a-46cc-ade3-7ff857195e3d", "?chat=", ""].map((q) => fetch(base + "/api/chat-handoff" + q).then((r) => r.status)))).every((s) => s === 404));
+  ok("POST and PUT to /api/chat-handoff are refused", (await fetch(base + "/api/chat-handoff?round=" + HO_ROUND.roundId, { method: "POST" })).status === 405 && (await fetch(base + "/api/chat-handoff?round=" + HO_ROUND.roundId, { method: "PUT" })).status === 405 && hoStarts.length === 2);
+  ok("chat-handoff-round and chat-handoff in --demo mode: buttons off, chat answers null, round 404, nothing starts", await (async () => {
+    const { createServer: cs } = await import("node:net");
+    const spare = await new Promise((d) => { const s = cs(); s.listen(0, HOST, () => { const p = s.address().port; s.close(() => d(p)); }); });
+    const kid = spawn(process.execPath, [fileURLToPath(import.meta.url), "--demo"], { env: { ...process.env, HUB_PORT: String(spare) }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    try {
+      await new Promise((d, no) => { let t = ""; const to = setTimeout(() => no(new Error("demo server did not start")), 15000); kid.stdout.on("data", (x) => { t += x; if (t.includes("Ready.")) { clearTimeout(to); d(); } }); });
+      const db = `http://${HOST}:${spare}`;
+      const dt = (await (await fetch(db + "/api/session")).json()).token;
+      const r = await fetch(db + "/api/action", { method: "POST", headers: { "Content-Type": "application/json", Origin: db, "X-Hub-Token": dt }, body: JSON.stringify({ action: "chat-handoff-round", id: "h-20261116-101500-k3x9", confirm: true }) });
+      const j = await r.json();
+      const c = await fetch(db + "/api/chat-handoff?chat=h-20261116-101500-k3x9");
+      const rr = await fetch(db + "/api/chat-handoff?round=r-20261116-101500-k3x9");
+      return r.status === 200 && j.ok === false && j.error === "Sample data mode: the buttons are switched off." && c.status === 200 && (await c.json()) === null && rr.status === 404;
     } catch { return false; } finally { kid.kill(); }
   })());
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();

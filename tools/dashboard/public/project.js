@@ -1,9 +1,10 @@
-// Hub project page (step 17.4). One project: what waits on Ivan, its chats, the handoff's next steps.
-// Reads GET /api/project?name=... every 30 s. The only things that change anything: the answer boxes (Send) and "Open this chat",
-// all using the SAME request route the dashboard already uses (POST /api/action with the per-run token), and Send asks "...?" first.
-// 17.5 (D54): a CLOSED app chat (canAnswerApp) gets an answer box too. The page sends only { action: "chat-answer-app", appId, text, confirm: true };
-// the server checks the whole safety rule (D49) right before sending and answers in words. Never for open app chats (D40).
+// Hub project page (step 17.4, chat workspace from Phase 19). One project: what waits on Ivan, its chats, the handoff's next steps.
+// Reads GET /api/project?name=... every 30 s. The "Latest chat" tab is a chat workspace (chatview.js); a chat chosen in "All chats" opens in the same view.
+// The only things that change anything: the composer and the buttons in the workspace (chatview.js) and the New chat form here, all using the
+// SAME request route the dashboard already uses (POST /api/action with the per-run token, confirm:true), and every one of them asks "...?" first.
 // All text goes in with textContent (via h()), never as HTML, because it comes from project files.
+import { createChatView } from "./chatview.js";
+
 const REFRESH_MS = 30_000;
 const $ = (id) => document.getElementById(id);
 const NAME = new URLSearchParams(location.search).get("name") || "";
@@ -31,19 +32,19 @@ function ago(iso) {
 
 const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
 const KIND_WORD = { hub: "Hub chat", app: "App chat", terminal: "Terminal chat" };
-const ANSWER_MAX = 4000;
-const FOLD_CHARS = 320, FOLD_LINES = 6;
+const TASK_MAX = 4000;
+// the same choices as the dashboard's New chat form (public/app.js)
+const MODELS = [["", "Default"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]];
+function lastModel() { try { const m = localStorage.getItem("hub-chat-model"); return MODELS.some(([v]) => v === m) ? m : ""; } catch { return ""; } }
+function rememberModel(m) { try { localStorage.setItem("hub-chat-model", m); } catch { /* storage blocked: still works for this visit */ } }
 
 let data = null;
 let session = null;
-let asking = null;                 // { id, text } while "Send this answer?" is open
-const drafts = new Map();          // chat id -> half-typed answer
-const sending = new Set();
-const expanded = new Set();        // chat ids whose "Show more" is open
 let noteText = "";
 let chatTab = "latest";            // "latest" | "all": the chosen Chats tab, kept across the 30 s refresh (D56)
-let openRow = null;                // chat id whose row is open in "All chats" (one at a time)
-const appResults = new Map();      // chat id -> { ok, text } the last answer box result of a closed app chat, shown on its card
+let viewId = null;                 // a chat chosen in "All chats"; null = the latest chat
+let newForm = null;                // { text, model, remoteControl, skipWorkflow } while the New chat form is open
+let newAsk = null;                 // { text, extra } while "Start a chat ...?" is open
 
 function setNote(text, bad = false) { noteText = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
 
@@ -70,6 +71,12 @@ function appIdOf(link) {
 }
 
 function fill(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
+
+const cv = createChatView({
+  h, ago, send, appIdOf, setNote,
+  onChanged: () => load(true),
+  onRoundDone: () => { viewId = null; },   // the new chat is now the latest chat
+});
 
 // ---------- pieces ----------
 function header(p) {
@@ -105,102 +112,14 @@ function decisionsSection(list) {
     list.length ? h("p", { class: "quiet-line" }, "Answering decisions from this page comes later. For now, tell Claude your choice in the chat.") : null);
 }
 
-function saidBlock(c) {
-  const text = c.lastSaid || "";
-  if (!text) return h("p", { class: "empty" }, c.state === "working" ? "Working on it…" : "No saved reply found.");
-  const long = text.length > FOLD_CHARS || text.split("\n").length > FOLD_LINES;
-  const open = expanded.has(c.id);
-  return h("div", { class: "said-wrap" },
-    h("span", { class: "cp-label" }, "Claude last said", c.lastSaidAt ? h("span", { class: "said-when" }, ` · ${ago(c.lastSaidAt)}`) : null),
-    h("div", { class: "said-text" + (long && !open ? " folded" : "") }, text),
-    long ? h("button", { class: "chat-more", type: "button", "aria-expanded": String(open), "data-act": "more", "data-id": c.id }, open ? "Show less" : "Show more") : null);
-}
-
-function askRow() {
-  return h("div", { class: "actions ask", role: "group", "aria-label": asking.text },
-    h("div", { class: "ask-text" }, h("b", {}, asking.text), asking.extra ? h("span", {}, asking.extra) : null),
-    h("button", { class: "btn primary", type: "button", "data-act": "yes" }, "Yes"),
-    h("button", { class: "btn", type: "button", "data-act": "cancel" }, "Cancel"));
-}
-
-function chatItem(c, i) {
-  const state = STATE_WORD[c.state] ? c.state : "idle";
-  const kids = [
-    h("div", { class: "ch-head" },
-      h("span", { class: "ch-title" }, c.title || "Chat"),
-      h("span", { class: "ch-tags" },
-        h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
-        h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
-        c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null,
-        c.remoteControl === true ? h("span", { class: "crc" }, "Remote Control") : null)),
-    h("p", { class: "ch-meta" }, c.lastActive ? `Last active ${ago(c.lastActive)}` : "", c.needsYou && c.since ? ` · waiting since ${ago(c.since)}` : ""),
-    saidBlock(c)];
-
-  if (c.kind === "hub") {
-    if (c.canAnswer) {
-      const busy = sending.has(c.id);
-      const draft = drafts.get(c.id) || "";
-      const ta = h("textarea", { id: "ans-" + i, class: "chat-text", rows: "3", maxlength: String(ANSWER_MAX), "data-id": c.id, "aria-describedby": "cnt-" + i });
-      ta.value = draft;
-      kids.push(h("div", { class: "cf-field" }, h("label", { for: "ans-" + i }, "Your answer"), ta, h("span", { class: "cf-count", id: "cnt-" + i }, `${draft.length} / ${ANSWER_MAX}`)));
-      kids.push(asking && asking.id === c.id ? askRow()
-        : h("div", { class: "actions" }, h("button", { class: "btn primary", type: "button", "data-act": "ask-send", "data-id": c.id, disabled: busy || !draft.trim() }, "Send")));
-    } else if (c.remoteControl === true) {
-      kids.push(h("p", { class: "cp-note" }, "Remote Control is on. Answer it on your phone, or turn Remote Control off on the dashboard to answer it here."));
-    } else if (c.state === "working") {
-      kids.push(h("p", { class: "cp-note" }, "Claude is working on it. You can answer when it stops."));
-    }
-    const appId = appIdOf(c.openLink);
-    if (typeof c.openLink === "string" && c.openLink.startsWith("claude://resume?session=")) {
-      kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "open-hub", "data-id": c.id }, "Open in the app")));
-    } else if (appId) kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat")));
-  } else if (c.kind === "app") {
-    const appId = appIdOf(c.openLink);
-    // 17.5 (D54): a closed app chat with Remote Control off can be answered from here; open app chats never (D40/D46)
-    const canApp = c.canAnswerApp === true && c.state === "closed" && c.remoteControl === false && !!appId;
-    if (canApp) {
-      const busy = sending.has(c.id);
-      const draft = drafts.get(c.id) || "";
-      kids.push(h("p", { class: "cp-note" }, "This chat is closed. You can answer it here: Claude continues in the same chat. Or open it in the Claude app."));
-      const ta = h("textarea", { id: "ans-" + i, class: "chat-text", rows: "3", maxlength: String(ANSWER_MAX), "data-id": c.id, "aria-describedby": "cnt-" + i, disabled: busy });
-      ta.value = draft;
-      kids.push(h("div", { class: "cf-field" }, h("label", { for: "ans-" + i }, "Your answer"), ta, h("span", { class: "cf-count", id: "cnt-" + i }, `${draft.length} / ${ANSWER_MAX}`)));
-      if (busy) kids.push(h("p", { class: "app-busy", role: "status" }, h("span", { class: "dot", "aria-hidden": "true" }), "Answering from the Hub. Don't type in this chat in the app until it is done."));
-      const res = appResults.get(c.id);
-      if (res && !busy) kids.push(appResultBlock(res));
-      kids.push(asking && asking.id === c.id ? askRow()
-        : h("div", { class: "actions" },
-          h("button", { class: "btn primary", type: "button", "data-act": "ask-send-app", "data-id": c.id, disabled: busy || !draft.trim() }, busy ? "Answering…" : "Send"),
-          h("button", { class: "btn open-this", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat"),
-          h("span", { class: "cp-rc" }, "Remote Control: off")));
-      return h("li", { class: "chat-card" + (c.needsYou ? " needs" : "") }, kids);
-    }
-    kids.push(h("p", { class: "cp-note" }, c.state === "closed" ? (c.remoteControl === true ? "This chat is closed and Remote Control is on. Answer it on your phone, or open it in the Claude app." : "This chat is closed. Open it in the Claude app and answer it there.") : "This chat is open in the Claude app. Answer it there so it does not split."));
-    const rc = c.remoteControl === true ? "Remote Control: on" : c.remoteControl === false ? "Remote Control: off" : null;
-    if (appId || rc) kids.push(h("div", { class: "actions" }, appId ? h("button", { class: "btn open-this", type: "button", "data-act": "open-app", "data-app-id": appId }, "Open this chat") : null, rc ? h("span", { class: "cp-rc" }, rc) : null));
-  } else {
-    kids.push(h("p", { class: "cp-note" }, "This chat is open in a terminal. Answer it there."));
-  }
-  return h("li", { class: "chat-card" + (c.needsYou ? " needs" : "") }, kids);
-}
-
-// the result of an answer to a closed app chat, in words: Claude's reply, or why nothing was sent, or "may be split"
-function appResultBlock(res) {
-  if (res.ok && res.reply) {
-    return h("div", { class: "said-wrap app-result" + (res.warn ? " warn" : "") },
-      h("span", { class: "cp-label" }, res.warn ? res.text : "Claude replied"),
-      h("div", { class: "said-text" }, res.reply));
-  }
-  return h("p", { class: "app-result-line" + (res.ok && !res.warn ? "" : " bad") }, res.text);
-}
-
 function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
 function latestOf(chats) { return chats.reduce((best, c) => (!best || msOf(c) > msOf(best) ? c : best), null); }
 
-function chatRow(c, idx) {
+// a row in "All chats": a summary and one button that opens the chat in the workspace
+function chatRow(c) {
   const state = STATE_WORD[c.state] ? c.state : "idle";
-  const open = openRow === c.id;
-  const li = h("li", { class: "pg-row" + (open ? " open" : "") + (c.needsYou ? " needs" : "") },
+  const current = viewId === c.id;
+  return h("li", { class: "pg-row" + (c.needsYou ? " needs" : "") },
     h("div", { class: "row-main" },
       h("span", { class: "ch-title" }, c.title || "Chat"),
       h("span", { class: "ch-tags" },
@@ -208,19 +127,45 @@ function chatRow(c, idx) {
         h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
         c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null),
       h("span", { class: "row-when" }, c.lastActive ? ago(c.lastActive) : ""),
-      h("button", { class: "btn row-show", type: "button", "data-act": "row", "data-id": c.id, "aria-expanded": String(open), "aria-label": `${open ? "Hide" : "Show"} chat: ${c.title || "Chat"}` }, open ? "Hide" : "Show")));
-  if (open) li.append(h("ul", { class: "chat-cards in-row" }, chatItem(c, idx)));
-  return li;
+      h("button", { class: "btn row-show", type: "button", "data-act": "open", "data-id": c.id, "aria-label": `Open chat: ${c.title || "Chat"}`, "aria-current": current ? "true" : null }, "Open")));
+}
+
+// ---------- New chat (19.5): the same request the dashboard's form sends ----------
+function newChatForm() {
+  const project = (data.project || { name: NAME }).name;
+  const ta = h("textarea", { id: "nc-text", class: "chat-text", rows: "4", maxlength: String(TASK_MAX), "aria-describedby": "nc-count" });
+  ta.value = newForm.text;
+  const sel = h("select", { id: "nc-model", class: "chat-model" }, MODELS.map(([v, l]) => h("option", { value: v }, l)));
+  sel.value = newForm.model;
+  const ask = newAsk ? h("div", { class: "actions ask", role: "group", "aria-label": newAsk.text },
+    h("div", { class: "ask-text" }, h("b", {}, newAsk.text), newAsk.extra ? h("span", {}, newAsk.extra) : null),
+    h("button", { class: "btn primary", type: "button", "data-act": "nc-yes" }, "Yes"),
+    h("button", { class: "btn", type: "button", "data-act": "nc-cancel-ask" }, "Cancel")) : null;
+  return h("div", { class: "chat-form", role: "group", "aria-label": `New chat in ${project}` },
+    h("div", { class: "cf-field" },
+      h("label", { for: "nc-text" }, "What should Claude do?"), ta,
+      h("span", { class: "cf-count", id: "nc-count" }, `${newForm.text.length} / ${TASK_MAX}`)),
+    h("div", { class: "cf-field cf-model" }, h("label", { for: "nc-model" }, "Model"), sel),
+    h("label", { class: "cf-check", for: "nc-rc" }, h("input", { type: "checkbox", id: "nc-rc", checked: newForm.remoteControl === true }), "Reach it from my phone (Remote Control)"),
+    h("label", { class: "cf-check", for: "nc-skip" }, h("input", { type: "checkbox", id: "nc-skip", checked: newForm.skipWorkflow === true }), "Skip the project workflow (for a quick question)"),
+    ask || h("div", { class: "actions" },
+      h("button", { class: "btn primary", type: "button", "data-act": "nc-ask" }, "Start chat"),
+      h("button", { class: "btn", type: "button", "data-act": "nc-close" }, "Cancel")));
 }
 
 function chatsSection(chats) {
-  const kids = [h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null)];
+  const head = h("div", { class: "sec-head" },
+    h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null),
+    newForm ? null : h("button", { class: "btn", type: "button", "data-act": "nc-open" }, "New chat"));
+  const kids = [head];
+  if (newForm) kids.push(newChatForm());
   if (!chats.length) {
     kids.push(h("p", { class: "empty" }, "No chats for this project yet."));
     return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
   }
   const latest = latestOf(chats);
-  const idx = new Map(chats.map((c, i) => [c.id, i]));
+  const shown = viewId && chats.find((c) => c.id === viewId);
+  if (viewId && !shown) viewId = null;
   const others = chats.filter((c) => c.needsYou && c !== latest);
   if (others.length) {
     const names = others.map((c) => c.title || "Chat");
@@ -229,16 +174,17 @@ function chatsSection(chats) {
       h("span", {}, others.length === 1 ? "1 other chat needs you: " : `${others.length} other chats need you: `, h("b", {}, names.join(", ")), " — ",
         h("button", { class: "linkbtn", type: "button", "data-act": "tab", "data-tab": "all" }, "open All chats"))));
   }
+  const older = !!shown && shown !== latest;
   const tab = (key, label, extra) => h("button", { class: "tab", type: "button", role: "tab", id: "tab-" + key, "aria-controls": "tabpanel-chats", "aria-selected": String(chatTab === key), tabindex: chatTab === key ? "0" : "-1", "data-act": "tab", "data-tab": key }, label, extra);
   kids.push(h("div", { class: "tabs", role: "tablist", "aria-label": "Chats" },
-    tab("latest", "Latest chat"),
+    tab("latest", older ? "This chat" : "Latest chat"),
     tab("all", `All chats (${chats.length})`, others.length ? [h("span", { class: "tab-dia", "aria-hidden": "true" }, " ◆"), h("span", { class: "sr" }, ", some need you")] : null)));
   const panel = h("div", { class: "tabpanel", role: "tabpanel", id: "tabpanel-chats", "aria-labelledby": "tab-" + chatTab, tabindex: "-1" });
   if (chatTab === "all") {
-    if (openRow && !chats.some((c) => c.id === openRow)) openRow = null;
-    panel.append(h("ul", { class: "pg-rows" }, chats.map((c) => chatRow(c, idx.get(c.id)))));
+    panel.append(h("ul", { class: "pg-rows" }, chats.map(chatRow)));
   } else {
-    panel.append(h("ul", { class: "chat-cards" }, chatItem(latest, idx.get(latest.id))));
+    if (older) panel.append(h("p", { class: "view-note" }, "You are looking at an older chat. ", h("button", { class: "linkbtn", type: "button", "data-act": "latest" }, "Show the latest chat")));
+    panel.append(h("div", { id: "cw-slot", class: "cw-slot" }));
   }
   kids.push(panel);
   return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
@@ -252,15 +198,8 @@ function nextStepsSection(ho) {
 }
 
 // ---------- render with nothing lost ----------
-function render() {
+function paintTop() {
   const d = data;
-  const ae = document.activeElement;
-  const keepId = ae && ae.tagName === "TEXTAREA" ? ae.dataset.id : null;
-  const sel = keepId ? [ae.selectionStart, ae.selectionEnd] : null;
-  const keepMore = ae && ae.dataset && ae.dataset.act === "more" ? ae.dataset.id : null;
-  const keepBtn = ae && ae.dataset && (ae.dataset.act === "row" || ae.dataset.act === "tab") ? { act: ae.dataset.act, id: ae.dataset.id, tab: ae.dataset.tab } : null;
-  const y = window.scrollY;
-
   const p = d.project || { name: NAME };
   document.title = `Hub · ${p.name}`;
   $("crumb").textContent = p.name;
@@ -268,110 +207,127 @@ function render() {
   const dec = d.decisions || [], chats = d.chats || [];
   const needN = chats.filter((c) => c.needsYou).length;
   $("summary").textContent = `${dec.length ? dec.length + " decision" + (dec.length > 1 ? "s" : "") : "No decisions"} waiting · ${needN ? needN + " chat" + (needN > 1 ? "s" : "") + " need" + (needN > 1 ? "" : "s") + " you" : "no chat needs you"}`;
-  $("page").replaceChildren(header(p), decisionsSection(dec), chatsSection(chats), nextStepsSection(d.handoff));
+}
+
+function chatInView() {
+  const chats = (data && data.chats) || [];
+  if (!chats.length) return null;
+  return (viewId && chats.find((c) => c.id === viewId)) || latestOf(chats);
+}
+
+// the workspace shows only while the Latest chat tab is open; the other tab leaves it out of the page (its state is kept)
+function placeWorkspace() {
+  const slot = $("cw-slot");
+  if (!slot) { cv.show(null); return; }
+  cv.snapshot();
+  slot.append(cv.el);
+  cv.show(chatInView());
+  cv.restore();
+}
+
+function render() {
+  const d = data;
+  const ae = document.activeElement;
+  const keepId = ae && ae.id && /^nc-(text|model|rc|skip)$/.test(ae.id) ? ae.id : null;
+  const sel = keepId === "nc-text" ? [ae.selectionStart, ae.selectionEnd] : null;
+  const keepBtn = ae && ae.dataset && ["tab", "open", "nc-open"].includes(ae.dataset.act) ? { act: ae.dataset.act, id: ae.dataset.id, tab: ae.dataset.tab } : null;
+  const y = window.scrollY;
+  cv.snapshot();
+
+  paintTop();
+  const p = d.project || { name: NAME };
+  $("page").replaceChildren(header(p), decisionsSection(d.decisions || []), chatsSection(d.chats || []), nextStepsSection(d.handoff));
+  placeWorkspace();
 
   if (keepId) {
-    const t = [...document.querySelectorAll("textarea[data-id]")].find((x) => x.dataset.id === keepId);
-    if (t) { t.focus(); try { t.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
+    const t = $(keepId);
+    if (t) { t.focus(); if (sel) { try { t.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } } }
   } else if (keepBtn) {
     const b = [...document.querySelectorAll(`button[data-act="${keepBtn.act}"]`)].find((x) => x.dataset.id === keepBtn.id && x.dataset.tab === keepBtn.tab);
-    if (b) b.focus();
-  } else if (keepMore) {
-    const b = [...document.querySelectorAll('button[data-act="more"]')].find((x) => x.dataset.id === keepMore);
     if (b) b.focus();
   }
   if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
 }
 
-// only an open "Send this answer?" question pauses redrawing; typed text and open folds are kept across a redraw
-function busy() { return !!asking; }
-
-function findChat(id) { return data && (data.chats || []).find((c) => c.id === id); }
+// While Ivan types in the composer or the New chat form, or a "...?" question is open, the page is not redrawn
+// (the chat view still gets fresh data); everything he typed is kept in any case.
+function busy() {
+  if (newAsk) return true;
+  const ae = document.activeElement;
+  if (cv.hasFocus()) return true;
+  return !!(newForm && ae && ae.closest && ae.closest(".chat-form"));
+}
 
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   const act = b.dataset.act, id = b.dataset.id;
   if (act === "tab") {
-    const to = b.dataset.tab === "all" ? "all" : "latest";
-    asking = null; chatTab = to; render();
-    const t2 = $("tab-" + to); if (t2) t2.focus();
+    chatTab = b.dataset.tab === "all" ? "all" : "latest";
+    render();
+    const t2 = $("tab-" + chatTab); if (t2) t2.focus();
     return;
   }
-  if (act === "row") { asking = null; openRow = openRow === id ? null : id; render(); return; }
-  if (act === "more") { if (expanded.has(id)) expanded.delete(id); else expanded.add(id); render(); return; }
-  if (act === "ask-send") {
-    const text = (drafts.get(id) || "").trim();
-    if (!text) return;
-    asking = { id, text: "Send this answer to this chat?", extra: "Claude works without a window and uses your Claude allowance." };
+  if (act === "open") { viewId = id; chatTab = "latest"; render(); cv.focusHeading(); return; }
+  if (act === "latest") { viewId = null; render(); cv.focusHeading(); return; }
+  if (act === "nc-open") {
+    newForm = { text: "", model: lastModel(), remoteControl: false, skipWorkflow: false }; newAsk = null; setNote(""); render();
+    const t = $("nc-text"); if (t) t.focus();
+    return;
+  }
+  if (act === "nc-close") { newForm = null; newAsk = null; render(); const o = document.querySelector('button[data-act="nc-open"]'); if (o) o.focus(); return; }
+  if (act === "nc-ask") {
+    const text = newForm ? newForm.text.trim() : "";
+    if (!text) { setNote("Write what Claude should do first.", true); const t = $("nc-text"); if (t) t.focus(); return; }
+    const project = (data.project || { name: NAME }).name;
+    newAsk = {
+      text: `Start a chat in ${project} with this task?`,
+      extra: (newForm.skipWorkflow ? "The chat gets your task as it is, without the project workflow. " : "The chat first runs /pickup so it knows where the project stands, and is named like your other chats. ")
+        + "Claude works without a window and uses your Claude allowance."
+        + (newForm.remoteControl ? " Remote Control is on: the chat keeps running in the background so you can open it on your phone. You cannot answer it here while it is on." : ""),
+    };
     setNote(""); render();
-    const y = document.querySelector(".actions.ask .btn.primary"); if (y) y.focus();
+    const y2 = document.querySelector(".chat-form .actions.ask .btn.primary"); if (y2) y2.focus();
     return;
   }
-  if (act === "ask-send-app") {
-    const c = findChat(id);
-    const text = (drafts.get(id) || "").trim();
-    if (!text || !c || c.canAnswerApp !== true || sending.has(id)) return;
-    asking = { id, app: true, text: "Send this answer into the chat in the Claude app?", extra: "Don't type in that chat while it works." };
-    setNote(""); render();
-    const y = document.querySelector(".actions.ask .btn.primary"); if (y) y.focus();
-    return;
-  }
-  if (act === "cancel") { asking = null; setNote(""); render(); return; }
-  if (act === "yes" && asking && asking.app) {
-    const a = asking; asking = null;
-    const c = findChat(a.id);
-    const appId = c ? appIdOf(c.openLink) : null;
-    const text = (drafts.get(a.id) || "").trim();
-    if (!c || c.kind !== "app" || c.canAnswerApp !== true || !appId || !text || sending.has(a.id)) { render(); return; }
-    sending.add(a.id); appResults.delete(a.id); setNote("Answering from the Hub. Don't type in this chat in the app until it is done."); render();
+  if (act === "nc-cancel-ask") { newAsk = null; render(); const t = $("nc-text"); if (t) t.focus(); return; }
+  if (act === "nc-yes") {
+    const f = newForm; newAsk = null;
+    const task = f ? f.text.trim() : "";
+    if (!task) { render(); return; }
+    const project = (data.project || { name: NAME }).name;
+    const body = { action: "chat-start", project, task };
+    if (f.model) body.model = f.model;
+    if (f.remoteControl) body.remoteControl = true;
+    if (f.skipWorkflow) body.workflow = false;
+    setNote("Working on it…"); render();
     let r;
-    try { r = await send({ action: "chat-answer-app", appId, text }); }
-    catch { r = { ok: false, error: "The Hub did not answer. Look at the chat in the app before you try again." }; }
-    finally { sending.delete(a.id); }
+    try { r = await send(body); } catch { r = { ok: false, error: "The Hub did not answer." }; }
     if (r.ok) {
-      const warn = r.status !== "done";
-      const msg = r.message || (warn ? "Claude replied, but the chat may be split: check it in the app." : "Done.");
-      appResults.set(a.id, { ok: true, warn, text: r.reply ? (warn ? msg : "Claude replied") : msg, reply: r.reply || "" });
-      setNote(r.message || "Done.", warn);
-      drafts.delete(a.id);
-    } else {
-      appResults.set(a.id, { ok: false, text: r.error || "That did not work." });
-      setNote(r.error || "That did not work.", true);
-    }
-    await load(true);
+      setNote(r.message || "Done.");
+      newForm = null; viewId = null; chatTab = "latest";
+      await load(true);
+      // the new chat becomes the latest chat as soon as the Hub lists it
+      setTimeout(() => load(true), 3000); setTimeout(() => load(true), 8000);
+    } else { setNote(r.error || "That did not work.", true); render(); }
     return;
   }
-  if (act === "yes") {
-    const a = asking; asking = null;
-    const c = a && findChat(a.id);
-    const text = a ? (drafts.get(a.id) || "").trim() : "";
-    if (!c || c.kind !== "hub" || !/^h-/.test(a.id) || !text || sending.has(a.id)) { render(); return; }
-    sending.add(a.id); setNote("Working on it…"); render();
-    let r;
-    try { r = await send({ action: "chat-answer", id: a.id, text }); } finally { sending.delete(a.id); }
-    if (r.ok) { setNote(r.message || "Sent."); drafts.delete(a.id); } else setNote(r.error || "That did not work.", true);
-    await load(true);
-    return;
-  }
-  if (act === "open-app") { if (APP_ID.test(b.dataset.appId || "")) await open({ action: "chat-open-app", appId: b.dataset.appId }); return; }
-  if (act === "open-hub") { if (/^h-/.test(id || "")) await open({ action: "chat-open-app", hubId: id }); return; }
 });
-async function open(body) {
-  setNote("Working on it…");
-  const r = await send(body);
-  setNote(r.ok ? r.message || "Opening in the Claude app." : r.error || "That did not work.", !r.ok);
-}
 
 document.addEventListener("input", (e) => {
   const t = e.target;
-  if (!(t instanceof HTMLTextAreaElement) || !t.dataset.id) return;
-  drafts.set(t.dataset.id, t.value);
-  const cnt = t.parentElement.querySelector(".cf-count"); if (cnt) cnt.textContent = `${t.value.length} / ${ANSWER_MAX}`;
-  const btn = t.closest(".chat-card").querySelector('button[data-act="ask-send"], button[data-act="ask-send-app"]'); if (btn) btn.disabled = !t.value.trim() || sending.has(t.dataset.id);
+  if (!newForm || !t || !t.id) return;
+  if (t.id === "nc-text") { newForm.text = t.value; const c = $("nc-count"); if (c) c.textContent = `${t.value.length} / ${TASK_MAX}`; }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!newForm || !t || !t.id) return;
+  if (t.id === "nc-rc") newForm.remoteControl = t.checked;
+  if (t.id === "nc-skip") newForm.skipWorkflow = t.checked;
+  if (t.id === "nc-model") { newForm.model = t.value; rememberModel(newForm.model); }
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && asking) { asking = null; render(); return; }
+  if (e.key === "Escape" && newAsk) { newAsk = null; render(); return; }
   const tb = e.target instanceof Element ? e.target.closest('button[role="tab"]') : null;
   if (!tb) return;
   let to = null;
@@ -379,7 +335,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Home") to = "latest"; else if (e.key === "End") to = "all";
   if (!to) return;
   e.preventDefault();
-  asking = null; chatTab = to; render();
+  chatTab = to; render();
   const t2 = $("tab-" + to); if (t2) t2.focus();
 });
 
@@ -399,6 +355,7 @@ async function load(force = false) {
     data = j;
     $("banner").hidden = true;
     if (force || !busy()) render();
+    else { paintTop(); if ($("cw-slot")) cv.show(chatInView()); }
     $("updated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     $("banner").hidden = false;
@@ -421,6 +378,6 @@ $("theme").addEventListener("click", () => {
 paintToggle();
 
 load();
-// refresh every 30 s while in front; a half-typed answer or an open question is never replaced
+// refresh every 30 s while in front; typed text and open questions are never replaced (the chat view also reads its own messages, 15 s while Claude works)
 setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });

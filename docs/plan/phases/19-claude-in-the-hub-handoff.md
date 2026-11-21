@@ -85,3 +85,10 @@ One line per step in `logs/hub_actions.log` through the server's `log(action, id
 - No real run: the self-test uses a pretend chat engine, a pretend clock and a pretend handoff.md. The real round is run later with Ivan watching (a real `/handoff` and `/pickup` in a real project).
 - How long a real `/handoff` takes (the 10-minute limit is a guess), and whether a real `/handoff` could leave handoff.md unchanged on purpose (for example nothing new to save): then the round stops, which is the safe side.
 - A Hub restart in the middle of a round loses the round's status (the chat itself is not affected).
+
+## Wiring (done in tools/dashboard/server.mjs)
+- One `makeHandoffRound({ chats, log })` made next to the chat engine (not in `--demo`), replaceable in the self-test (`handoffHooks`).
+- Action `chat-handoff-round` in the guarded `POST /api/action`: body exactly `{ action, id, confirm: true }` (id = a Hub chat id `h-...`; extra fields or a bad id are refused in words, nothing started). Answers at once `{ ok: true, roundId, note }` or `{ ok: false, error }` (the engine's plain sentence, redacted). `--demo`: "Sample data mode: the buttons are switched off."
+- `GET /api/chat-handoff?round=<roundId>` -> the round object, unknown or badly shaped id -> 404 `{"error":"unknown round"}`. `GET /api/chat-handoff?chat=<chat id>` -> that chat's newest round or `null` (bad id shape -> 404). Error and step texts are redacted. POST/PUT -> 405. `--demo`: `?chat=` answers `null`, `?round=` 404.
+- Log: one line per request in `hub_actions.log`: `chat-handoff-round <chat id> accepted <roundId>` / `refused` / `refused: wrong request shape` (never any text); the engine writes its own step lines.
+- Self-test: 14 new checks in `node tools/dashboard/server.mjs --selftest` (fake rounds object; no real round, no real chat).

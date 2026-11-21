@@ -87,3 +87,12 @@
   .ph-pct { font-size: 1.5rem; }
   .dec-date { margin-left: 0; }
 }
+
+/* 19.5: Chats heading with the New chat button; one chat in the workspace, an older one chosen from All chats */
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.sec-head h2 { margin-bottom: 0; }
+.sec .chat-form { margin-bottom: 14px; max-width: 46rem; }
+.view-note { font-size: 0.875rem; color: var(--muted); margin-bottom: 10px; }
+.view-note .linkbtn { color: var(--accent); }
+.row-show[aria-current="true"] { border-color: var(--accent); color: var(--accent); }
+.cw-slot { min-width: 0; }
