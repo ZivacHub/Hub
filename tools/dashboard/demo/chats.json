@@ -101,7 +101,7 @@
           "needsYou": true,
           "why": "question",
           "snippet": "Should the presets include a square format too?",
-          "remoteControl": false,
+          "remoteControl": null,
           "sinceAgoMinutes": 420,
           "lastActiveAgoMinutes": 300,
           "model": null,

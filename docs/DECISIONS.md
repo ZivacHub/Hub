@@ -371,3 +371,15 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-21):** chose "All at once" (my recommendation was writing and the hand-off round first).
 **Result:** Phase 19 is one phase, 19.1 to 19.6; the manager still builds in an order that keeps each step testable (view, writing, context meter and hand-off, side panel) and shows him the result at the end of the phase, as in whole-phase mode. If an early step shows a problem the phase stops and asks.
 **Affects:** Phase 19
+
+## D59 — "Hand off and pick up" is always visible, with a glow from 60 percent   [decided 2026-11-21]
+**Question:** The button only appeared at 60 percent full, so he could not test it on a small chat. What should it do?
+**The owner said (2026-11-21), his own words:** "always visable, but make it recomended like a glow around when we hit 60 percent."
+**Result:** the button is on every resting Hub chat from the start; at 60 percent it gets a glow (and the words "time to hand off soon"), at 80 percent a stronger one. So he can rehearse it on a tiny test chat. It still asks first and never sends by itself.
+**Affects:** Phase 19 (19.3, step 19.11)
+
+## D60 — "Read" in the chat view: the Claude app's own reader cannot be used from the Hub   [proposed 2026-11-21: needs his yes]
+**Question:** In the Claude app each message has copy, fork, pin, resume, read. What does he want by "read"?
+**The owner said (2026-11-21), his own words:** "read, meaning we can use the claudes reader in hub, since that text/promts lives and operate in claude desktop, I think we can use claudes voice that reads".
+**My reading (not his decision yet):** he wants a speaker button on each reply that reads it aloud. The reader is a part of the Claude desktop app and has no way in from outside, so the Hub cannot call it. Proposal: a speaker button using the voice built into the Hub window (Windows voices, free, no download, works now); the Jarvis voice (Kokoro, the voice track in the Jarvis chat) can replace it later.
+**Affects:** Phase 19 (19.9)

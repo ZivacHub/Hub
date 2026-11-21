@@ -73,3 +73,8 @@ Result: for a chat that is not in the middle of a turn the number is exact. Whil
 ## Tests
 - `node tools/dashboard/lib/chatlog.mjs --selftest` (38 checks, fake files in a temp dir); add `--real` to print counts (never text) for the 3 newest real Hub chats.
 - `node tools/dashboard/server.mjs --selftest` (chat-log checks: known id from the live list, unknown 404, path tricks 404, POST/PUT 405, and the `--demo` sample conversation with paging).
+
+## Remote Control states (2026-11-21)
+- App chats: Remote Control is `true` or `false` only when the app's own record says so; when the record has no such field it is `null` (unknown), never "off". Found on Ivan's real data: a chat with Remote Control on in the app had no field at all.
+- Hub chats keep true/false (the Hub knows it itself); terminal chats are `null`.
+- Pages must say "unknown" or show nothing for `null`, never "Remote Control: off".

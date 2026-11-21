@@ -448,6 +448,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   check("app chat by s- id and by its local_ app id: the file from the app record", ra.status === 200 && ra.body.messages[0].blocks[0].text === "app chat words" && ra.body.meta.remoteControl === true && rl.status === 200 && rl.body.chatId === "s-99887766" && rl.body.messages[0].blocks[0].text === "app chat words" && ra.body.meta.model === "claude-opus-5-5" && ra.body.meta.permissionMode === "auto");
   const rt = await readChatLog({ id: "s-55667788", ...opts });
   check("terminal chat: found by id start in the project's (sub)folder chats", rt.status === 200 && rt.body.messages[0].blocks[0].text === "terminal words" && !JSON.stringify(rt.body).includes("WRONG PROJECT"));
+  check("chat-log meta keeps null (unknown Remote Control): terminal null, other values only true/false", rt.body.meta.remoteControl === null && typeof rh.body.meta.remoteControl === "boolean");
   const rn = await readChatLog({ id: "s-00000000", ...opts });
   check("known chat with no saved file: 200, empty, savedFileFound false", rn.status === 200 && rn.body.messages.length === 0 && rn.body.meta.savedFileFound === false && rn.body.context.usedTokens === null);
   const bad = await Promise.all(["h-nope", "s-12345678", "local_00000000-0000", "..\\..\\x", "../../x", "", null, 5, SID, "s-99887766/..", "h-20261120-1\0", "C:\\Windows"].map((x) => readChatLog({ id: x, ...opts }).then((r) => r.status)));

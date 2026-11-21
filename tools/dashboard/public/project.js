@@ -44,6 +44,8 @@ let noteText = "";
 let chatTab = "latest";            // "latest" | "all": the chosen Chats tab, kept across the 30 s refresh (D56)
 let viewId = null;                 // a chat chosen in "All chats"; null = the latest chat
 let newForm = null;                // { text, model, remoteControl, skipWorkflow } while the New chat form is open
+let openDecs = new Set();           // decisions folded open on this page, kept across the 30 s refresh
+let nextOpen = false;              // the "Next steps" fold
 let newAsk = null;                 // { text, extra } while "Start a chat ...?" is open
 
 function setNote(text, bad = false) { noteText = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
@@ -84,32 +86,37 @@ function header(p) {
   const done = p.phase === null && pct === 100;
   const phase = done ? "Every phase finished" : p.phase ? `Phase ${p.phase.number} of ${p.phase.of} · ${p.phase.title}` : "No phase in progress";
   return h("section", { class: "panel ph", "aria-labelledby": "ph-name" },
-    h("div", { class: "ph-top" },
-      h("div", { class: "ph-id" }, h("h2", { id: "ph-name", class: "ph-name" }, p.name), h("p", { class: "ph-phase" }, phase)),
-      h("p", { class: "ph-pct", "aria-hidden": "true" }, `${pct}%`)),
-    h("div", { class: "bar", role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": `${p.name} progress` }, fill(pct)),
-    h("p", { class: "ph-steps" }, `${pct}% done · ${p.stepsDone} of ${p.stepsTotal} steps · ${p.phasesDone} of ${p.phasesTotal} phases`),
+    h("div", { class: "ph-id" }, h("h2", { id: "ph-name", class: "ph-name" }, p.name), h("p", { class: "ph-phase" }, phase)),
+    h("div", { class: "ph-prog" },
+      h("div", { class: "bar", role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": `${p.name} progress` }, fill(pct)),
+      h("p", { class: "ph-steps" }, h("b", { class: "ph-pct" }, `${pct}%`), ` done · ${p.stepsDone} of ${p.stepsTotal} steps · ${p.phasesDone} of ${p.phasesTotal} phases`)),
     p.nextStep ? h("p", { class: "ph-next" }, h("span", { class: "k" }, "Next step"), p.nextStep) : null);
 }
 
 function decisionItem(d) {
+  const hasMore = !!(d.question || (Array.isArray(d.options) && d.options.length) || d.ownerSaid || d.recommendation);
+  const row = [
+    h("span", { class: "dec-id" }, d.id),
+    h("span", { class: "dec-title" }, d.title || "Untitled decision"),
+    h("span", { class: "dec-status" }, d.status === "proposed" ? "Proposed" : "Open"),
+    d.date ? h("span", { class: "dec-date" }, d.date) : null];
+  if (!hasMore) return h("li", { class: "dec" }, h("div", { class: "dec-row dec-flat" }, row));
   return h("li", { class: "dec" },
-    h("div", { class: "dec-head" },
-      h("span", { class: "dec-id" }, d.id),
-      h("span", { class: "dec-title" }, d.title || "Untitled decision"),
-      h("span", { class: "dec-status" }, d.status === "proposed" ? "Proposed" : "Open"),
-      d.date ? h("span", { class: "dec-date" }, d.date) : null),
-    d.question ? h("p", { class: "dec-q" }, d.question) : null,
-    Array.isArray(d.options) && d.options.length ? h("ul", { class: "opts" }, d.options.map((o) => h("li", {}, h("span", { class: "opt-key" }, o.key), h("span", {}, o.text)))) : null,
-    d.ownerSaid ? h("p", { class: "dec-line" }, h("span", { class: "k" }, "Your words"), d.ownerSaid) : null,
-    d.recommendation ? h("p", { class: "dec-line rec" }, h("span", { class: "k" }, "Claude recommends"), d.recommendation) : null);
+    h("details", { class: "dec-fold", "data-id": d.id, open: openDecs.has(d.id) },
+      h("summary", { class: "dec-row" }, h("span", { class: "dec-chev", "aria-hidden": "true" }), row),
+      h("div", { class: "dec-more" },
+        d.question ? h("p", { class: "dec-q" }, d.question) : null,
+        Array.isArray(d.options) && d.options.length ? h("ul", { class: "opts" }, d.options.map((o) => h("li", {}, h("span", { class: "opt-key" }, o.key), h("span", {}, o.text)))) : null,
+        d.ownerSaid ? h("p", { class: "dec-line" }, h("span", { class: "k" }, "Your words"), d.ownerSaid) : null,
+        d.recommendation ? h("p", { class: "dec-line rec" }, h("span", { class: "k" }, "Claude recommends"), d.recommendation) : null)));
 }
 
 function decisionsSection(list) {
-  return h("section", { class: "panel sec", "aria-labelledby": "h-dec" },
-    h("h2", { id: "h-dec" }, "Waiting on you ", list.length ? h("span", { class: "count" }, String(list.length)) : null),
-    list.length ? h("ul", { class: "decs" }, list.map(decisionItem)) : h("p", { class: "empty" }, "Nothing waits on you here."),
-    list.length ? h("p", { class: "quiet-line" }, "Answering decisions from this page comes later. For now, tell Claude your choice in the chat.") : null);
+  return h("section", { class: "panel sec decs-panel", "aria-labelledby": "h-dec" },
+    h("div", { class: "decs-head" },
+      h("h2", { id: "h-dec" }, "Waiting on you ", list.length ? h("span", { class: "count" }, String(list.length)) : null),
+      list.length ? h("p", { class: "quiet-line" }, "Answering decisions from this page comes later. For now, tell Claude your choice in the chat.") : null),
+    list.length ? h("ul", { class: "decs" }, list.map(decisionItem)) : h("p", { class: "empty" }, "Nothing waits on you here."));
 }
 
 function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
@@ -154,46 +161,48 @@ function newChatForm() {
 }
 
 function chatsSection(chats) {
-  const head = h("div", { class: "sec-head" },
-    h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null),
-    newForm ? null : h("button", { class: "btn", type: "button", "data-act": "nc-open" }, "New chat"));
-  const kids = [head];
-  if (newForm) kids.push(newChatForm());
+  const newBtn = newForm ? null : h("button", { class: "btn", type: "button", "data-act": "nc-open" }, "New chat");
+  const heading = h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null);
+  const pad = [];
+  if (newForm) pad.push(newChatForm());
   if (!chats.length) {
-    kids.push(h("p", { class: "empty" }, "No chats for this project yet."));
-    return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
+    pad.push(h("p", { class: "empty" }, "No chats for this project yet."));
+    return h("section", { class: "panel sec chats-panel", "aria-labelledby": "h-chats" }, h("div", { class: "chats-bar" }, heading, h("span", { class: "chats-fill" }), newBtn), h("div", { class: "chats-pad" }, pad));
   }
   const latest = latestOf(chats);
   const shown = viewId && chats.find((c) => c.id === viewId);
   if (viewId && !shown) viewId = null;
   const others = chats.filter((c) => c.needsYou && c !== latest);
+  const older = !!shown && shown !== latest;
+  // the two notices sit in the slim bar (one line each), so the conversation starts high on the page
+  const notices = [];
   if (others.length) {
     const names = others.map((c) => c.title || "Chat");
-    kids.push(h("p", { class: "chat-notice", role: "status" },
+    notices.push(h("p", { class: "chat-notice", role: "status" },
       h("span", { class: "dia", "aria-hidden": "true" }, "◆"),
-      h("span", {}, others.length === 1 ? "1 other chat needs you: " : `${others.length} other chats need you: `, h("b", {}, names.join(", ")), " — ",
-        h("button", { class: "linkbtn", type: "button", "data-act": "tab", "data-tab": "all" }, "open All chats"))));
+      h("span", { class: "cn-text" }, others.length === 1 ? "1 other chat needs you: " : `${others.length} other chats need you: `, h("b", {}, names.join(", "))),
+      h("button", { class: "linkbtn", type: "button", "data-act": "tab", "data-tab": "all" }, "open All chats")));
   }
-  const older = !!shown && shown !== latest;
+  if (older && chatTab !== "all") notices.push(h("p", { class: "view-note" }, "An older chat. ", h("button", { class: "linkbtn", type: "button", "data-act": "latest" }, "Show the latest chat")));
   const tab = (key, label, extra) => h("button", { class: "tab", type: "button", role: "tab", id: "tab-" + key, "aria-controls": "tabpanel-chats", "aria-selected": String(chatTab === key), tabindex: chatTab === key ? "0" : "-1", "data-act": "tab", "data-tab": key }, label, extra);
-  kids.push(h("div", { class: "tabs", role: "tablist", "aria-label": "Chats" },
-    tab("latest", older ? "This chat" : "Latest chat"),
-    tab("all", `All chats (${chats.length})`, others.length ? [h("span", { class: "tab-dia", "aria-hidden": "true" }, " ◆"), h("span", { class: "sr" }, ", some need you")] : null)));
+  const bar = h("div", { class: "chats-bar" }, heading,
+    h("div", { class: "tabs", role: "tablist", "aria-label": "Chats" },
+      tab("latest", older ? "This chat" : "Latest chat"),
+      tab("all", `All chats (${chats.length})`, others.length ? [h("span", { class: "tab-dia", "aria-hidden": "true" }, " ◆"), h("span", { class: "sr" }, ", some need you")] : null)),
+    h("div", { class: "chats-notices" }, notices), newBtn);
   const panel = h("div", { class: "tabpanel", role: "tabpanel", id: "tabpanel-chats", "aria-labelledby": "tab-" + chatTab, tabindex: "-1" });
   if (chatTab === "all") {
-    panel.append(h("ul", { class: "pg-rows" }, chats.map(chatRow)));
+    panel.append(h("div", { class: "chats-pad" }, h("ul", { class: "pg-rows" }, chats.map(chatRow))));
   } else {
-    if (older) panel.append(h("p", { class: "view-note" }, "You are looking at an older chat. ", h("button", { class: "linkbtn", type: "button", "data-act": "latest" }, "Show the latest chat")));
     panel.append(h("div", { id: "cw-slot", class: "cw-slot" }));
   }
-  kids.push(panel);
-  return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
+  return h("section", { class: "panel sec chats-panel", "aria-labelledby": "h-chats" }, bar, pad.length ? h("div", { class: "chats-pad" }, pad) : null, panel);
 }
 
 function nextStepsSection(ho) {
   const t = ho && typeof ho.nextSteps === "string" ? ho.nextSteps.trim() : "";
-  return h("section", { class: "panel sec", "aria-labelledby": "h-next" },
-    h("h2", { id: "h-next" }, "Next steps from the handoff"),
+  return h("details", { class: "panel sec next-fold", id: "next-fold", open: nextOpen },
+    h("summary", { id: "h-next" }, "Next steps from the handoff"),
     t ? h("pre", { class: "handoff" }, t) : h("p", { class: "empty" }, "No handoff note with next steps yet."));
 }
 
@@ -221,9 +230,31 @@ function placeWorkspace() {
   if (!slot) { cv.show(null); return; }
   cv.snapshot();
   slot.append(cv.el);
+  fitWorkspace();
   cv.show(chatInView());
   cv.restore();
 }
+
+// The workspace is as tall as the window space left under the blocks above it (never less than MIN_CW, so the conversation stays readable).
+// Only a CSS variable is set; the look itself lives in chatview.css.
+const MIN_CW = 690, BOTTOM_GAP = 16;
+function fitWorkspace() {
+  const slot = $("cw-slot");
+  if (!slot) return;
+  const top = slot.getBoundingClientRect().top + window.scrollY;
+  const h2 = Math.max(MIN_CW, Math.floor(window.innerHeight - top - BOTTOM_GAP));
+  document.documentElement.style.setProperty("--cw-h", `${h2}px`);
+}
+let fitTimer = null;
+function fitSoon() { cancelAnimationFrame(fitTimer); fitTimer = requestAnimationFrame(fitWorkspace); }
+window.addEventListener("resize", fitSoon);
+// a decision folded open or closed moves the workspace: measure again
+document.addEventListener("toggle", (e) => {
+  const t = e.target;
+  if (!t || !t.classList) return;
+  if (t.classList.contains("dec-fold")) { if (t.open) openDecs.add(t.dataset.id); else openDecs.delete(t.dataset.id); fitSoon(); }
+  else if (t.id === "next-fold") nextOpen = t.open;
+}, true);
 
 function render() {
   const d = data;

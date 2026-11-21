@@ -11,6 +11,8 @@ import { chatFileState } from "./attention.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = resolve(HERE, "..", "..", "..", "..");
 const clip = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+/** Remote Control from the app's own record: true, false, or null when the field is missing (unknown, never "off"). */
+const rcOf = (rec) => (rec && typeof rec.remoteControlUserEnabled === "boolean" ? rec.remoteControlUserEnabled : null);
 const iso = (v) => {
   if (v === null || v === undefined || v === "") return null;
   const t = typeof v === "number" ? v : Date.parse(v);
@@ -110,7 +112,7 @@ export function buildChats({ hubChats = [], open = [], appRecords = [], states =
       name: red(rec && rec.title ? rec.title : e.name, 80),
       state: e.status === "busy" ? "working" : "idle",
       needsYou: nm, why: nm ? s.state : "", snippet: nm ? red(s.snippet, 220) : "",
-      remoteControl: rec ? rec.remoteControlUserEnabled === true : null,
+      remoteControl: rec ? rcOf(rec) : null, // true / false from the app record, null = the record does not say
       since: iso(e.startedAt), lastActive: (s && iso(s.at)) || iso(e.startedAt), model: null, turns: null, canAnswer: false,
       openLink: rec && typeof rec.sessionId === "string" && APP_ID.test(rec.sessionId) ? "claude://claude.ai/epitaxy/" + rec.sessionId : null,
       lastReply: "", refused: [],
@@ -124,7 +126,7 @@ export function buildChats({ hubChats = [], open = [], appRecords = [], states =
     add(project, {
       id: "s-" + rec.cliSessionId.slice(0, 8), kind: "app", name: red(rec.title || "Chat", 80), state: "closed",
       needsYou: nm, why: nm ? s.state : "", snippet: nm ? red(s.snippet, 220) : "",
-      remoteControl: rec.remoteControlUserEnabled === true,
+      remoteControl: rcOf(rec), // true / false / null (record does not say)
       since: iso(rec.createdAt), lastActive: iso(rec.lastActivityAt) ?? iso(rec.createdAt), model: null, turns: null, canAnswer: false,
       openLink: typeof rec.sessionId === "string" && APP_ID.test(rec.sessionId) ? "claude://claude.ai/epitaxy/" + rec.sessionId : null,
       lastReply: "", refused: [],
@@ -276,7 +278,8 @@ async function selftest() {
   check("app: name from record, id, link, rc", app.name === "App title" && app.id === "s-bbbbbbbb" && app.openLink === "claude://claude.ai/epitaxy/local_abcdef12-3456" && app.remoteControl === true && !app.canAnswer);
   check("terminal: name, rc null, no link", term.name === "t2" && term.remoteControl === null && term.openLink === null && term.model === null && term.turns === null && term.lastReply === "" && term.refused.length === 0);
   check("remoteControl false for app", one({ open: [ent({})], appRecords: [rec({ remoteControlUserEnabled: false })] }).remoteControl === false);
-  check("remoteControl missing = false for app", one({ open: [ent({})], appRecords: [rec({ remoteControlUserEnabled: undefined })] }).remoteControl === false);
+  check("remoteControl missing = null (unknown) for app, never false", one({ open: [ent({})], appRecords: [rec({ remoteControlUserEnabled: undefined })] }).remoteControl === null && one({ open: [ent({})], appRecords: [rec({ remoteControlUserEnabled: "yes" })] }).remoteControl === null);
+  check("remoteControl true for app", one({ open: [ent({})], appRecords: [rec({ remoteControlUserEnabled: true })] }).remoteControl === true);
   check("duplicate skipped", all(b({ hubChats: [hub({ sessionId: "bbbbbbbb-1111-2222" })], open: [ent({})] })).length === 1);
   check("entry name used when record has no title", one({ open: [ent({ name: "entry" })], appRecords: [rec({ title: "" })] }).name === "entry");
 
@@ -369,7 +372,7 @@ async function selftest() {
   check("closed: record outside the projects folder skipped", all(b({ appRecords: [crec({ cwd: "C:\\Other\\Alpha" }), crec({ cwd: "C:\\Proj" }), crec({ cwd: "C:\\Proj2\\Alpha" })] })).length === 0);
   check("closed: project from the first folder", b({ appRecords: [crec({ cwd: "C:\\Proj\\Beta\\sub" })] }).projects[0].project === "Beta");
   check("closed: bad app id gives no link", all(b({ appRecords: [crec({ sessionId: "local_../x" })] }))[0].openLink === null);
-  check("closed: remote control false when not true", all(b({ appRecords: [crec({ remoteControlUserEnabled: undefined })] }))[0].remoteControl === false);
+  check("closed: remote control null when the record does not say; false and true kept", all(b({ appRecords: [crec({ remoteControlUserEnabled: undefined })] }))[0].remoteControl === null && all(b({ appRecords: [crec({ remoteControlUserEnabled: false })] }))[0].remoteControl === false && all(b({ appRecords: [crec({ remoteControlUserEnabled: true })] }))[0].remoteControl === true);
   check("closed: needs you when the saved state says question", (() => { const c = one({ appRecords: [crec({})], states: { "dddddddd-1111-2222": { state: "question", snippet: "Pick one?" } } }); return c.needsYou && c.why === "question" && c.snippet === "Pick one?"; })());
   check("closed: name redacted and clipped", (() => { const c = all(b({ redact: fake, appRecords: [crec({ title: "SECRET " + "x".repeat(200) })] }))[0]; return c.name.length === 80 && !c.name.includes("SECRET"); })());
   const many = Array.from({ length: 15 }, (_, i) => crec({ cliSessionId: "eeeeeeee-" + String(i).padStart(4, "0") + "-aaaa", sessionId: "local_ab" + String(i).padStart(6, "0"), title: "C" + i, lastActivityAt: NOW - (i + 1) * 60000 }));

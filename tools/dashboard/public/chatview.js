@@ -1,7 +1,7 @@
 // Hub chat workspace (Phase 19, steps 19.1 to 19.5 on the project page). One chat shown as a real conversation:
-//   header (title, kind, state, Remote Control in words) + context bar (+ "Hand off and pick up" from 60 percent)
+//   one slim band (title, kind, state, Remote Control in words and, for a resting Hub chat, its switch) + context bar (+ "Hand off and pick up" from 60 percent)
 //   + the whole conversation from GET /api/chat-log (Claude's replies drawn as markdown, tools folded)
-//   + a composer (Ctrl+Enter sends; asks first; the same requests the project page always sent) + a side panel.
+//   + a composer docked at the bottom (Ctrl+Enter sends; asks first; the same requests the project page always sent) + a details column on the right.
 // The root element is built ONCE and moved into the page by project.js, so a refresh never loses the draft, the scroll place or open folds.
 // Safety: every piece of text goes in with textContent (via h()) or md.js (which never makes HTML from the text).
 import { renderMarkdown } from "./md.js";
@@ -70,6 +70,8 @@ export function createChatView(deps) {
   const metaEl = h("p", { class: "cv-meta" });
   const headEl = h("header", { class: "cv-head" }, h("div", { class: "cv-head-top" }, titleEl, tagsEl), metaEl);
   const ctxEl = h("div", { class: "cv-ctx-wrap" });
+  const bandEl = h("div", { class: "cv-band" }, headEl, ctxEl);
+  const askEl = h("div", { class: "cv-askbar", hidden: true });
   const roundEl = h("div", { class: "cv-round", hidden: true });
   const roundLive = h("p", { class: "sr", role: "status" });
   const bannerEl = h("p", { class: "cv-banner", role: "status", hidden: true });
@@ -78,9 +80,9 @@ export function createChatView(deps) {
   const jump = h("button", { class: "btn cv-jump", type: "button", "data-k": "jump", hidden: true }, icon("down"), "Jump to latest");
   const scrollWrap = h("div", { class: "cv-scrollwrap" }, scroll, jump);
   const composer = h("div", { class: "cv-composer" });
-  const side = h("details", { class: "cv-side" });
+  const side = h("aside", { class: "cv-side", "aria-label": "Chat details" });
   const grid = h("div", { class: "cv-grid" }, h("div", { class: "cv-main" }, bannerEl, scrollWrap, composer), side);
-  const el = h("section", { class: "cw", "aria-labelledby": "cv-title" }, headEl, ctxEl, roundEl, roundLive, grid);
+  const el = h("section", { class: "cw", "aria-labelledby": "cv-title" }, bandEl, askEl, roundEl, roundLive, grid);
 
   const ta = h("textarea", { id: "cv-ta", class: "chat-text cv-ta", rows: "3", maxlength: String(ANSWER_MAX), "aria-describedby": "cv-hint", placeholder: "Write your message" });
   let countEl = null;
@@ -132,7 +134,9 @@ export function createChatView(deps) {
     if (st.meta && (st.meta.remoteControl === true || st.meta.remoteControl === false)) return st.meta.remoteControl;
     return null;
   }
-  const rcWord = () => { const v = rcValue(); return v === true ? "on" : v === false ? "off" : "unknown"; };
+  const rcWord = () => { const v = rcValue(); return v === true ? "On" : v === false ? "Off" : "Unknown"; };
+  // a real switch only for a Hub chat the Hub runs itself: turning it OFF is always possible, turning it ON only while the chat rests (the same rule as the dashboard)
+  const rcSwitchable = () => isHub() && !!st.chat && (rcValue() === true || (rcValue() === false && st.chat.canAnswer === true));
   const pctNow = () => (st.context && Number.isFinite(st.context.percent) ? st.context.percent : null);
 
   // ---------- header and context bar ----------
@@ -141,11 +145,14 @@ export function createChatView(deps) {
     if (!ch) return;
     const state = STATE_WORD[ch.state] ? ch.state : "idle";
     titleEl.textContent = ch.title || "Chat";
-    tagsEl.replaceChildren(...[
+    const rv = rcValue();
+    const showRc = !(ch.kind === "terminal" && rv === null);
+    const sw = rcSwitchable() ? h("button", { class: "crc-btn", type: "button", "data-k": "rc-toggle", disabled: !!st.ask || st.sending }, rv === true ? "Turn off" : "Turn on") : null;
+    withFocus(() => tagsEl.replaceChildren(...[
       h("span", { class: "ckind" }, KIND_WORD[ch.kind] || "Chat"),
       h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
       ch.needsYou ? h("span", { class: "cneeds" }, ch.why === "permission" ? "Needs you: permission" : "Needs you") : null,
-      h("span", { class: "crc" + (rcValue() === true ? " on" : "") }, `Remote Control: ${rcWord()}`)].filter(Boolean));
+      showRc ? h("span", { class: "crc" + (rv === true ? " on" : rv === null ? " unk" : "") }, "Remote Control: ", h("b", {}, rcWord()), sw) : null].filter(Boolean)));
     const bits = [];
     if (ch.lastActive) bits.push(`Last active ${ago(ch.lastActive)}`);
     if (st.meta && st.meta.model) bits.push(st.meta.model);
@@ -167,7 +174,7 @@ export function createChatView(deps) {
       const kids = [];
       const ctx = st.context;
       const pct = pctNow();
-      if (!ch) { ctxEl.replaceChildren(); return; }
+      if (!ch) { ctxEl.replaceChildren(); askEl.replaceChildren(); askEl.hidden = true; return; }
       if (pct === null) {
         kids.push(h("p", { class: "cv-ctx-none" }, st.loading ? "Context: reading…" : "Context: not known for this chat."));
       } else {
@@ -181,11 +188,15 @@ export function createChatView(deps) {
             lv === "soon" ? h("b", { class: "cv-lv lv-soon" }, "Time to hand off soon") : lv === "now" ? h("b", { class: "cv-lv lv-now" }, "Hand off now") : null),
           handoffControl(pct)), bar);
       }
-      if (st.ask && st.ask.where === "ctx") kids.push(askRow(st.ask));
-      if (st.roundMsg) kids.push(h("p", { class: "cv-ctx-err", role: "status" }, st.roundMsg));
+      const asks = [];
+      if (st.ask && st.ask.where === "ctx") asks.push(askRow(st.ask));
+      if (st.roundMsg) asks.push(h("p", { class: "cv-ctx-err", role: "status" }, st.roundMsg));
       ctxEl.replaceChildren(...kids);
-      if (st.ask && st.ask.where === "ctx" && st.ask.fresh) { st.ask.fresh = false; const y = ctxEl.querySelector('[data-k="yes"]'); if (y) y.focus(); }
+      askEl.replaceChildren(...asks);
+      askEl.hidden = !asks.length;
     });
+    // after the redraw (the redraw gives focus back to what had it before): a fresh question takes the focus on its Yes button
+    if (st.ask && st.ask.where === "ctx" && st.ask.fresh) { st.ask.fresh = false; const y = askEl.querySelector('[data-k="yes"]'); if (y) y.focus(); }
   }
   function fillEl(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
   function tickEl(at) { const i = document.createElement("i"); i.className = "cv-tick"; i.style.left = `${at}%`; return i; }
@@ -196,7 +207,7 @@ export function createChatView(deps) {
     if (visibleRound()) return null;
     const ch = c();
     let why = "";
-    if (ch.remoteControl === true) why = "Turn Remote Control off first.";
+    if (rcValue() === true) why = "Turn Remote Control off first.";
     else if (ch.state !== "idle") why = ch.state === "working" ? "Wait until Claude stops working." : "Only a resting chat can be handed off.";
     else if (roundRunning()) why = "A hand-off is already running.";
     const asking = st.ask && st.ask.kind === "round";
@@ -504,9 +515,10 @@ export function createChatView(deps) {
         kids.push(h("p", { class: "cv-note work", role: "status" }, h("span", { class: "cv-pulse", "aria-hidden": "true" }), "A hand-off is running. You can write when it is finished."));
         kids.push(field("Your message", { disabled: true }));
       } else if (m.kind === "hub-rc") {
-        kids.push(h("p", { class: "cv-note" }, "Remote Control is on. Answer it on your phone, or turn Remote Control off on the dashboard to answer it here."));
-        if (ch.state === "working") kids.push(actionRow([stopBtn(), h("span", { class: "cp-rc" }, "Working…"), openButtons(m)]));
-        else if (openButtons(m).length) kids.push(h("div", { class: "actions" }, ...openButtons(m)));
+        kids.push(h("p", { class: "cv-note" }, "Remote Control is on. Answer it on your phone, or turn Remote Control off to answer it here."));
+        const offBtn = h("button", { class: "btn", type: "button", "data-k": "rc-toggle", disabled: busy || !!st.ask }, "Turn Remote Control off");
+        if (ch.state === "working") kids.push(actionRow([stopBtn(), offBtn, h("span", { class: "cp-rc" }, "Working…"), openButtons(m)]));
+        else kids.push(h("div", { class: "actions" }, offBtn, ...openButtons(m)));
       } else if (m.kind === "hub-other") {
         kids.push(h("p", { class: "cv-note" }, "This chat can't take a message from the Hub right now."));
         if (openButtons(m).length) kids.push(h("div", { class: "actions" }, ...openButtons(m)));
@@ -523,15 +535,15 @@ export function createChatView(deps) {
         kids.push(h("p", { class: "cv-note" }, ch.state === "closed"
           ? (ch.remoteControl === true ? "This chat is closed and Remote Control is on. Answer it on your phone, or open it in the Claude app." : "This chat is closed. Open it in the Claude app and answer it there.")
           : "This chat is open in the Claude app. Answer it there so it does not split."));
-        const rc = ch.remoteControl === true ? "Remote Control: on" : ch.remoteControl === false ? "Remote Control: off" : null;
-        if (m.appId || rc) kids.push(h("div", { class: "actions" }, ...openButtons(m), rc ? h("span", { class: "cp-rc" }, rc) : null));
+        const rc = `Remote Control: ${rcWord().toLowerCase()}`;
+        kids.push(h("div", { class: "actions" }, ...openButtons(m), h("span", { class: "cp-rc" }, rc)));
       } else if (m.kind === "terminal") {
         kids.push(h("p", { class: "cv-note" }, "This chat is open in a terminal. Answer it there."));
       }
       composer.classList.toggle("is-empty", !kids.length);
       composer.replaceChildren(...kids);
-      if (asking && st.ask.fresh) { st.ask.fresh = false; const y = composer.querySelector('[data-k="yes"]'); if (y) y.focus(); }
     });
+    if (st.ask && st.ask.where === "composer" && st.ask.fresh) { st.ask.fresh = false; const y = composer.querySelector('[data-k="yes"]'); if (y) y.focus(); }
   }
   function appResult(res) {
     if (res.ok && res.reply) {
@@ -559,6 +571,13 @@ export function createChatView(deps) {
     else if (kind === "stop") { if (!isHub()) return; a = { where: "composer", text: "Stop this chat?", extra: "You can answer it later to continue.", body: { action: "chat-stop", id: st.id } }; }
     else if (kind === "handoff") { if (!isHub()) return; a = { where: "composer", text: "Hand off this chat?", extra: "Claude saves where the work stands and writes the handoff note. " + SAFE, body: { action: "chat-answer", id: st.id, text: "/handoff" } }; }
     else if (kind === "pickup") { if (!isHub()) return; a = { where: "composer", text: "Run /pickup in this chat?", extra: SAFE, body: { action: "chat-answer", id: st.id, text: "/pickup" } }; }
+    else if (kind === "rc") {
+      if (!rcSwitchable()) return;
+      const on = rcValue() !== true;
+      a = { where: "ctx", on, text: on ? "Turn Remote Control on?" : "Turn Remote Control off?",
+        extra: on ? "The chat runs in the background so you can open it on your phone. You cannot answer it here while it is on. " + SAFE : "The chat stops running in the background; you can answer it here afterwards.",
+        body: { action: "chat-remote-control", id: st.id, on } };
+    }
     else if (kind === "round") {
       if (!isHub()) return;
       a = { where: "ctx", text: "Hand off and pick up?", extra: "This tells the chat to write its hand-off, then starts a new chat that picks up. Your old chat stays in All chats.", body: { action: "chat-handoff-round", id: st.id } };
@@ -567,9 +586,15 @@ export function createChatView(deps) {
     st.ask = { ...a, kind, chatId: st.id, fresh: true };
     st.roundMsg = "";
     setNote("");
-    drawComposer(); drawContext();
+    drawComposer(); drawContext(); drawHead(); drawSide();
   }
-  function cancelAsk() { if (!st.ask) return; st.ask = null; drawComposer(); drawContext(); }
+  // a closed question hands the focus back to the button that opened it (the switch), so the keyboard does not lose its place
+  function focusBack(a) {
+    if (!a || a.kind !== "rc") return;
+    const b = [...el.querySelectorAll('[data-k="rc-toggle"]')].find((x) => !x.disabled && x.offsetParent !== null);
+    if (b) b.focus({ preventScroll: true });
+  }
+  function cancelAsk() { if (!st.ask) return; const a = st.ask; st.ask = null; drawComposer(); drawContext(); drawHead(); drawSide(); focusBack(a); }
 
   async function confirmAsk() {
     const a = st.ask;
@@ -580,11 +605,18 @@ export function createChatView(deps) {
     st.sending = true;
     setNote(a.kind === "send-app" ? "Answering from the Hub. Don't type in this chat in the app until it is done." : "Working on it…");
     results.delete(id);
-    drawComposer(); drawContext();
+    drawComposer(); drawContext(); drawHead(); drawSide();
     let r;
     try { r = await send(a.body); }
     catch { r = { ok: false, error: a.kind === "send-app" ? "The Hub did not answer. Look at the chat in the app before you try again." : "The Hub did not answer." }; }
     st.sending = false;
+    if (a.kind === "rc") {
+      setNote(r.ok ? r.message || (a.on ? "Remote Control is on." : "Remote Control is off.") : r.error || "That did not work.", !r.ok);
+      drawComposer(); drawContext(); drawHead(); drawSide(); focusBack(a);
+      if (deps.onChanged) await deps.onChanged();
+      refresh({ force: false });
+      return;
+    }
     if (a.kind === "round") {
       if (r.ok && r.roundId) {
         rounds.set(id, { roundId: r.roundId, state: "running", steps: [], startedLocal: Date.now() });
@@ -592,7 +624,7 @@ export function createChatView(deps) {
         setNote("Hand-off started.");
         setTimeout(pollRounds, 1200);
       } else { st.roundMsg = r.error || "The hand-off did not start."; setNote(st.roundMsg, true); }
-      drawRound(); drawContext(); drawComposer();
+      drawRound(); drawContext(); drawComposer(); drawHead(); drawSide();
       return;
     }
     if (a.kind === "send-app") {
@@ -607,7 +639,7 @@ export function createChatView(deps) {
       setNote(r.message || (a.kind === "stop" ? "Stopped." : "Sent."));
       if (a.kind === "send") { drafts.delete(id); if (st.id === id) ta.value = ""; }
     } else setNote(r.error || "That did not work.", true);
-    drawComposer();
+    drawComposer(); drawHead(); drawSide();
     if (deps.onChanged) await deps.onChanged();
     refresh({ force: false });
     setTimeout(() => { if (st.id === id) refresh(); }, 2500);
@@ -628,27 +660,53 @@ export function createChatView(deps) {
     }
   });
 
-  // ---------- side panel ----------
+  // ---------- details column (right edge, own scroll, collapsible) ----------
+  const RC_TEXT = {
+    on: "On: you can reach this chat from your phone. The Hub can't write into it while this is on.",
+    off: "Off: this chat is not open to your phone.",
+    unknown: "Unknown (the Claude app did not tell the Hub). Check the switch in the Claude app.",
+    terminal: "Unknown: a terminal chat does not tell the Hub.",
+  };
+  function rcSection() {
+    const rc = rcValue();
+    const ch = c();
+    const text = rc === true ? RC_TEXT.on : rc === false ? RC_TEXT.off : ch && ch.kind === "terminal" ? RC_TEXT.terminal : RC_TEXT.unknown;
+    // On / Off get a bold word; Unknown says everything in its one sentence (no stuttering "Unknown / Unknown (...)")
+    const kids = [h("h4", {}, "Remote Control")];
+    if (rc !== null) kids.push(h("p", { class: "cv-rc-word" }, h("b", { class: rc === true ? "rc-on" : "" }, rcWord())));
+    kids.push(h("p", { class: rc === null ? "cv-small cv-rc-unk" : "cv-small" }, text));
+    if (rcSwitchable()) {
+      kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-k": "rc-toggle", disabled: !!st.ask || st.sending }, rc === true ? "Turn off" : "Turn on")));
+    } else if (isHub() && rc === false) {
+      kids.push(h("p", { class: "cv-small" }, "You can switch it on once Claude stops working."));
+    } else if (ch && ch.kind === "app") {
+      kids.push(h("p", { class: "cv-small" }, "Switch it in the Claude app: the Hub can not change Remote Control of a chat the app runs."));
+    }
+    return h("section", { class: "cv-sec" }, kids);
+  }
   function drawSide() {
+    const ch = c();
+    if (!ch) { side.replaceChildren(); return; }
+    if (st.sideOpen === null) {
+      let saved = null;
+      try { saved = localStorage.getItem("hub-chat-side"); } catch { /* storage blocked */ }
+      st.sideOpen = saved === "open" ? true : saved === "closed" ? false : !(window.matchMedia && matchMedia("(max-width: 900px)").matches);
+    }
+    const open = st.sideOpen;
+    el.classList.toggle("side-closed", !open);
+    const prev = side.querySelector(".cv-side-body");
+    const keepTop = prev ? prev.scrollTop : 0;
     withFocus(() => {
-      const ch = c();
-      if (!ch) { side.replaceChildren(); return; }
-      if (st.sideOpen === null) st.sideOpen = !(window.matchMedia && matchMedia("(max-width: 900px)").matches);
-      side.open = st.sideOpen;
       const meta = st.meta || {};
       const val = (v) => (v === null || v === undefined || v === "" ? h("span", { class: "unk" }, st.loading ? "Reading…" : "Not known") : String(v));
       const dl = (rows) => h("dl", { class: "cv-dl" }, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
-      const rc = rcValue();
-      const rcText = rc === true ? "On: you can reach this chat from your phone. The Hub can't write into it while this is on." : rc === false ? "Off: this chat is not open to your phone." : "The Hub could not tell.";
       const outs = Array.isArray(meta.outputs) ? meta.outputs : [];
       const shown = st.outputsAll ? outs : outs.slice(0, OUTPUTS_FIRST);
       const ctx = st.context;
       const secs = [
         h("section", { class: "cv-sec" }, h("h4", {}, "Environment"),
           dl([["Folder", val(meta.cwd)], ["Branch", val(meta.branch)], ["Model", val(meta.model)], ["Permission mode", val(meta.permissionMode)]])),
-        h("section", { class: "cv-sec" }, h("h4", {}, "Remote Control"),
-          h("p", { class: "cv-rc-word" }, h("b", {}, rc === true ? "On" : rc === false ? "Off" : "Unknown")),
-          h("p", { class: "cv-small" }, rcText)),
+        rcSection(),
         h("section", { class: "cv-sec" }, h("h4", {}, "Outputs", outs.length ? h("span", { class: "count" }, String(outs.length)) : null),
           outs.length ? h("ul", { class: "cv-outs" }, shown.map((o) => h("li", {},
             h("span", { class: "cv-path" }, o.path), h("span", { class: "cv-out-meta" }, [o.tool, o.outside ? "outside the project" : null, o.at ? ago(o.at) : null].filter(Boolean).join(", ")))))
@@ -659,10 +717,13 @@ export function createChatView(deps) {
             ? dl([["Full", `${ctx.percent}%${ctx.estimated ? " (estimate)" : ""}`], ["Used", `${ctx.usedTokens.toLocaleString("en-US")} tokens`], ["Room in total", `${ctx.windowTokens.toLocaleString("en-US")} tokens`], ["Compacted", meta.compactions ? `${meta.compactions} time${meta.compactions > 1 ? "s" : ""}` : "Never"]])
             : h("p", { class: "cv-small" }, st.loading ? "Reading…" : "Not known for this chat."),
           ctx && ctx.basis ? h("p", { class: "cv-small" }, `Counted from the ${ctx.basis}.`) : null)];
-      side.replaceChildren(h("summary", { class: "cv-side-sum" }, icon("chev"), "Chat details"), h("div", { class: "cv-side-body" }, secs));
+      side.replaceChildren(
+        h("button", { class: "cv-side-sum", type: "button", "data-k": "side-toggle", "aria-expanded": String(open), "aria-controls": "cv-side-body" }, icon("chev"), h("span", { class: "cv-side-label" }, "Chat details")),
+        h("div", { class: "cv-side-body", id: "cv-side-body", hidden: !open }, secs));
     });
+    const body = side.querySelector(".cv-side-body");
+    if (body && keepTop) body.scrollTop = keepTop;
   }
-  side.addEventListener("toggle", () => { st.sideOpen = side.open; });
 
   // ---------- clicks inside the workspace ----------
   el.addEventListener("click", async (e) => {
@@ -682,6 +743,13 @@ export function createChatView(deps) {
     if (k === "older") { loadOlder(); return; }
     if (k === "retry") { st.loading = true; st.error = ""; st.sig = ""; drawThread({ force: true }); refresh({ force: true }); return; }
     if (k === "outputs-all") { st.outputsAll = !st.outputsAll; drawSide(); return; }
+    if (k === "side-toggle") {
+      st.sideOpen = !st.sideOpen;
+      try { localStorage.setItem("hub-chat-side", st.sideOpen ? "open" : "closed"); } catch { /* storage blocked */ }
+      drawSide(); if (scroll.clientHeight) { if (st.stick) toBottom(); updateJump(); }
+      return;
+    }
+    if (k === "rc-toggle") { startAsk("rc"); return; }
     if (k === "send" || k === "send-app" || k === "stop" || k === "handoff" || k === "pickup" || k === "round") { startAsk(k); return; }
     if (k === "yes") { confirmAsk(); return; }
     if (k === "cancel") { cancelAsk(); return; }
