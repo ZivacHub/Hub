@@ -43,6 +43,16 @@
 .cv-bar.lv-now > i:not(.cv-tick) { background: repeating-linear-gradient(135deg, var(--c-bad) 0 6px, color-mix(in oklch, var(--c-bad) 70%, var(--surface)) 6px 10px); }
 .cv-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--surface-2); }
 .cv-ho { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+/* D59: the hand-off button is always there; from 60 percent it glows (the words "Time to hand off soon" / "Hand off now" stay as the real signal) */
+.cv-ho .btn.glow-soon { --glow: var(--warn); border-color: var(--warn); box-shadow: 0 0 0 3px color-mix(in oklch, var(--warn) 28%, transparent), 0 0 14px 2px color-mix(in oklch, var(--warn) 38%, transparent); }
+.cv-ho .btn.glow-now { --glow: var(--c-bad); border-color: var(--c-bad); box-shadow: 0 0 0 4px color-mix(in oklch, var(--c-bad) 34%, transparent), 0 0 20px 4px color-mix(in oklch, var(--c-bad) 46%, transparent); }
+.cv-ho .btn.glow-soon:disabled, .cv-ho .btn.glow-now:disabled { box-shadow: 0 0 0 3px color-mix(in oklch, var(--glow) 14%, transparent); }
+.cv-ho .btn.glow-soon:focus-visible, .cv-ho .btn.glow-now:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .cv-ho .btn.glow-soon:not(:disabled), .cv-ho .btn.glow-now:not(:disabled) { animation: cv-glow 3.2s ease-in-out infinite; }
+  .cv-ho .btn.glow-now:not(:disabled) { animation-duration: 2.2s; }
+}
+@keyframes cv-glow { 50% { box-shadow: 0 0 0 5px color-mix(in oklch, var(--glow) 16%, transparent), 0 0 8px 1px color-mix(in oklch, var(--glow) 20%, transparent); } }
 .cv-ho-why { font-size: 0.8125rem; color: var(--muted); }
 .cv-ctx-err { font-size: 0.875rem; color: var(--c-bad); background: var(--c-bad-bg); border-radius: 8px; padding: 6px 10px; }
 .cv-ctx-wrap:not(:has(*)) { display: none; }

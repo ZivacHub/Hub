@@ -366,6 +366,32 @@
           ]
         }
       ]
+    },
+    "h-20261115-093000-r5t8": {
+      "context": {
+        "usedTokens": 201500,
+        "windowTokens": 1000000,
+        "estimated": false,
+        "basis": "last reply's size (input + cache read + cache write tokens)"
+      },
+      "meta": {
+        "model": "claude-opus-4-8",
+        "permissionMode": "auto",
+        "compactions": 0,
+        "outputs": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "agoMinutes": 430,
+          "blocks": [{ "type": "text", "text": "How should the first level start?" }]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 428,
+          "blocks": [{ "type": "text", "text": "I would start with a quiet corridor, one enemy and one door, so the player learns to move and shoot." }]
+        }
+      ]
     }
   }
 }

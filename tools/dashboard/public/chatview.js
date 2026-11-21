@@ -1,5 +1,5 @@
 // Hub chat workspace (Phase 19, steps 19.1 to 19.5 on the project page). One chat shown as a real conversation:
-//   one slim band (title, kind, state, Remote Control in words and, for a resting Hub chat, its switch) + context bar (+ "Hand off and pick up" from 60 percent)
+//   one slim band (title, kind, state, Remote Control in words and, for a resting Hub chat, its switch) + context bar (+ "Hand off and pick up", always; glowing from 60 percent)
 //   + the whole conversation from GET /api/chat-log (Claude's replies drawn as markdown, tools folded)
 //   + a composer docked at the bottom (Ctrl+Enter sends; asks first; the same requests the project page always sent) + a details column on the right.
 // The root element is built ONCE and moved into the page by project.js, so a refresh never loses the draft, the scroll place or open folds.
@@ -201,9 +201,9 @@ export function createChatView(deps) {
   function fillEl(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
   function tickEl(at) { const i = document.createElement("i"); i.className = "cv-tick"; i.style.left = `${at}%`; return i; }
 
-  // "Hand off and pick up": only from 60 percent, Hub chats only; pressed only by Ivan, after a question
+  // "Hand off and pick up": always there on Hub chats (D59); a glow from 60 percent (amber) and 80 percent (red-orange); pressed only by Ivan, after a question
   function handoffControl(pct) {
-    if (!isHub() || pct < SOON) return null;
+    if (!isHub()) return null;
     if (visibleRound()) return null;
     const ch = c();
     let why = "";
@@ -212,7 +212,7 @@ export function createChatView(deps) {
     else if (roundRunning()) why = "A hand-off is already running.";
     const asking = st.ask && st.ask.kind === "round";
     return h("div", { class: "cv-ho" },
-      h("button", { class: "btn" + (pct >= NOW ? " primary" : ""), type: "button", "data-k": "round", disabled: !!why || asking || st.sending, "aria-describedby": why ? "cv-ho-why" : null }, "Hand off and pick up"),
+      h("button", { class: "btn" + (pct >= NOW ? " primary glow-now" : pct >= SOON ? " glow-soon" : ""), type: "button", "data-k": "round", disabled: !!why || asking || st.sending, "aria-describedby": why ? "cv-ho-why" : null }, "Hand off and pick up"),
       why ? h("span", { class: "cv-ho-why", id: "cv-ho-why" }, why) : null);
   }
 
