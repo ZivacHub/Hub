@@ -22,6 +22,10 @@
       "lastSaid": {
         "h-20261116-091000-q7w2": { "text": "Working on the caption timing now. The first 3 of 9 clips are done.", "agoMinutes": 2 },
         "h-20261116-101500-k3x9": { "text": "The caption export now handles empty captions. Tests pass: 9 of 9.\n\nWhich caption style should I burn in: word-by-word highlight or whole sentences?", "agoMinutes": 40 },
+        "h-20261116-084500-n5r1": { "text": "I checked the intro clip. The logo fades in too slowly, so I cut it from 3 seconds to 1.", "agoMinutes": 180 },
+        "s-2b3c4d5e": { "text": "Three presets are drafted: vertical, wide and square. Should the square one be included in the export list?", "agoMinutes": 300 },
+        "s-3c4d5e6f": { "text": "The sample music loops cleanly. No gaps found at the loop point.", "agoMinutes": 600 },
+        "s-4d5e6f7a": { "text": "Moved 14 old test clips into the archive folder. Nothing was deleted.", "agoMinutes": 1500 },
         "s-1a2b3c4d": { "text": "Step 4.3 is half built: the vertical cut works, captions are next.", "agoMinutes": 6 }
       },
       "handoff": "1. Step 4.3: burn captions into the vertical cut (waits on D7).\n2. Then 4.4: export presets.\n3. Phase 4 close: show Ivan the three sample clips."

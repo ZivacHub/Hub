@@ -41,6 +41,8 @@ const drafts = new Map();          // chat id -> half-typed answer
 const sending = new Set();
 const expanded = new Set();        // chat ids whose "Show more" is open
 let noteText = "";
+let chatTab = "latest";            // "latest" | "all": the chosen Chats tab, kept across the 30 s refresh (D56)
+let openRow = null;                // chat id whose row is open in "All chats" (one at a time)
 const appResults = new Map();      // chat id -> { ok, text } the last answer box result of a closed app chat, shown on its card
 
 function setNote(text, bad = false) { noteText = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
@@ -192,14 +194,53 @@ function appResultBlock(res) {
   return h("p", { class: "app-result-line" + (res.ok && !res.warn ? "" : " bad") }, res.text);
 }
 
+function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
+function latestOf(chats) { return chats.reduce((best, c) => (!best || msOf(c) > msOf(best) ? c : best), null); }
+
+function chatRow(c, idx) {
+  const state = STATE_WORD[c.state] ? c.state : "idle";
+  const open = openRow === c.id;
+  const li = h("li", { class: "pg-row" + (open ? " open" : "") + (c.needsYou ? " needs" : "") },
+    h("div", { class: "row-main" },
+      h("span", { class: "ch-title" }, c.title || "Chat"),
+      h("span", { class: "ch-tags" },
+        h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
+        h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
+        c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null),
+      h("span", { class: "row-when" }, c.lastActive ? ago(c.lastActive) : ""),
+      h("button", { class: "btn row-show", type: "button", "data-act": "row", "data-id": c.id, "aria-expanded": String(open), "aria-label": `${open ? "Hide" : "Show"} chat: ${c.title || "Chat"}` }, open ? "Hide" : "Show")));
+  if (open) li.append(h("ul", { class: "chat-cards in-row" }, chatItem(c, idx)));
+  return li;
+}
+
 function chatsSection(chats) {
-  const need = chats.filter((c) => c.needsYou), rest = chats.filter((c) => !c.needsYou);
-  let n = 0;
   const kids = [h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null)];
-  if (!chats.length) kids.push(h("p", { class: "empty" }, "No chats for this project yet. Start one from the card on the dashboard."));
-  if (need.length) kids.push(h("h3", { class: "sub" }, "Needs you"), h("ul", { class: "chat-cards" }, need.map((c) => chatItem(c, n++))));
-  else if (chats.length) kids.push(h("p", { class: "empty" }, "No chat needs you right now."));
-  if (rest.length) kids.push(h("h3", { class: "sub" }, need.length ? "Other chats" : "Chats"), h("ul", { class: "chat-cards" }, rest.map((c) => chatItem(c, n++))));
+  if (!chats.length) {
+    kids.push(h("p", { class: "empty" }, "No chats for this project yet."));
+    return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
+  }
+  const latest = latestOf(chats);
+  const idx = new Map(chats.map((c, i) => [c.id, i]));
+  const others = chats.filter((c) => c.needsYou && c !== latest);
+  if (others.length) {
+    const names = others.map((c) => c.title || "Chat");
+    kids.push(h("p", { class: "chat-notice", role: "status" },
+      h("span", { class: "dia", "aria-hidden": "true" }, "◆"),
+      h("span", {}, others.length === 1 ? "1 other chat needs you: " : `${others.length} other chats need you: `, h("b", {}, names.join(", ")), " — ",
+        h("button", { class: "linkbtn", type: "button", "data-act": "tab", "data-tab": "all" }, "open All chats"))));
+  }
+  const tab = (key, label, extra) => h("button", { class: "tab", type: "button", role: "tab", id: "tab-" + key, "aria-controls": "tabpanel-chats", "aria-selected": String(chatTab === key), tabindex: chatTab === key ? "0" : "-1", "data-act": "tab", "data-tab": key }, label, extra);
+  kids.push(h("div", { class: "tabs", role: "tablist", "aria-label": "Chats" },
+    tab("latest", "Latest chat"),
+    tab("all", `All chats (${chats.length})`, others.length ? [h("span", { class: "tab-dia", "aria-hidden": "true" }, " ◆"), h("span", { class: "sr" }, ", some need you")] : null)));
+  const panel = h("div", { class: "tabpanel", role: "tabpanel", id: "tabpanel-chats", "aria-labelledby": "tab-" + chatTab, tabindex: "-1" });
+  if (chatTab === "all") {
+    if (openRow && !chats.some((c) => c.id === openRow)) openRow = null;
+    panel.append(h("ul", { class: "pg-rows" }, chats.map((c) => chatRow(c, idx.get(c.id)))));
+  } else {
+    panel.append(h("ul", { class: "chat-cards" }, chatItem(latest, idx.get(latest.id))));
+  }
+  kids.push(panel);
   return h("section", { class: "panel sec", "aria-labelledby": "h-chats" }, kids);
 }
 
@@ -217,6 +258,7 @@ function render() {
   const keepId = ae && ae.tagName === "TEXTAREA" ? ae.dataset.id : null;
   const sel = keepId ? [ae.selectionStart, ae.selectionEnd] : null;
   const keepMore = ae && ae.dataset && ae.dataset.act === "more" ? ae.dataset.id : null;
+  const keepBtn = ae && ae.dataset && (ae.dataset.act === "row" || ae.dataset.act === "tab") ? { act: ae.dataset.act, id: ae.dataset.id, tab: ae.dataset.tab } : null;
   const y = window.scrollY;
 
   const p = d.project || { name: NAME };
@@ -231,6 +273,9 @@ function render() {
   if (keepId) {
     const t = [...document.querySelectorAll("textarea[data-id]")].find((x) => x.dataset.id === keepId);
     if (t) { t.focus(); try { t.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
+  } else if (keepBtn) {
+    const b = [...document.querySelectorAll(`button[data-act="${keepBtn.act}"]`)].find((x) => x.dataset.id === keepBtn.id && x.dataset.tab === keepBtn.tab);
+    if (b) b.focus();
   } else if (keepMore) {
     const b = [...document.querySelectorAll('button[data-act="more"]')].find((x) => x.dataset.id === keepMore);
     if (b) b.focus();
@@ -247,6 +292,13 @@ document.addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   const act = b.dataset.act, id = b.dataset.id;
+  if (act === "tab") {
+    const to = b.dataset.tab === "all" ? "all" : "latest";
+    asking = null; chatTab = to; render();
+    const t2 = $("tab-" + to); if (t2) t2.focus();
+    return;
+  }
+  if (act === "row") { asking = null; openRow = openRow === id ? null : id; render(); return; }
   if (act === "more") { if (expanded.has(id)) expanded.delete(id); else expanded.add(id); render(); return; }
   if (act === "ask-send") {
     const text = (drafts.get(id) || "").trim();
@@ -318,7 +370,18 @@ document.addEventListener("input", (e) => {
   const cnt = t.parentElement.querySelector(".cf-count"); if (cnt) cnt.textContent = `${t.value.length} / ${ANSWER_MAX}`;
   const btn = t.closest(".chat-card").querySelector('button[data-act="ask-send"], button[data-act="ask-send-app"]'); if (btn) btn.disabled = !t.value.trim() || sending.has(t.dataset.id);
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && asking) { asking = null; render(); } });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && asking) { asking = null; render(); return; }
+  const tb = e.target instanceof Element ? e.target.closest('button[role="tab"]') : null;
+  if (!tb) return;
+  let to = null;
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") to = tb.dataset.tab === "all" ? "latest" : "all";
+  else if (e.key === "Home") to = "latest"; else if (e.key === "End") to = "all";
+  if (!to) return;
+  e.preventDefault();
+  asking = null; chatTab = to; render();
+  const t2 = $("tab-" + to); if (t2) t2.focus();
+});
 
 function fail(msg) {
   $("summary").textContent = msg;

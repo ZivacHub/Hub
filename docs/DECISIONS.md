@@ -354,3 +354,20 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-21), his own words (a variant of "card = short summary"):** "Card = short summary, but it its more visual of element, when pressed we get all project info".
 **Reading (to confirm when the page look is shown):** the card keeps only a short, more visual summary (counts, progress, next step, marks for waiting decisions and chats); pressing it opens the project page with every decision and chat. The exact look is shown to him before it is built into the page for good.
 **Affects:** Phase 17 (17.4), the cards from Phase 3
+
+## D56 — The project page shows only the latest chat   [decided 2026-11-21]
+**The owner said (2026-11-21), his own words:** "when I press on the hub, we are having all basically the chats. And like six chats, right? It should realistically show only one, and then maybe in some other tab we can see like other chats or whatever, but it should only show the latest one."
+**Result:** the project page shows the latest chat (by last activity) in full; every other chat goes to an "All chats" tab. Reading (mine, to confirm when shown): if an older chat needs him, the tab and a small notice at the top say so, so nothing waiting is hidden.
+**Affects:** Phase 17 (17.6)
+
+## D57 — Work chats live in the Hub (the active chat cannot be typed into from outside if it is open in the app)   [decided 2026-11-21]
+**Question:** He wants to write into the chat that is running right now from the Hub. The Claude app does not allow typing into a chat that is open in the app from outside (it splits the chat, test T9). Which way?
+**The owner said (2026-11-21):** chose "Work chats live in the Hub (Recommended)".
+**Result:** his main working chat is a Hub chat started from the project page: he can write in it any time, reach it from his phone (Remote Control), and at about 60 to 70 percent full a button hands off and starts the next chat with pick up; old chats stay in the All chats tab. App chats that are open stay under D40/D46 (open them, never write into them); closed app chats can be answered under D54. The Claude app window is no longer needed for the work chat.
+**Affects:** Phase 19, D40, D46, D54
+
+## D58 — Phase 19 is built all at once   [decided 2026-11-21]
+**Question:** What should be built first in Phase 19 (writing and hand-off round, or the nice drawing, or all together)?
+**The owner said (2026-11-21):** chose "All at once" (my recommendation was writing and the hand-off round first).
+**Result:** Phase 19 is one phase, 19.1 to 19.6; the manager still builds in an order that keeps each step testable (view, writing, context meter and hand-off, side panel) and shows him the result at the end of the phase, as in whole-phase mode. If an early step shows a problem the phase stops and asks.
+**Affects:** Phase 19
