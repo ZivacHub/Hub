@@ -85,7 +85,7 @@ and has a detail file `docs/plan/phases/<NN>-<name>.md` (NN = the phase number, 
   - [ ] 18.1 When a phase is closed, a report is generated: what was built, what works now (screenshots), decisions made, what is left, time and tokens
   - [ ] 18.2 A Reports screen in the Hub: every project's reports in one list, open one to read it, nothing editable
   - [ ] 18.3 Milestone: Ivan reads the report of a finished phase and says what to change
-- [ ] Phase 19 — Claude inside the Hub: a work chat you can write in, drawn like Claude's own (Ivan's wish 2026-11-21; PROPOSED, gate not run; first question put to him the same day)
+- [~] Phase 19 — Claude inside the Hub: a work chat you can write in, drawn like Claude's own (Ivan's wish 2026-11-21; gate passed 2026-11-21, D57 and D58, his go "Go, whole phase"; defaults: work chat starts with Remote Control off (D41), hand-off button from 60 percent and never sent for him, everything asks first)
   - [ ] 19.1 The chat view is drawn like Claude's own app: headings, lists, code blocks and the tools Claude used (folded), not plain text; whole conversation, newest at the bottom
   - [ ] 19.2 A work chat you write in from the Hub at any time (a Hub chat started from the project page, kept going for hours): the box is always there while the chat is idle; Remote Control stays a switch
   - [ ] 19.3 Context meter and the hand-off round: a bar showing how full the chat is (read from the saved chat file, to be checked for accuracy), and at about 60 to 70 percent a "Hand off and pick up" button that sends /handoff, then starts the next chat with /pickup; the old chat moves to the All chats tab
