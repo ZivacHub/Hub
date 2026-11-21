@@ -65,3 +65,29 @@ Ideas worth borrowing: one list of all chats with a "needs you" mark (already ou
 | T19 | Switching it on again: a chat that ran in the background is woken with ONLY `claude --bg --resume <id>` (it keeps its saved options, Remote Control included); adding any flag there starts a COPY. A chat that only ever ran as `-p` turns continues under the same id with `--bg --name N --remote-control N --permission-mode auto --resume <id>` | same session id, no new file, Remote Control active again; the copy case was seen once and stopped |
 | T20 | A new background chat can be listed as idle before its first turn has run | the engine keeps the first turn "working" until a reply is in the saved file (or 20 s of idle) |
 RE-TEST all of T16 to T20 after a Claude update: `node tools/dashboard/lib/chats.mjs --selftest --real-rc` (starts and stops its own chats only, cheapest model).
+
+## Added 2026-11-21 (D49 test: closed app chats)
+Real runs by a helper, same versions as above (`claude` 2.1.316). One test chat only (`4fda14bc-...`, app id `local_4fda14bc-...`, cheapest model, no tools, replies HUB-D49-ONE to -SEVEN). "Closed" = the app has a record for the chat (T14) but no process: not in `claude agents --json`, and the app's own session tool says `isRunning: false`. Ivan's chats get there when the app restarts or the chat is archived; an idle open chat keeps its process for days (seen: processes from 18 Nov still idle on 21 Nov), so "I am not looking at it" does NOT make a chat closed. "Split" was checked in the saved file: each new message points to the message it follows (`parentUuid`).
+| # | What | Proof |
+|---|---|---|
+| T21 | Moving a command-line chat into the app (T7b) makes a record but NO process | the record `local_<id>.json` appeared within 6 s; `claude agents --json` did not list the chat; the app's session tool said `isRunning: false`. The link also put that chat on Ivan's screen (it takes the main window) |
+| T22 | **Closed app chat, answered from outside, no split** (3 rounds) | `claude -p --resume <id> "..."` (guard: not in the agents list first) replied HUB-D49-TWO / -FOUR / -SIX in the same id and the same saved file. The app's next message (sent from inside the app with its own messaging tool) hung from the outside answer each time, and the app's reply listed every earlier word including the outside ones (last one: "HUB-D49-SEVEN: ...ONE, TWO, THREE, FOUR, FIVE, SIX") |
+| T22b | Also safe when the app already had its own turns in that chat | round 2: the record's `lastAssistantUuid` still pointed at the app's own last reply (THREE) after the outside answer, yet the app continued from the end of the file (after FOUR), not from that pointer |
+| T22c | Also safe when the closed chat is ON SCREEN (shown, but no process) | round 3: chat open in the main window, no process; outside answer SIX, then the app's message hung from SIX |
+| T23 | The app's record does not notice an outside answer | round 2: 0 fields changed after the outside answer (round 1: only `lastFocusedAt`, from moving the screen away). `lastActivityAt`, `title`, `completedTurns`, `lastAssistantUuid`, `postTurnSummary` stay as they were until the app's own next turn updates them. So the chat does not jump up in the app's list and the app's own "what happened" summary is out of date. The app's transcript reader (`list_events`) did show the outside answer, because it reads the saved file |
+| T24 | A chat started by the command line gets its title from Ivan's start-up hook, not from `--name` | `--name HUB-D49-TEST-1` was replaced by "Hub · 11.5 Start with the PC... · 21 Nov 01:04" |
+| T25 | Safe way to bring a test chat back to "closed" | the app's archive tool stops its process (pid gone, not listed); unarchive brings it back closed. Only for the Hub's own test chats |
+
+NOT proven, or still risky:
+- **On screen, the app's page itself was not looked at.** Whether a chat that is on screen shows the outside answer at once, or only after it is reopened, is unknown (the saved file and the app's next turn were right). RE-TEST with Ivan watching.
+- **Race:** if Ivan (or his phone) sends a message into the same chat WHILE the Hub's answer is still running, the app starts its own process on a half-written file: that is the T9 split again. Short fixed answers took a few seconds; a real task with tools can take minutes.
+- Not checked: whether a `claude -p` run shows up in `claude agents --json` while it runs (so the Hub must keep its own "busy" list); chats with Remote Control on; chats in a worktree; the outside runs were started from a shell inside the app (the saved lines are marked `claude-desktop`), not from the Hub's own process: RE-TEST from the Hub.
+- The test chat `local_4fda14bc-b4b3-405e-b96b-c68457079ff4` is left ARCHIVED in the app (nothing running); Ivan can delete it from the Archived list.
+
+**Rule for the Hub (D49)**, all must hold, checked by code right before sending:
+1. the chat's saved-file id is NOT in `claude agents --json` (no app process, no background chat);
+2. the app record (T14) for it exists, `isArchived` is false, and its `cwd` is the folder the Hub runs `claude` in;
+3. the saved file has not changed for at least 60 seconds (no turn in flight, nobody just started it);
+4. the Hub sends at most one answer per chat at a time (its own list), and shows "answering from the Hub, don't type in this chat" while it runs;
+5. right AFTER the run, check the agents list again: if the chat appeared during the run, mark it "may be split, check it in the app" instead of "done".
+If any check fails: do not send; tell Ivan "this chat is open in the app, answer it there" (T9). Expect the app's list order and summary to lag (T23).
