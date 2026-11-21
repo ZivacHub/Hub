@@ -342,3 +342,15 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-17), his own words, not one of the options:** "generaly I would like that every "bat" file that has project to run, it would be good to interate to the "app" so when we run a project it runs as subpart of the "app"".
 **Reading he confirmed:** the Hub program replaces the separate .bat files: starting a project means the Hub starts it from its own list (config/projects.json, already so since Phase 11) and it runs as a part of the Hub, visible and stoppable inside it. The Hub program itself starts with Windows from a switch Ivan flips in the icon menu; the old Install Hub Autostart.bat is then not needed. **Confirmed by the owner (2026-11-17):** he agreed to the reading and chose "They stop with the Hub (Recommended)": quitting the Hub for real stops everything it started; closing the window with X does not quit (D51), so projects keep running in the background.
 **Affects:** Phase 16 (16.3), step 11.5 (folded in if confirmed)
+
+## D54 — Answering a chat that lives in the Claude app, from the project page   [decided 2026-11-21]
+**Question:** On the project page, a chat from the Claude app is waiting for him. What should the answer box do?
+**The owner said (2026-11-21):** chose "Answer inside the same chat (test first)".
+**Result:** The answer box writes into the SAME chat, but only if the safety test (the D49 test, with a chat the test makes itself) proves the chat does not split in two and still shows the messages in the app. As the option was worded to him, if the test fails the box falls back to continuing as a NEW Hub chat that starts from the last message (the original untouched). A chat that is OPEN in the app right now stays under D40/D46 (never written into; open it or use the phone) unless the test shows otherwise and he says so.
+**Affects:** Phase 17 (17.4), D40, D49
+
+## D55 — The project card becomes a short, more visual summary; pressing it opens all the project info   [decided 2026-11-21]
+**Question:** What happens to the info boxes (decisions, chats) on the project card?
+**The owner said (2026-11-21), his own words (a variant of "card = short summary"):** "Card = short summary, but it its more visual of element, when pressed we get all project info".
+**Reading (to confirm when the page look is shown):** the card keeps only a short, more visual summary (counts, progress, next step, marks for waiting decisions and chats); pressing it opens the project page with every decision and chat. The exact look is shown to him before it is built into the page for good.
+**Affects:** Phase 17 (17.4), the cards from Phase 3
