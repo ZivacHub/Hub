@@ -87,7 +87,7 @@
   background: color-mix(in oklab, var(--surface-2) 45%, var(--surface));
 }
 .cv-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.cv-thread { display: grid; gap: 20px; align-content: start; max-width: var(--cv-col); margin: 0 auto; padding: 20px 20px 24px; min-height: 100%; }
+.cv-thread { display: grid; gap: 12px; align-content: start; max-width: var(--cv-col); margin: 0 auto; padding: 20px 20px 24px; min-height: 100%; }
 .cv-jump { position: absolute; right: 24px; bottom: 12px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; background: var(--surface); box-shadow: var(--shadow); border-color: var(--line-strong); }
 .cv-state { color: var(--muted); font-size: 0.9375rem; text-align: center; padding: 28px 8px; }
 .cv-cut, .cv-older-err { color: var(--muted); font-size: 0.8125rem; text-align: center; }
@@ -193,7 +193,7 @@
   .cv-side-body { max-height: 30rem; }
 }
 @media (max-width: 720px) {
-  .cv-thread { padding: 14px 10px 18px; gap: 16px; }
+  .cv-thread { padding: 14px 10px 18px; gap: 10px; }
   .cv-u { max-width: 92%; }
   .cv-ta { font-size: 1rem; }
   .cv-tool-btn { min-height: 40px; }
@@ -201,3 +201,110 @@
   .crc-btn { min-height: 32px; padding-inline: 12px; }
   .cv-side-sum { min-height: 48px; }
 }
+
+/* ---------- chat actions in the header: Pin, Fork, Resume ---------- */
+.cv-head-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; }
+.cv-head-sub .cv-meta { margin: 0; }
+.cv-hact { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cv-hbtn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 9px; }
+.cv-hbtn .ic { flex: none; }
+.cpinned { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; font-weight: 650; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px 1px 6px; white-space: nowrap; }
+.cpinned .ic { width: 12px; height: 12px; }
+
+/* the question that has a name box (Fork) */
+.ask-name { flex: 1 1 14rem; min-width: 0; }
+.cv-ask-input { font: inherit; font-size: 0.875rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 6px 10px; width: 100%; }
+.cv-ask-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- pictures and files inside the conversation ---------- */
+.cv-pic { margin: 0; display: grid; gap: 4px; max-width: 100%; min-width: 0; justify-items: start; }
+.cv-u .cv-pic, .cv-u .cv-fileitem, .cv-u .cv-acts { justify-self: end; }
+.cv-u .cv-pic { justify-items: end; }
+.cv-pic-btn { display: block; padding: 0; margin: 0; border: 0; background: none; cursor: zoom-in; border-radius: 12px; max-width: 100%; line-height: 0; }
+.cv-pic-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cv-pic-img { display: block; max-width: 100%; max-height: 320px; width: auto; height: auto; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-2); object-fit: contain; transition: border-color 150ms ease-out, box-shadow 150ms ease-out; }
+.cv-pic-btn:hover .cv-pic-img { border-color: var(--accent); box-shadow: var(--shadow); }
+.cv-pic.is-loading .cv-pic-img { min-width: 11rem; min-height: 7rem; }
+.cv-pic-cap { font-size: 0.75rem; color: var(--muted); overflow-wrap: anywhere; max-width: 100%; }
+.cv-pic-broken { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 0.8125rem; color: var(--muted); background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: 10px; padding: 14px 16px; }
+.cv-pic-broken-name { font-size: 0.75rem; }
+.cv-fileitem { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; width: fit-content; font-size: 0.8125rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px 6px 10px; }
+.cv-fileitem .ic { flex: none; color: var(--muted); width: 16px; height: 16px; }
+.cv-fileitem-name { overflow-wrap: anywhere; min-width: 0; font-weight: 600; }
+.cv-fileitem-size { flex: none; color: var(--muted); font-size: 0.75rem; }
+
+/* ---------- the row under a message ---------- */
+.cv-acts { display: flex; align-items: center; gap: 2px; min-height: 26px; margin-top: -2px; }
+.cv-act {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--muted); background: none; border: 0;
+  border-radius: 6px; padding: 3px 8px 3px 6px; min-height: 26px; cursor: pointer; transition: background 150ms ease-out, color 150ms ease-out;
+}
+.cv-act:hover { background: var(--line); color: var(--ink); }
+.cv-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) and (min-width: 721px) {
+  .cv-acts { opacity: 0; transition: opacity 150ms ease-out; }
+  .cv-msg:hover .cv-acts, .cv-msg:focus-within .cv-acts { opacity: 1; }
+}
+
+/* ---------- composer: attach button, chips, drop target ---------- */
+.cv-composer { position: relative; }
+.cv-attach { display: inline-flex; align-items: center; gap: 6px; padding-left: 9px; }
+.cv-attach .ic { flex: none; }
+.cv-composer.drop-on::after {
+  content: "Drop to attach"; position: absolute; inset: 6px 10px; display: grid; place-items: center; z-index: 3; pointer-events: none;
+  font-size: 0.9375rem; font-weight: 650; color: var(--accent); background: color-mix(in oklch, var(--accent-soft) 88%, var(--surface));
+  border: 2px dashed var(--accent); border-radius: 12px;
+}
+.cv-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin-block: 0; }
+.cv-chip {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; min-width: 0; max-width: 100%; overflow: hidden;
+  padding: 5px 4px 5px 5px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 10px;
+}
+.cv-chip.bad { border-color: color-mix(in oklch, var(--c-bad) 50%, var(--line-strong)); background: var(--c-bad-bg); }
+.cv-chip-thumb, .cv-chip-ico { width: 40px; height: 40px; border-radius: 7px; flex: none; }
+.cv-chip-thumb { object-fit: cover; border: 1px solid var(--line); background: var(--surface); }
+.cv-chip-ico { display: grid; place-items: center; color: var(--muted); background: var(--surface); border: 1px solid var(--line); }
+.cv-chip-ico .ic { width: 18px; height: 18px; }
+.cv-chip-text { display: grid; gap: 1px; min-width: 0; max-width: 16rem; }
+.cv-chip-name { font-size: 0.8125rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-chip-sub { font-size: 0.75rem; color: var(--muted); overflow-wrap: anywhere; }
+.cv-chip.bad .cv-chip-sub { color: var(--c-bad); font-weight: 600; }
+.cv-chip.bad .cv-chip-text { max-width: 24rem; }
+.cv-chip-x {
+  display: grid; place-items: center; width: 28px; height: 28px; align-self: start; padding: 0; border: 0; border-radius: 8px; cursor: pointer;
+  background: none; color: var(--muted); transition: background 150ms ease-out, color 150ms ease-out;
+}
+.cv-chip-x:hover { background: var(--line); color: var(--ink); }
+.cv-chip-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cv-chip-x:disabled { opacity: 0.4; cursor: not-allowed; }
+.cv-chip-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--track); }
+.cv-chip-bar i { display: block; height: 100%; background: var(--accent); transition: width 150ms ease-out; }
+.cv-copybuf { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
+
+/* ---------- the large view of a picture ---------- */
+.cv-lb { border: 0; padding: 0; color: var(--ink); background: var(--surface); border-radius: 14px; width: min(96vw, 1200px); max-width: 96vw; max-height: 94dvh; overflow: hidden; box-shadow: 0 24px 64px oklch(12% 0.02 255 / 0.45); }
+.cv-lb[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.cv-lb::backdrop { background: oklch(14% 0.012 255 / 0.74); }
+.cv-lb-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+.cv-lb-name { font-size: 0.875rem; font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
+.cv-lb-bar .btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 36px; }
+.cv-lb-stage { display: grid; place-items: center; padding: 14px; background: var(--surface-2); overflow: auto; min-height: 0; }
+.cv-lb-img { display: block; max-width: 100%; max-height: calc(94dvh - 6.5rem); width: auto; height: auto; object-fit: contain; border-radius: 8px; }
+@media (prefers-reduced-motion: no-preference) {
+  .cv-lb[open] { animation: cv-lb-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .cv-lb[open]::backdrop { animation: cv-lb-fade 180ms ease-out; }
+}
+@keyframes cv-lb-in { from { opacity: 0; transform: scale(0.97); } }
+@keyframes cv-lb-fade { from { opacity: 0; } }
+
+@media (max-width: 720px) {
+  .cv-hact { margin-left: 0; width: 100%; }
+  .cv-hbtn { min-height: 36px; }
+  .cv-act { min-height: 36px; padding-inline: 10px; }
+  .cv-chip-x { width: 36px; height: 36px; }
+  .cv-chip-text { max-width: 11rem; }
+  .cv-attach { min-height: 40px; }
+  .cv-pic-img { max-height: 260px; }
+}
+
+@media (max-width: 720px) { .cv-hint-files { display: none; } }

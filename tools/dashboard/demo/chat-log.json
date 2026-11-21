@@ -79,6 +79,14 @@
           "agoMinutes": 60,
           "blocks": [
             {
+              "type": "image",
+              "m": 2,
+              "b": 0,
+              "mediaType": "image/png",
+              "bytes": 48210,
+              "name": "caption-bug.png"
+            },
+            {
               "type": "text",
               "text": "Yes, fix the empty captions first, then do 4.3."
             }
@@ -146,6 +154,14 @@
             {
               "type": "text",
               "text": "Before you start 4.3: which export formats do we support today, and how fast is each?"
+            },
+            {
+              "type": "file",
+              "m": 5,
+              "b": 1,
+              "mediaType": "application/pdf",
+              "bytes": 182400,
+              "name": "export-notes.pdf"
             }
           ]
         },
@@ -166,6 +182,14 @@
               "summary": "Bash: node tools/time-export.mjs sample-clip",
               "status": "error",
               "output": "Error: ENOENT: no such file or directory, open 'sample-clip.json'\n    at readFileSync (node:fs:441:20)\n    at main (tools/time-export.mjs:7:14)"
+            },
+            {
+              "type": "image",
+              "m": 6,
+              "b": 2,
+              "mediaType": "image/png",
+              "bytes": 30944,
+              "name": "timing-chart.png"
             },
             {
               "type": "text",
@@ -193,6 +217,14 @@
           "role": "user",
           "agoMinutes": 4950,
           "blocks": [
+            {
+              "type": "image",
+              "m": 0,
+              "b": 0,
+              "mediaType": "image/png",
+              "bytes": 61530,
+              "name": "listing-screenshot.png"
+            },
             {
               "type": "text",
               "text": "Why does the listing parser skip the salary?"
@@ -384,12 +416,22 @@
         {
           "role": "user",
           "agoMinutes": 430,
-          "blocks": [{ "type": "text", "text": "How should the first level start?" }]
+          "blocks": [
+            {
+              "type": "text",
+              "text": "How should the first level start?"
+            }
+          ]
         },
         {
           "role": "assistant",
           "agoMinutes": 428,
-          "blocks": [{ "type": "text", "text": "I would start with a quiet corridor, one enemy and one door, so the player learns to move and shoot." }]
+          "blocks": [
+            {
+              "type": "text",
+              "text": "I would start with a quiet corridor, one enemy and one door, so the player learns to move and shoot."
+            }
+          ]
         }
       ]
     }

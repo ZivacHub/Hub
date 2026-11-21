@@ -3,7 +3,7 @@
 // The only things that change anything: the composer and the buttons in the workspace (chatview.js) and the New chat form here, all using the
 // SAME request route the dashboard already uses (POST /api/action with the per-run token, confirm:true), and every one of them asks "...?" first.
 // All text goes in with textContent (via h()), never as HTML, because it comes from project files.
-import { createChatView } from "./chatview.js";
+import { createChatView, icon } from "./chatview.js";
 
 const REFRESH_MS = 30_000;
 const $ = (id) => document.getElementById(id);
@@ -74,8 +74,11 @@ function appIdOf(link) {
 
 function fill(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
 
+// the per-run token for the file upload (same token the other requests use); fresh = ask the Hub for a new one
+async function getToken(fresh = false) { if (fresh) session = null; await ensureSession(); return session.token; }
+
 const cv = createChatView({
-  h, ago, send, appIdOf, setNote,
+  h, ago, send, appIdOf, setNote, getToken, projectName: () => ((data && data.project) || { name: NAME }).name,
   onChanged: () => load(true),
   onRoundDone: () => { viewId = null; },   // the new chat is now the latest chat
 });
@@ -122,6 +125,9 @@ function decisionsSection(list) {
 function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
 function latestOf(chats) { return chats.reduce((best, c) => (!best || msOf(c) > msOf(best) ? c : best), null); }
 
+// pinned chats first (in the order the Hub sent them), then the rest as the Hub sent them
+function pinnedFirst(chats) { return [...chats.filter((c) => c.pinned === true), ...chats.filter((c) => c.pinned !== true)]; }
+
 // a row in "All chats": a summary and one button that opens the chat in the workspace
 function chatRow(c) {
   const state = STATE_WORD[c.state] ? c.state : "idle";
@@ -132,7 +138,8 @@ function chatRow(c) {
       h("span", { class: "ch-tags" },
         h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
         h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
-        c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null),
+        c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null,
+        c.pinned === true ? h("span", { class: "cpinned" }, icon("pin"), "Pinned") : null),
       h("span", { class: "row-when" }, c.lastActive ? ago(c.lastActive) : ""),
       h("button", { class: "btn row-show", type: "button", "data-act": "open", "data-id": c.id, "aria-label": `Open chat: ${c.title || "Chat"}`, "aria-current": current ? "true" : null }, "Open")));
 }
@@ -154,6 +161,7 @@ function newChatForm() {
       h("span", { class: "cf-count", id: "nc-count" }, `${newForm.text.length} / ${TASK_MAX}`)),
     h("div", { class: "cf-field cf-model" }, h("label", { for: "nc-model" }, "Model"), sel),
     h("label", { class: "cf-check", for: "nc-rc" }, h("input", { type: "checkbox", id: "nc-rc", checked: newForm.remoteControl === true }), "Reach it from my phone (Remote Control)"),
+    h("p", { class: "cf-quiet" }, "Start the chat first, then attach files to your next message."),
     h("label", { class: "cf-check", for: "nc-skip" }, h("input", { type: "checkbox", id: "nc-skip", checked: newForm.skipWorkflow === true }), "Skip the project workflow (for a quick question)"),
     ask || h("div", { class: "actions" },
       h("button", { class: "btn primary", type: "button", "data-act": "nc-ask" }, "Start chat"),
@@ -192,7 +200,7 @@ function chatsSection(chats) {
     h("div", { class: "chats-notices" }, notices), newBtn);
   const panel = h("div", { class: "tabpanel", role: "tabpanel", id: "tabpanel-chats", "aria-labelledby": "tab-" + chatTab, tabindex: "-1" });
   if (chatTab === "all") {
-    panel.append(h("div", { class: "chats-pad" }, h("ul", { class: "pg-rows" }, chats.map(chatRow))));
+    panel.append(h("div", { class: "chats-pad" }, h("ul", { class: "pg-rows" }, pinnedFirst(chats).map(chatRow))));
   } else {
     panel.append(h("div", { id: "cw-slot", class: "cw-slot" }));
   }

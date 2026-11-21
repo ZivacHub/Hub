@@ -19,7 +19,8 @@
           "canAnswer": false,
           "openLink": null,
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "h-20261116-101500-k3x9",
@@ -37,7 +38,8 @@
           "canAnswer": true,
           "openLink": "claude://resume?session=3f9d2c1e-0000-4000-8000-000000000001",
           "lastReply": "The caption export now handles empty captions. Tests pass: 9 of 9.",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "s-1a2b3c4d",
@@ -55,7 +57,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000001",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "s-5e6f7a8b",
@@ -73,7 +76,8 @@
           "canAnswer": false,
           "openLink": null,
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "h-20261116-084500-n5r1",
@@ -91,7 +95,8 @@
           "canAnswer": true,
           "openLink": "claude://resume?session=3f9d2c1e-0000-4000-8000-000000000011",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": true
         },
         {
           "id": "s-2b3c4d5e",
@@ -109,7 +114,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000011",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": true
         },
         {
           "id": "s-3c4d5e6f",
@@ -127,7 +133,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000012",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "s-4d5e6f7a",
@@ -145,7 +152,8 @@
           "canAnswer": false,
           "openLink": null,
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         }
       ]
     },
@@ -168,7 +176,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000004",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "s-9c0d1e2f",
@@ -186,7 +195,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000002",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "h-20261115-164000-b2n8",
@@ -207,7 +217,8 @@
           "refused": [
             "Bash: rm -rf build",
             "Write: data/samples/listings.json"
-          ]
+          ],
+          "pinned": true
         }
       ]
     },
@@ -230,7 +241,8 @@
           "canAnswer": true,
           "openLink": "claude://resume?session=3f9d2c1e-0000-4000-8000-000000000003",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "s-3d4e5f6a",
@@ -248,7 +260,8 @@
           "canAnswer": false,
           "openLink": "claude://claude.ai/epitaxy/local_0bac1d2e-0000-4000-8000-000000000003",
           "lastReply": "",
-          "refused": []
+          "refused": [],
+          "pinned": false
         },
         {
           "id": "h-20261115-093000-r5t8",
@@ -266,7 +279,8 @@
           "canAnswer": true,
           "openLink": "claude://resume?session=3f9d2c1e-0000-4000-8000-000000000004",
           "lastReply": "Phase two attack pattern passes 6 of 6 tests after the restart fix.",
-          "refused": []
+          "refused": [],
+          "pinned": false
         }
       ]
     }

@@ -34,6 +34,9 @@ import { loadThrottleConfig, makeThrottle } from "./lib/throttle.mjs";
 import { makePauses } from "./lib/pauses.mjs";
 import { makeAppAnswer } from "./lib/appanswer.mjs";
 import { makeHandoffRound } from "./lib/handoffround.mjs";
+import { makePins, MAX_PINS } from "./lib/pins.mjs";
+import { readChatImage } from "./lib/chatimage.mjs";
+import { deflateSync } from "node:zlib";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
 const control = DEMO ? null : (await import("./lib/control.mjs")).makeControl();
@@ -99,7 +102,7 @@ const demoChats = () => {
 // it never becomes part of a file path. Unknown name -> 404.
 const projectPageLib = await import("./lib/projectpage.mjs");
 const projectPageSample = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "project-page.json"), "utf8")) : null;
-async function projectApi(rawName) {
+async function projectApiRaw(rawName) {
   const notFound = { status: 404, body: { error: "unknown project" } };
   if (DEMO) {
     const known = sample.projects.map((p) => p.name);
@@ -116,6 +119,13 @@ async function projectApi(rawName) {
   const root = await projectPageLib.projectRoot(name, { known: cards.map((p) => p.name) });
   const body = await projectPageLib.buildProjectPage({ name, card: cards.find((p) => p.name === name), root, chatGroup: cl.projects.find((p) => String(p.project).toLowerCase() === name.toLowerCase()), hubChats: hub, redact: real.redact });
   return { status: 200, body };
+}
+
+// every chat of a project page carries `pinned: true|false` (Phase 19 pins; the feed lib is not touched, the server adds the flag)
+async function projectApi(rawName) {
+  const r = await projectApiRaw(rawName);
+  if (r.status === 200 && r.body && Array.isArray(r.body.chats)) r.body = { ...r.body, chats: r.body.chats.map((c) => ({ ...c, pinned: pinHooks.pins.isPinned(c && c.id) })) };
+  return r;
 }
 
 // Chat log (Phase 19, read only): GET /api/chat-log?id=<chat id>[&before=<index>][&limit=<n>]. The id is only compared with the ids of the
@@ -153,7 +163,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app", "chat-handoff-round"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app", "chat-handoff-round", "chat-fork", "chat-pin"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -258,13 +268,191 @@ function handoffApi(sp) {
   return notFound;
 }
 
+// ---------- Phase 19 wiring: attached files, fork, pictures in the chat view, pinned chats ----------
+// Every piece is replaceable through a hooks object so the self-test only ever uses fakes (no real chat, no real data/pins.json).
+const redactText = (s) => (DEMO ? String(s) : real.redact(String(s)));
+const chatHooks = { engine: chats };   // start / answer / fork / the upload store (chats.uploads) come from here
+const uploadHooks = { hubChats: () => chatHooks.engine.list(), log: (...a) => gameLog(...a), pollMs: 3000, watchMs: 45 * 60000 };
+const UPLOAD_MAX = Math.round(10.5 * 1024 * 1024);   // the body limit of POST /api/upload ONLY (the store itself still says 10 MB per file)
+const UPLOAD_ID = /^[0-9a-f]{32}$/;
+const BUTTONS_OFF = "Sample data mode: the buttons are switched off.";
+
+// Memory-only pins for --demo (really toggles, never touches data/pins.json). Same rules as lib/pins.mjs.
+function memoryPins() {
+  const ID = /^(h-[A-Za-z0-9-]{1,60}|s-[0-9a-fA-F-]{8}|local_[0-9a-f-]{8,64})$/i;
+  const proj = (p) => typeof p === "string" && p.length >= 1 && p.length <= 120 && !/[\\/:\0]|^\.+$/.test(p);
+  let pins = [], tick = 0;
+  return {
+    list: (project) => { const all = [...pins].reverse(); return typeof project === "string" && project ? all.filter((p) => p.project === project) : all; },
+    pin: ({ chatId, project } = {}) => {
+      if (typeof chatId !== "string" || !ID.test(chatId)) return { ok: false, error: "bad chat id" };
+      if (!proj(project)) return { ok: false, error: "bad project name" };
+      if (pins.some((p) => p.chatId === chatId)) return { ok: true, already: true, count: pins.length };
+      if (pins.length >= MAX_PINS) return { ok: false, error: `at most ${MAX_PINS} pinned chats; unpin one first` };
+      pins.push({ chatId, project, at: new Date(Date.now() + ++tick).toISOString() });
+      return { ok: true, count: pins.length };
+    },
+    unpin: ({ chatId } = {}) => {
+      if (typeof chatId !== "string" || !ID.test(chatId)) return { ok: false, error: "bad chat id" };
+      const left = pins.filter((p) => p.chatId !== chatId); const already = left.length === pins.length; pins = left;
+      return already ? { ok: true, already: true, count: pins.length } : { ok: true, count: pins.length };
+    },
+    isPinned: (id) => pins.some((p) => p.chatId === id),
+  };
+}
+const pinHooks = { pins: DEMO ? memoryPins() : makePins(), log: (...a) => gameLog(...a) };
+
+// --- POST /api/upload?chat=<Hub chat id or "new">: raw file body, guarded like /api/action, 10.5 MB limit counted while reading ---
+async function handleUpload(req, res, send, sp) {
+  const h = req.headers;
+  // a refusal never reads the rest of the body; for a too-big file the connection is closed after the answer (nothing more is accepted), otherwise the small leftover is thrown away
+  const refuse = (code, m) => {
+    if (code === 413) { res.writeHead(413, { "Content-Type": "application/json", ...HEADERS, Connection: "close" }); res.end(err(m)); res.once("finish", () => { try { req.destroy(); } catch { /* already gone */ } }); }
+    else { send(code, err(m)); req.resume(); }
+  };
+  if (String(h["content-type"] || "").split(";")[0].trim().toLowerCase() !== "application/octet-stream") return refuse(415, "Send the file as application/octet-stream");
+  if (!allowedOrigins.includes(h.origin)) return refuse(403, "forbidden origin");
+  if (h["sec-fetch-site"] && h["sec-fetch-site"] !== "same-origin") return refuse(403, "forbidden origin");
+  const got = Buffer.from(String(h["x-hub-token"] || "")); const want = Buffer.from(TOKEN);
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return refuse(403, "missing or wrong token");
+  const chat = sp.get("chat");
+  if (chat !== "new" && !(typeof chat === "string" && HUB_CHAT_ID.test(chat))) return refuse(400, "Unknown chat.");
+  let name = "file";
+  if (h["x-upload-name"] !== undefined) {
+    try { name = decodeURIComponent(String(h["x-upload-name"])); } catch { return refuse(400, "The file name could not be read."); }
+    if (name.length > 300) return refuse(400, "The file name could not be read.");
+  }
+  if (!/^\d+$/.test(String(h["content-length"] ?? ""))) return refuse(411, "The file size is missing. Try attaching it again.");
+  if (Number(h["content-length"]) > UPLOAD_MAX) return refuse(413, "Files can be at most 10 MB.");   // refused from the header alone: nothing is read
+  if (DEMO) { send(200, err(BUTTONS_OFF)); req.resume(); return; }
+  if (chat !== "new" && !uploadHooks.hubChats().some((c) => c && c.id === chat)) { uploadHooks.log("upload", chat, "refused: unknown chat"); req.resume(); return send(200, err("Unknown chat.")); }
+  const chunks = []; let total = 0;
+  for await (const chunk of req) { total += chunk.length; if (total > UPLOAD_MAX) return refuse(413, "Files can be at most 10 MB."); chunks.push(chunk); }
+  const r = chatHooks.engine.uploads.save({ chatKey: chat, bytes: Buffer.concat(chunks), originalName: name });
+  if (!r || r.ok !== true) { uploadHooks.log("upload", chat, "refused"); return send(200, err(redactText(String(r?.error || "The file could not be attached.")))); }
+  uploadHooks.log("upload", chat, `ok ${r.kind} ${r.bytes}`);   // kind and size only: never the name
+  send(200, JSON.stringify({ ok: true, uploadId: r.uploadId, kind: r.kind, name: r.name, bytes: r.bytes, mediaType: r.mediaType }));
+}
+
+// attachments on chat-start / chat-answer: absent or empty = none (the old behaviour, nothing extra is passed); else 1 to 4 ids of 32 hex characters
+function attachmentsOf(body) {
+  if (body.attachments === undefined || (Array.isArray(body.attachments) && body.attachments.length === 0)) return { ids: null };
+  const a = body.attachments;
+  if (!Array.isArray(a) || a.length > 4 || a.some((x) => typeof x !== "string" || !UPLOAD_ID.test(x))) return { bad: true };
+  return { ids: a };
+}
+// Pictures and PDFs are copied into the chat's own saved file when the turn runs, so the stored copy goes as soon as the turn is over (success or failure).
+// Text files stay (Claude reads them during the turn) until the 7-day cleanup. Nothing is removed when the engine refused the message (the person may retry).
+function dropPictures(chatId, ids) {
+  const up = chatHooks.engine.uploads; if (!up || !ids || typeof chatId !== "string") return;
+  const pics = ids.filter((id) => { try { const g = up.get(id); return g && (g.kind === "image" || g.kind === "pdf"); } catch { return false; } });
+  if (!pics.length) return;
+  const t0 = Date.now();
+  const look = () => {
+    let st = "working"; try { const c = chatHooks.engine.list().find((x) => x && x.id === chatId); st = c ? c.state : null; } catch { /* look again */ }
+    if (st !== "working" || Date.now() - t0 > uploadHooks.watchMs) { for (const id of pics) { try { up.remove(id); } catch { /* the 7-day cleanup will get it */ } } return; }
+    setTimeout(look, uploadHooks.pollMs).unref();
+  };
+  setTimeout(look, uploadHooks.pollMs).unref();
+}
+const attachRefused = (action, id) => { uploadHooks.log(action, id || "-", "refused: wrong attachments"); return { ok: false, error: "The Hub can not send those attached files. Attach them again." }; };
+
+// --- chat-fork: body exactly { action, id, name?, text?, confirm } ---
+const FORK_KEYS = new Set(["action", "id", "name", "text", "confirm"]);
+async function forkAction(body) {
+  const logId = String(typeof body.id === "string" ? body.id : "-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) || "-";
+  if (Object.keys(body).some((k) => !FORK_KEYS.has(k)) || typeof body.id !== "string" || !HUB_CHAT_ID.test(body.id) || (body.name !== undefined && typeof body.name !== "string") || (body.text !== undefined && typeof body.text !== "string")) {
+    uploadHooks.log("chat-fork", logId, "refused: wrong request shape");
+    return { ok: false, error: "The Hub can not copy that chat. Look at the page again." };
+  }
+  if (body.name !== undefined && body.name.length > 80) return { ok: false, error: "The name must be at most 80 characters." };
+  if (body.text !== undefined && body.text.length > 4000) return { ok: false, error: "The first message must be at most 4000 characters." };
+  const o = { id: body.id }; if (body.name !== undefined) o.name = body.name; if (body.text !== undefined) o.text = body.text;
+  const r = await chatHooks.engine.fork(o);   // the engine writes its own log line
+  if (!r || r.ok !== true) return { ok: false, error: redactText(String(r?.error || "The copy was not made.")) };
+  return { ok: true, id: r.id, note: String(r.message || "Made a copy of the chat. The old chat stays as it was.") };
+}
+
+// --- pins: GET /api/pins?project=<name> and the action chat-pin { action, chatId, project, pinned, confirm } ---
+const PIN_KEYS = new Set(["action", "chatId", "project", "pinned", "confirm"]);
+function pinAction(body) {
+  const logId = String(typeof body.chatId === "string" ? body.chatId : "-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) || "-";
+  if (Object.keys(body).some((k) => !PIN_KEYS.has(k)) || typeof body.chatId !== "string" || typeof body.project !== "string" || typeof body.pinned !== "boolean") {
+    pinHooks.log("chat-pin", logId, "refused: wrong request shape");
+    return { ok: false, error: "The Hub can not pin that chat. Look at the page again." };
+  }
+  const r = body.pinned ? pinHooks.pins.pin({ chatId: body.chatId, project: body.project }) : pinHooks.pins.unpin({ chatId: body.chatId });
+  if (!r || r.ok !== true) {
+    const e = String(r?.error || "");
+    pinHooks.log("chat-pin", logId, "refused");
+    return { ok: false, error: /^at most/.test(e) ? `At most ${MAX_PINS} pinned chats. Unpin one first.` : /save/.test(e) ? "The Hub could not save the pinned chats. Try again." : "The Hub can not pin that chat. Look at the page again." };
+  }
+  pinHooks.log("chat-pin", logId, (body.pinned ? "pinned" : "unpinned") + (r.already ? " (already)" : ""));
+  return { ok: true, pinned: body.pinned, count: r.count, ...(r.already ? { already: true } : {}) };
+}
+
+// --- GET /api/chat-image?id=<chat id>&m=<n>&b=<n>: one picture out of a saved chat. The file is found like /api/chat-log finds it; no path from the query ---
+const imageHooks = {
+  resolveFile: async (id) => {
+    const hub = chats.list();
+    const cl = await chatlist.readChats({ hubChats: hub, redact: real.redact });
+    return chatLogLib.resolveChatFile(id, { chatList: cl, hubChats: hub, appRecords: chatlist.readAppRecords() });
+  },
+  read: readChatImage,
+};
+const IMG_NOT_FOUND = { status: 404, body: { error: "unknown chat" } };
+async function chatImageApi(sp, demoJson = chatLogSample) {
+  const id = sp.get("id"), m = sp.get("m"), b = sp.get("b");
+  if (DEMO) return demoImage(id, m, b, demoJson);
+  if (typeof id !== "string" || !id) return IMG_NOT_FOUND;
+  const file = await imageHooks.resolveFile(id);
+  if (!file) return IMG_NOT_FOUND;
+  const r = imageHooks.read({ file, m, b });
+  if (r && r.ok === true) return { status: 200, mediaType: r.mediaType, bytes: r.bytes };
+  const st = r && [400, 404, 413, 415, 422].includes(r.status) ? r.status : 404;
+  return { status: st, body: { error: String(r?.error || "no such picture") } };
+}
+// --demo: a tiny made-up picture (120x80, one colour with a lighter box) for sample chats whose log has an image block at m / b
+const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (buf) => { let c = 0xffffffff; for (const x of buf) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function demoPng() {
+  const W = 120, H = 80, raw = Buffer.alloc((W * 3 + 1) * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const o = y * (W * 3 + 1);
+    const box = x >= 30 && x < 90 && y >= 20 && y < 60; const px = box ? [150, 190, 235] : [60, 110, 190];
+    raw[o + 1 + x * 3] = px[0]; raw[o + 2 + x * 3] = px[1]; raw[o + 3 + x * 3] = px[2];
+  }
+  const chunk = (type, data) => { const t = Buffer.from(type), len = Buffer.alloc(4), crc = Buffer.alloc(4); len.writeUInt32BE(data.length); crc.writeUInt32BE(crc32(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, crc]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+function demoImage(id, m, b, demoJson) {
+  const msgs = demoJson && demoJson.chats && typeof id === "string" && Object.hasOwn(demoJson.chats, id) ? demoJson.chats[id].messages : null;
+  if (!Array.isArray(msgs)) return IMG_NOT_FOUND;
+  if (!/^\d{1,6}$/.test(String(m)) || !/^\d{1,6}$/.test(String(b))) return { status: 400, body: { error: "bad request" } };
+  const blk = msgs[Number(m)] && Array.isArray(msgs[Number(m)].blocks) ? msgs[Number(m)].blocks[Number(b)] : null;
+  if (!blk || blk.type !== "image") return { status: 404, body: { error: "no such picture" } };
+  return { status: 200, mediaType: "image/png", bytes: demoPng() };
+}
+
 async function chatAction(body) {
   if (body.action === "chat-handoff-round") return handoffRound(body);
   if (body.action === "chat-open-app") return openApp(body);
   if (body.action === "chat-answer-app") return appAnswer(body);
   // workflow (D44): the chat first runs /pickup, unless the page says exactly false (the "Skip the project workflow" tick)
-  if (body.action === "chat-start") return chats.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true, workflow: body.workflow !== false });
-  if (body.action === "chat-answer") return chats.answer({ id: body.id, text: body.text });
+  if (body.action === "chat-fork") return forkAction(body);
+  if (body.action === "chat-start") {
+    const at = attachmentsOf(body); if (at.bad) return attachRefused("chat-start", "-");
+    const r = await chatHooks.engine.start({ project: body.project, task: body.task, model: body.model, remoteControl: body.remoteControl === true, workflow: body.workflow !== false, ...(at.ids ? { attachments: at.ids } : {}) });
+    if (at.ids && r && r.ok === true) dropPictures(r.id, at.ids);
+    return r;
+  }
+  if (body.action === "chat-answer") {
+    const at = attachmentsOf(body); if (at.bad) return attachRefused("chat-answer", typeof body.id === "string" ? body.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 70) : "-");
+    const r = await chatHooks.engine.answer({ id: body.id, text: body.text, ...(at.ids ? { attachments: at.ids } : {}) });
+    if (at.ids && r && r.ok === true) dropPictures(body.id, at.ids);
+    return r;
+  }
   if (body.action === "chat-stop") return chats.stop({ id: body.id });
   if (body.action === "chat-remote-control") return chats.setRemoteControl({ id: body.id, on: typeof body.on === "boolean" ? body.on : undefined }); // only the Hub id and a true / false
   return chats.appLink({ project: body.project, task: body.task }); // chat-app-link: only builds the link; the page opens it and Ivan presses Send in the app
@@ -282,6 +470,7 @@ async function handleAction(req, send) {
   if (!body || body.confirm !== true) return send(400, err("confirmation missing"));
   if (!ACTIONS.includes(body.action)) return send(400, err("unknown action"));
   if (raw.length > 2000 && !body.action.startsWith("chat-")) return send(413, err("too big"));
+  if (body.action === "chat-pin") return send(200, JSON.stringify(pinAction(body)));   // pinning is reversible and stays on in --demo (memory only)
   if (DEMO) return send(200, err("Sample data mode: the buttons are switched off."));
   let result;
   if (body.action.startsWith("game-")) result = await gameAction(body);
@@ -299,10 +488,18 @@ const server = createServer(async (req, res) => {
     if (!hostOk(req.headers.host)) return send(403, '{"error":"forbidden"}');
     const path = new URL(req.url, "http://x").pathname;
     if (req.method === "POST" && path === "/api/action") return await handleAction(req, send);
+    if (path === "/api/upload") return req.method === "POST" ? await handleUpload(req, res, send, new URL(req.url, "http://x").searchParams) : send(405, '{"error":"method not allowed"}');
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, '{"error":"method not allowed"}');
     if (path === "/api/project") { const r = await projectApi(new URL(req.url, "http://x").searchParams.get("name")); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-handoff") { const r = handoffApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
+    if (path === "/api/pins") { const p = new URL(req.url, "http://x").searchParams.get("project"); return send(200, JSON.stringify({ pins: pinHooks.pins.list(p === null ? undefined : p) })); }
+    if (path === "/api/chat-image") {
+      const r = await chatImageApi(new URL(req.url, "http://x").searchParams);
+      if (r.status !== 200) return send(r.status, JSON.stringify(r.body));
+      res.writeHead(200, { ...HEADERS, "Content-Type": r.mediaType, "Content-Length": r.bytes.length, "Cache-Control": "private, max-age=300", "Content-Disposition": "inline" });
+      return res.end(r.bytes);
+    }
     if (api[path]) return send(200, JSON.stringify(await api[path]()));
     const rel = path === "/" ? "index.html" : normalize(decodeURIComponent(path)).replace(/^[/\\]+/, "");
     const file = join(PUBLIC, rel);
@@ -491,6 +688,209 @@ server.listen(PORT, HOST, async () => {
       return r.status === 200 && j.ok === false && j.error === "Sample data mode: the buttons are switched off." && c.status === 200 && (await c.json()) === null && rr.status === 404;
     } catch { return false; } finally { kid.kill(); }
   })());
+  // ---------- Phase 19 wiring (attached files, fork, pictures, pins): a FAKE engine, a FAKE picture finder and pins in a temp folder.
+  // Nothing here touches a real chat, the real upload folder or the real data/pins.json. ----------
+  const { mkdtempSync, writeFileSync: wf } = await import("node:fs"); const { tmpdir } = await import("node:os");
+  const sleep = (ms) => new Promise((d) => setTimeout(d, ms));
+  const realPinsFile = join(HERE, "..", "..", "data", "pins.json");
+  const pinsBefore = existsSync(realPinsFile) ? statSync(realPinsFile).mtimeMs : null;
+  const withDemo = async (fn) => {   // a separate --demo server on a spare port (its engine does not even exist there)
+    const { createServer: cs } = await import("node:net");
+    const spare = await new Promise((d) => { const s = cs(); s.listen(0, HOST, () => { const p = s.address().port; s.close(() => d(p)); }); });
+    const kid = spawn(process.execPath, [fileURLToPath(import.meta.url), "--demo"], { env: { ...process.env, HUB_PORT: String(spare) }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    try {
+      await new Promise((d, no) => { let t = ""; const to = setTimeout(() => no(new Error("demo server did not start")), 15000); kid.stdout.on("data", (x) => { t += x; if (t.includes("Ready.")) { clearTimeout(to); d(); } }); });
+      const db = `http://${HOST}:${spare}`;
+      return await fn(db, (await (await fetch(db + "/api/session")).json()).token);
+    } catch (e) { console.log("demo helper failed: " + (e && e.message)); return false; } finally { kid.kill(); }
+  };
+  ok("chat-start with an empty task and an empty attachments list is still refused in the old words (real engine, nothing starts)", await refused({ action: "chat-start", project: "Hub", task: "", attachments: [] }));
+  const realEngine = chatHooks.engine;
+  const I1 = "1".repeat(32), I2 = "2".repeat(32), I3 = "3".repeat(32), kinds = { [I1]: "image", [I2]: "pdf", [I3]: "text" };
+  const fx = { saves: [], removed: [], starts: [], answers: [], forks: [], state: "idle", logs: [] };
+  chatHooks.engine = {
+    uploads: {
+      save: (o) => { fx.saves.push({ chatKey: o.chatKey, name: o.originalName, len: o.bytes.length, isBuf: Buffer.isBuffer(o.bytes) }); return o.bytes.length ? { ok: true, uploadId: "a".repeat(32), kind: "image", mediaType: "image/png", name: "my pic.png", bytes: o.bytes.length, path: "C:\\secret\\x.png" } : { ok: false, error: "The file is empty." }; },
+      get: (id) => (kinds[id] ? { kind: kinds[id] } : null),
+      remove: (id) => { fx.removed.push(id); return true; },
+    },
+    list: () => [{ id: "h-rest", state: fx.state }, { id: "h-new1", state: fx.state }],
+    start: async (o) => { fx.starts.push(o); return o.project === "Nope" ? { ok: false, error: "Unknown project." } : { ok: true, id: "h-new1", message: "Started." }; },
+    answer: async (o) => { fx.answers.push(o); return o.id === "h-gone" ? { ok: false, error: "Unknown chat." } : { ok: true, message: "Sent." }; },
+    fork: async (o) => { fx.forks.push(o); return o.id === "h-busy" ? { ok: false, error: "This chat is still working. Wait for it to finish before making a copy." } : { ok: true, id: "h-fork1", message: "Made a copy of the chat in Hub. The old chat stays as it was." }; },
+  };
+  uploadHooks.pollMs = 20; uploadHooks.log = (...a) => fx.logs.push(a.join(" "));
+  // --- upload ---
+  const octet = { "Content-Type": "application/octet-stream", Origin: base, "X-Hub-Token": tok, "X-Upload-Name": encodeURIComponent("my pic \u00e9.png") };
+  const up = (q, h = octet, body = Buffer.from("PNGDATA")) => raw("/api/upload" + q, h, body, "POST");
+  const headersOnly = (path, headers) => new Promise((resolve) => {
+    const r = request({ host: HOST, port, path, method: "POST", headers: { Host: `${HOST}:${port}`, ...headers } }, (res) => { let t = ""; res.on("data", (d) => (t += d)); res.on("end", () => resolve({ status: res.statusCode, text: t })); });
+    r.on("error", () => resolve({ status: 0, text: "" })); r.flushHeaders();
+  });
+  const u1 = await up("?chat=new"); const uj = JSON.parse(u1.text);
+  ok("upload for a new chat: answers uploadId, kind, name, bytes, mediaType and no path; the store got the raw bytes, the decoded name and chat key 'new'", u1.status === 200 && uj.ok === true && uj.uploadId === "a".repeat(32) && uj.kind === "image" && uj.name === "my pic.png" && uj.bytes === 7 && uj.mediaType === "image/png" && !("path" in uj) && !u1.text.includes("secret") && fx.saves.length === 1 && fx.saves[0].chatKey === "new" && fx.saves[0].name === "my pic \u00e9.png" && fx.saves[0].isBuf && fx.saves[0].len === 7);
+  const u2 = JSON.parse((await up("?chat=h-rest")).text);
+  ok("upload for a chat the engine knows (h-rest): saved under that chat key", u2.ok === true && fx.saves.length === 2 && fx.saves[1].chatKey === "h-rest");
+  const u3 = await up("?chat=h-nosuch");
+  ok("upload for an unknown Hub chat: 'Unknown chat.' and nothing saved", u3.status === 200 && JSON.parse(u3.text).ok === false && JSON.parse(u3.text).error === "Unknown chat." && fx.saves.length === 2);
+  ok("upload with a bad, missing, path-like or session-like chat is 400 and nothing is saved", (await Promise.all(["?chat=..%5Cx", "?chat=", "", "?chat=18ec7052-3a6a-46cc-ade3-7ff857195e3d", "?chat=h-../x", "?chat=local_abc"].map((q) => up(q).then((r) => r.status)))).every((s) => s === 400) && fx.saves.length === 2);
+  const u4 = await up("?chat=new", octet, Buffer.alloc(0));
+  ok("upload of an empty file: the store's sentence, status 200", u4.status === 200 && JSON.parse(u4.text).ok === false && JSON.parse(u4.text).error === "The file is empty." && fx.saves.length === 3);
+  ok("upload with another content type (text/plain, JSON, multipart) is 415, nothing saved", (await Promise.all(["text/plain", "application/json", "multipart/form-data; boundary=x", ""].map((t) => up("?chat=new", { ...octet, "Content-Type": t }).then((r) => r.status)))).every((s) => s === 415) && fx.saves.length === 3);
+  ok("upload without the token, with a wrong token, another Origin or no Origin is 403, nothing saved", (await up("?chat=new", { ...octet, "X-Hub-Token": "" })).status === 403 && (await up("?chat=new", { ...octet, "X-Hub-Token": "y".repeat(tok.length) })).status === 403 && (await up("?chat=new", { ...octet, Origin: "http://evil.example" })).status === 403 && (await up("?chat=new", { "Content-Type": "application/octet-stream", "X-Hub-Token": tok })).status === 403 && fx.saves.length === 3);
+  ok("upload from a foreign Host or with sec-fetch-site cross-site is 403", (await up("?chat=new", { ...octet, Host: "evil.example" })).status === 403 && (await up("?chat=new", { ...octet, "Sec-Fetch-Site": "cross-site" })).status === 403 && fx.saves.length === 3);
+  const u5 = await headersOnly("/api/upload?chat=new", { ...octet, "Content-Length": String(30 * 1024 * 1024) });
+  ok("upload that announces 30 MB is 413 'Files can be at most 10 MB.' from the header alone (no body was sent, nothing saved)", u5.status === 413 && JSON.parse(u5.text).error === "Files can be at most 10 MB." && fx.saves.length === 3);
+  const u6 = await up("?chat=new", octet, Buffer.alloc(10 * 1024 * 1024 + 1000, 7));
+  ok("upload of 10 MB + 1000 bytes passes this route's limit (the store decides about 10 MB itself); the action limit of 14000 does not apply", u6.status === 200 && fx.saves.length === 4 && fx.saves[3].len === 10 * 1024 * 1024 + 1000);
+  const u7 = await up("?chat=new", octet, Buffer.alloc(11 * 1024 * 1024 + 1, 7));
+  ok("upload of 11 MB + 1 byte is 413 (announced size over 10.5 MB), nothing saved", (u7.status === 413 || u7.status === 0) && fx.saves.length === 4);
+  ok("upload with no Content-Length (chunked) is 411, nothing saved", await new Promise((resolve) => {
+    const r = request({ host: HOST, port, path: "/api/upload?chat=new", method: "POST", headers: { Host: `${HOST}:${port}`, ...octet } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode === 411 && fx.saves.length === 4)); });
+    r.on("error", () => resolve(false)); r.write("abc"); r.end();
+  }));
+  ok("upload with a broken file name header is 400, nothing saved", (await up("?chat=new", { ...octet, "X-Upload-Name": "%E0%A4%A" })).status === 400 && fx.saves.length === 4);
+  ok("GET, PUT and DELETE on /api/upload are 405", (await fetch(base + "/api/upload?chat=new")).status === 405 && (await fetch(base + "/api/upload?chat=new", { method: "PUT" })).status === 405 && (await fetch(base + "/api/upload?chat=new", { method: "DELETE" })).status === 405);
+  ok("the upload log lines name chat key, kind and size only: never the file name", fx.logs.some((l) => l === "upload new ok image 7") && fx.logs.every((l) => !/pic|PNGDATA|\u00e9/.test(l)));
+  // --- attachments on chat-answer / chat-start ---
+  const ca = (action, o, h = json) => raw("/api/action", h, cj({ action, ...o }), "POST");
+  const caJ = async (action, o) => JSON.parse((await ca(action, o)).text);
+  const aOk = await caJ("chat-answer", { id: "h-rest", text: "Look", attachments: [I1, I3] });
+  ok("chat-answer with attachments passes id, text and the ids to the engine exactly", aOk.ok === true && JSON.stringify(fx.answers[0]) === JSON.stringify({ id: "h-rest", text: "Look", attachments: [I1, I3] }));
+  await caJ("chat-answer", { id: "h-rest", text: "Hi" }); await caJ("chat-answer", { id: "h-rest", text: "Hi", attachments: [] });
+  ok("chat-answer without attachments (or an empty list) calls the engine exactly as before: no attachments key", JSON.stringify(fx.answers[1]) === '{"id":"h-rest","text":"Hi"}' && JSON.stringify(fx.answers[2]) === '{"id":"h-rest","text":"Hi"}');
+  const aEmpty = await caJ("chat-answer", { id: "h-rest", text: "", attachments: [I1] });
+  ok("chat-answer with an empty text and a file reaches the engine", aEmpty.ok === true && JSON.stringify(fx.answers[3]) === JSON.stringify({ id: "h-rest", text: "", attachments: [I1] }));
+  const nA = fx.answers.length, nS = fx.starts.length;
+  const badAtt = [["x"], [5], ["A".repeat(32)], ["1".repeat(31)], ["1".repeat(33)], [null], [I1, I1, I1, I1, I1], "abc", 5, { 0: I1 }, [I1, "../x"], [[I1]]];
+  const badRes = await Promise.all(badAtt.map((a) => caJ("chat-answer", { id: "h-rest", text: "x", attachments: a })));
+  ok("chat-answer refuses bad attachments (not 32 hex, not a string, 5 ids, not a list) in words, nothing sent", badRes.every((r) => r.ok === false && r.error === "The Hub can not send those attached files. Attach them again.") && fx.answers.length === nA);
+  const badRes2 = await Promise.all(badAtt.map((a) => caJ("chat-start", { project: "Hub", task: "x", attachments: a })));
+  ok("chat-start refuses the same bad attachments, nothing started", badRes2.every((r) => r.ok === false && r.error === "The Hub can not send those attached files. Attach them again.") && fx.starts.length === nS);
+  const sOk = await caJ("chat-start", { project: "Hub", task: "", attachments: [I1], workflow: false });
+  ok("chat-start with an empty task and a file reaches the engine with the ids; Remote Control stays false", sOk.ok === true && sOk.id === "h-new1" && JSON.stringify(fx.starts[0]) === JSON.stringify({ project: "Hub", task: "", remoteControl: false, workflow: false, attachments: [I1] }));
+  await caJ("chat-start", { project: "Hub", task: "x" });
+  ok("chat-start without attachments calls the engine exactly as before: no attachments key", JSON.stringify(fx.starts[1]) === '{"project":"Hub","task":"x","remoteControl":false,"workflow":true}');
+  ok("the engine's own refusals are passed on in its words", (await caJ("chat-answer", { id: "h-gone", text: "x", attachments: [I1] })).error === "Unknown chat." && (await caJ("chat-start", { project: "Nope", task: "x", attachments: [I1] })).error === "Unknown project.");
+  ok("chat-answer / chat-start with attachments need the token", (await ca("chat-answer", { id: "h-rest", text: "x", attachments: [I1] }, { ...json, "X-Hub-Token": "" })).status === 403 && (await ca("chat-start", { project: "Hub", task: "x", attachments: [I1] }, { ...json, "X-Hub-Token": "" })).status === 403);
+  // pictures and PDFs go from the store after the turn; text files stay; a refused message removes nothing
+  await sleep(150); fx.removed.length = 0; fx.state = "working";   // earlier answers above were watched while resting: their pictures are already gone
+  await caJ("chat-answer", { id: "h-rest", text: "x", attachments: [I1, I2, I3] }); await sleep(120);
+  ok("while the turn is still working nothing is removed", fx.removed.length === 0);
+  fx.state = "idle"; await sleep(150);
+  ok("when the turn has finished the picture and the PDF are removed, the text file stays", fx.removed.slice().sort().join() === [I1, I2].join());
+  fx.removed.length = 0; fx.state = "working";
+  await caJ("chat-start", { project: "Hub", task: "x", attachments: [I1] }); fx.state = "failed"; await sleep(150);
+  ok("a turn that failed removes the picture too (start: the new chat's id is watched)", fx.removed.join() === I1);
+  fx.removed.length = 0; fx.state = "idle";
+  await caJ("chat-answer", { id: "h-gone", text: "x", attachments: [I1] }); await caJ("chat-answer", { id: "h-rest", text: "x", attachments: [I3] }); await sleep(120);
+  ok("a message the engine refused, or one with only a text file, removes nothing", fx.removed.length === 0);
+  // --- fork ---
+  const fkNo = async (o) => { const n = fx.forks.length; const r = await caJ("chat-fork", o); return r.ok === false && fx.forks.length === n; };
+  const f1 = await caJ("chat-fork", { id: "h-rest", name: "Copy", text: "Go" });
+  ok("chat-fork passes id, name and text to the engine and answers { ok, id, note }", f1.ok === true && f1.id === "h-fork1" && f1.note === "Made a copy of the chat in Hub. The old chat stays as it was." && JSON.stringify(fx.forks[0]) === '{"id":"h-rest","name":"Copy","text":"Go"}');
+  await caJ("chat-fork", { id: "h-rest" });
+  ok("chat-fork with only an id passes only the id", JSON.stringify(fx.forks[1]) === '{"id":"h-rest"}');
+  const f2 = await caJ("chat-fork", { id: "h-busy" });
+  ok("chat-fork shows the engine's refusal in words, with no id", f2.ok === false && f2.error === "This chat is still working. Wait for it to finish before making a copy." && f2.id === undefined);
+  ok("chat-fork refuses a missing, non-string, path-like, session-like or link-shaped id", await fkNo({}) && await fkNo({ id: 5 }) && await fkNo({ id: "x" }) && await fkNo({ id: "h-../x" }) && await fkNo({ id: "18ec7052-3a6a-46cc-ade3-7ff857195e3d" }) && await fkNo({ id: "local_abcdef12-3456" }) && await fkNo({ id: "claude://resume?session=x" }));
+  ok("chat-fork refuses extra fields (model, cwd, project, attachments)", await fkNo({ id: "h-rest", model: "opus" }) && await fkNo({ id: "h-rest", cwd: "C:\\Windows" }) && await fkNo({ id: "h-rest", project: "Hub" }) && await fkNo({ id: "h-rest", attachments: [I1] }));
+  const f3 = await caJ("chat-fork", { id: "h-rest", name: "x".repeat(81) }), f4 = await caJ("chat-fork", { id: "h-rest", text: "x".repeat(4001) });
+  ok("chat-fork: a name over 80 and a text over 4000 characters are refused in words; non-text name or text refused", f3.error === "The name must be at most 80 characters." && f4.error === "The first message must be at most 4000 characters." && await fkNo({ id: "h-rest", name: 5 }) && await fkNo({ id: "h-rest", text: 5 }) && (await caJ("chat-fork", { id: "h-rest", name: "x".repeat(80), text: "y".repeat(4000) })).ok === true);
+  ok("chat-fork without the token is 403, without confirm is 400, not JSON is 415", (await ca("chat-fork", { id: "h-rest" }, { ...json, "X-Hub-Token": "" })).status === 403 && (await raw("/api/action", json, JSON.stringify({ action: "chat-fork", id: "h-rest" }), "POST")).status === 400 && (await ca("chat-fork", { id: "h-rest" }, { ...json, "Content-Type": "text/plain" })).status === 415);
+  ok("fork and attachment refusals are logged without any text", fx.logs.some((l) => l.startsWith("chat-fork ") && l.endsWith("refused: wrong request shape")) && fx.logs.some((l) => l.endsWith("refused: wrong attachments")) && fx.logs.every((l) => !/Look|Copy|\bGo\b/.test(l)));
+  chatHooks.engine = realEngine;
+  // --- pins (a real pins object on a temp file; never data/pins.json) ---
+  const pinTmp = mkdtempSync(join(tmpdir(), "hub-srv-pins-")); let pt = Date.parse("2026-11-21T10:00:00Z");
+  pinHooks.pins = makePins({ file: join(pinTmp, "data", "pins.json"), now: () => (pt += 1000) }); const pinLogs = []; pinHooks.log = (...a) => pinLogs.push(a.join(" "));
+  const pn = (o, h = json) => raw("/api/action", h, cj({ action: "chat-pin", ...o }), "POST");
+  const pnJ = async (o) => JSON.parse((await pn(o)).text);
+  const p1 = await pnJ({ chatId: "h-20261121-1", project: "Alpha", pinned: true }), p1b = await pnJ({ chatId: "h-20261121-1", project: "Alpha", pinned: true });
+  ok("chat-pin pins a chat ({ ok, pinned, count}); pinning again says already", p1.ok === true && p1.pinned === true && p1.count === 1 && !("already" in p1) && p1b.ok === true && p1b.already === true && p1b.count === 1);
+  await pnJ({ chatId: "s-99887766", project: "Beta", pinned: true });
+  const gp = await (await fetch(base + "/api/pins")).json(), gpA = await (await fetch(base + "/api/pins?project=Alpha")).json(), gpN = await (await fetch(base + "/api/pins?project=Nope")).json();
+  ok("GET /api/pins lists newest first, ?project= filters, an unknown project gives an empty list", gp.pins.length === 2 && gp.pins[0].chatId === "s-99887766" && gp.pins[1].chatId === "h-20261121-1" && gpA.pins.length === 1 && gpA.pins[0].project === "Alpha" && gpN.pins.length === 0 && typeof gp.pins[0].at === "string");
+  const p2 = await pnJ({ chatId: "h-20261121-1", project: "Alpha", pinned: false }), p2b = await pnJ({ chatId: "h-20261121-1", project: "Alpha", pinned: false });
+  ok("chat-pin pinned:false unpins; unpinning again says already", p2.ok === true && p2.pinned === false && p2.count === 1 && p2b.ok === true && p2b.already === true);
+  for (let i = 1; i <= 49; i++) await pnJ({ chatId: "h-20261122-" + i, project: "Alpha", pinned: true });
+  const p50 = await pnJ({ chatId: "h-20261123-1", project: "Alpha", pinned: true });
+  ok("the 51st pin is refused in words (50 at most), and an unpin makes room again", p50.ok === false && p50.error === "At most 50 pinned chats. Unpin one first." && (await pnJ({ chatId: "h-20261122-1", project: "Alpha", pinned: false })).ok === true && (await pnJ({ chatId: "h-20261123-1", project: "Alpha", pinned: true })).ok === true);
+  const pnNo = async (o) => { const r = await pnJ(o); return r.ok === false && r.error === "The Hub can not pin that chat. Look at the page again."; };
+  ok("chat-pin refuses a non-boolean pinned, a missing project, extra fields and bad ids, in words", await pnNo({ chatId: "h-1", project: "Alpha", pinned: "yes" }) && await pnNo({ chatId: "h-1", pinned: true }) && await pnNo({ chatId: "h-1", project: "Alpha", pinned: true, cwd: "C:\\x" }) && await pnNo({ chatId: 5, project: "Alpha", pinned: true }) && await pnNo({ chatId: "..\\x", project: "Alpha", pinned: true }) && await pnNo({ chatId: "claude://x", project: "Alpha", pinned: true }) && await pnNo({ chatId: "h-1", project: "..", pinned: true }) && await pnNo({ chatId: "h-1", project: "C:\\x", pinned: true }));
+  ok("chat-pin without the token is 403, without confirm 400, from another Origin 403; nothing changes", (await pn({ chatId: "h-5", project: "Alpha", pinned: true }, { ...json, "X-Hub-Token": "" })).status === 403 && (await raw("/api/action", json, JSON.stringify({ action: "chat-pin", chatId: "h-5", project: "Alpha", pinned: true }), "POST")).status === 400 && (await pn({ chatId: "h-5", project: "Alpha", pinned: true }, { ...json, Origin: "http://evil.example" })).status === 403 && !pinHooks.pins.isPinned("h-5"));
+  ok("POST and PUT to /api/pins are 405", (await fetch(base + "/api/pins", { method: "POST" })).status === 405 && (await fetch(base + "/api/pins", { method: "PUT" })).status === 405);
+  ok("pin log lines carry the chat id and the result only", pinLogs.some((l) => l === "chat-pin h-20261121-1 pinned") && pinLogs.some((l) => l === "chat-pin h-20261121-1 unpinned") && pinLogs.every((l) => !/Alpha|Beta/.test(l)));
+  const keepPins = pinHooks.pins; pinHooks.pins = { ...keepPins, isPinned: () => true };
+  const pjAll = await (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName))).json();
+  pinHooks.pins = { ...keepPins, isPinned: () => false };
+  const pjNone = await (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName))).json();
+  ok(`GET /api/project: every chat has a pinned flag, true when pinned, false when not (${pjAll.chats.length} chats on this PC's first project)`, pjAll.chats.every((c) => c.pinned === true) && pjNone.chats.every((c) => c.pinned === false) && pjNone.chats.length === pjAll.chats.length);
+  pinHooks.pins = keepPins;
+  ok("the real data/pins.json was not written by these tests", (existsSync(realPinsFile) ? statSync(realPinsFile).mtimeMs : null) === pinsBefore);
+  // --- chat-image: a fake finder that knows ONE chat, with a saved file made here ---
+  const imgTmp = mkdtempSync(join(tmpdir(), "hub-srv-img-"));
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("fake-png-body-1234567890")]);
+  const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from("fake-jpeg-body-1234567890")]);
+  const imgRow = (i, content) => ({ type: "user", timestamp: new Date(Date.parse("2026-11-20T12:00:00Z") + i * 60000).toISOString(), isSidechain: false, message: { role: "user", content } });
+  const blk = (buf, t = "image/png") => ({ type: "image", source: { type: "base64", media_type: t, data: buf.toString("base64") } });
+  const imgLines = [imgRow(0, [blk(PNG)]), imgRow(1, [blk(JPG, "image/png")]), imgRow(2, [blk(Buffer.from("text renamed png"))]), imgRow(3, [blk(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>'))]), imgRow(4, "just words")].map((r) => JSON.stringify(r));
+  const imgFile = join(imgTmp, "chat.jsonl"); wf(imgFile, imgLines.join("\n") + "\n");
+  const imgFeed = chatLogLib.parseChat(imgLines.join("\n")).messages;
+  const asked = [];
+  imageHooks.resolveFile = async (id) => { asked.push(id); return id === "h-img1" ? imgFile : null; };
+  ok("the fixture's message and block numbers are what the tests ask for", imgFeed[0].blocks[0].type === "image" && imgFeed[0].blocks[0].m === 0 && imgFeed[1].blocks[0].m === 1 && imgFeed[4].blocks[0].type === "text");
+  const ci = async (q, o) => fetch(base + "/api/chat-image" + q, o);
+  const c0 = await ci("?id=h-img1&m=0&b=0"); const c0b = Buffer.from(await c0.arrayBuffer());
+  ok("chat-image: a PNG comes back byte for byte, with the right type, nosniff, a 5 minute private cache, inline", c0.status === 200 && c0.headers.get("content-type") === "image/png" && c0b.equals(PNG) && c0.headers.get("x-content-type-options") === "nosniff" && c0.headers.get("cache-control") === "private, max-age=300" && c0.headers.get("content-disposition") === "inline" && c0.headers.get("content-length") === String(PNG.length));
+  const c1 = await ci("?id=h-img1&m=1&b=0"); const c1b = Buffer.from(await c1.arrayBuffer());
+  ok("chat-image: a JPEG labelled as PNG in the file is sent as image/jpeg (the type comes from the bytes)", c1.status === 200 && c1.headers.get("content-type") === "image/jpeg" && c1b.equals(JPG));
+  const cu = await ci("?id=h-nosuch&m=0&b=0");
+  ok("chat-image: an unknown chat is 404 {error:'unknown chat'}", cu.status === 404 && (await cu.json()).error === "unknown chat");
+  ok("chat-image: path tricks, a session id, an empty or missing id are 404, and a 'file' or 'path' in the query changes nothing", (await Promise.all(["?id=..%5C..%5Cx&m=0&b=0", "?id=..%2F..%2Fx&m=0&b=0", "?id=18ec7052-3a6a-46cc-ade3-7ff857195e3d&m=0&b=0", "?id=C%3A%5CWindows&m=0&b=0", "?id=&m=0&b=0", "?m=0&b=0", "?file=" + encodeURIComponent(imgFile) + "&m=0&b=0", "?path=" + encodeURIComponent(imgFile) + "&id=h-nosuch&m=0&b=0"].map((q) => ci(q).then((r) => r.status)))).every((s) => s === 404) && asked.every((id) => !id.includes(imgTmp)));
+  ok("chat-image: text bytes labelled PNG and SVG bytes labelled PNG are 415 (never sent)", (await ci("?id=h-img1&m=2&b=0")).status === 415 && (await ci("?id=h-img1&m=3&b=0")).status === 415);
+  ok("chat-image: a text block, a wrong message or a wrong block number is 404", (await ci("?id=h-img1&m=4&b=0")).status === 404 && (await ci("?id=h-img1&m=99&b=0")).status === 404 && (await ci("?id=h-img1&m=0&b=9")).status === 404);
+  ok("chat-image: bad numbers (negative, fraction, exponent, text, missing) are 400", (await Promise.all(["?id=h-img1&m=-1&b=0", "?id=h-img1&m=1.5&b=0", "?id=h-img1&m=1e3&b=0", "?id=h-img1&m=x&b=0", "?id=h-img1&b=0", "?id=h-img1&m=0"].map((q) => ci(q).then((r) => r.status)))).every((s) => s === 400));
+  ok("chat-image: POST, PUT and DELETE are 405; a foreign Host is 403", (await ci("?id=h-img1&m=0&b=0", { method: "POST" })).status === 405 && (await ci("?id=h-img1&m=0&b=0", { method: "PUT" })).status === 405 && (await ci("?id=h-img1&m=0&b=0", { method: "DELETE" })).status === 405 && (await raw("/api/chat-image?id=h-img1&m=0&b=0", { Host: "evil.example" })).status === 403);
+  ok("the strict policy already lets the page show same-origin pictures: img-src 'self' is in the header of the page and of the picture", /img-src 'self'/.test(c0.headers.get("content-security-policy") || "") && /img-src 'self'/.test((await fetch(base + "/")).headers.get("content-security-policy") || "") && !/script-src[^;]*(unsafe|data:)/.test(c0.headers.get("content-security-policy") || ""));
+  ok("chat-image error answers are small JSON, never the saved file's text", (await (await ci("?id=h-img1&m=2&b=0")).text()).length < 120);
+  // demo picture: the generator makes a valid 120x80 PNG; it is served only for a sample chat block that is an image
+  {
+    const { inflateSync } = await import("node:zlib");
+    const dj = { chats: { "h-demo": { messages: [{ blocks: [{ type: "image" }, { type: "text" }] }] } } };
+    const dp = demoImage("h-demo", "0", "0", dj); let valid = false;
+    try {
+      const bb = dp.bytes; let o = 8; const chunks = [];
+      while (o < bb.length) { const len = bb.readUInt32BE(o), type = bb.toString("latin1", o + 4, o + 8), data = bb.subarray(o + 8, o + 8 + len); if (bb.readUInt32BE(o + 8 + len) !== crc32(bb.subarray(o + 4, o + 8 + len))) throw new Error("crc"); chunks.push([type, data]); o += 12 + len; }
+      valid = chunks.map((c) => c[0]).join() === "IHDR,IDAT,IEND" && chunks[0][1].readUInt32BE(0) === 120 && chunks[0][1].readUInt32BE(4) === 80 && inflateSync(chunks[1][1]).length === (120 * 3 + 1) * 80;
+    } catch { valid = false; }
+    ok("demo picture: a valid 120x80 PNG (right signature, chunk checksums, data size) for a sample image block", dp.status === 200 && dp.mediaType === "image/png" && valid);
+    ok("demo picture: 404 for a text block, a wrong number, an unknown chat or an object-prototype name; 400 for bad numbers", demoImage("h-demo", "0", "1", dj).status === 404 && demoImage("h-demo", "5", "0", dj).status === 404 && demoImage("h-x", "0", "0", dj).status === 404 && demoImage("__proto__", "0", "0", dj).status === 404 && demoImage("constructor", "0", "0", dj).status === 404 && demoImage("h-demo", "-1", "0", dj).status === 400 && demoImage("h-demo", null, "0", dj).status === 400);
+  }
+  // --demo server: uploads, fork off; pins really toggle in memory; chat-image only for sample image blocks
+  ok("--demo: upload and chat-fork say 'Sample data mode: the buttons are switched off.', pins toggle in memory (and show in /api/project), pictures only for sample image blocks", await withDemo(async (db, dt) => {
+    const dh = { "Content-Type": "application/json", Origin: db, "X-Hub-Token": dt };
+    const dpost = async (o) => (await fetch(db + "/api/action", { method: "POST", headers: dh, body: JSON.stringify({ confirm: true, ...o }) })).json();
+    const upR = await fetch(db + "/api/upload?chat=new", { method: "POST", headers: { "Content-Type": "application/octet-stream", Origin: db, "X-Hub-Token": dt, "X-Upload-Name": "a.png" }, body: Buffer.from("PNGDATA") });
+    const upJ = await upR.json();
+    const forkJ = await dpost({ action: "chat-fork", id: "h-20261116-101500-k3x9" });
+    const cl = (await (await fetch(db + "/api/chats")).json()).projects.find((p) => p.chats.length);
+    const cid = cl.chats[0].id, proj = cl.project;
+    const pin1 = await dpost({ action: "chat-pin", chatId: cid, project: proj, pinned: true });
+    const list1 = (await (await fetch(db + "/api/pins")).json()).pins;
+    const pg1 = await (await fetch(db + "/api/project?name=" + encodeURIComponent(proj))).json();
+    const pin2 = await dpost({ action: "chat-pin", chatId: cid, project: proj, pinned: false });
+    const pg2 = await (await fetch(db + "/api/project?name=" + encodeURIComponent(proj))).json();
+    const imgU = await fetch(db + "/api/chat-image?id=h-nope&m=0&b=0"), imgP = await fetch(db + "/api/chat-image?id=" + cid + "&m=999&b=0", { method: "POST" });
+    let pic = true;   // a sample image block, if the sample file has one: it must come back as a PNG
+    const sj = JSON.parse(readFileSync(join(HERE, "demo", "chat-log.json"), "utf8"));
+    for (const [id, c] of Object.entries(sj.chats || {})) for (const [mi, m] of (c.messages || []).entries()) for (const [bi, bk] of (m.blocks || []).entries()) if (bk.type === "image" && pic === true) { const r = await fetch(db + `/api/chat-image?id=${id}&m=${mi}&b=${bi}`); const bb = Buffer.from(await r.arrayBuffer()); pic = r.status === 200 && r.headers.get("content-type") === "image/png" && bb.subarray(1, 4).toString() === "PNG"; }
+    return upR.status === 200 && upJ.ok === false && upJ.error === "Sample data mode: the buttons are switched off." && forkJ.ok === false && forkJ.error === "Sample data mode: the buttons are switched off."
+      && pin1.ok === true && pin1.pinned === true && list1.length === 1 && list1[0].chatId === cid && pg1.chats.find((c) => c.id === cid)?.pinned === true && pg1.chats.filter((c) => c.id !== cid).every((c) => c.pinned === false)
+      && pin2.ok === true && pg2.chats.find((c) => c.id === cid)?.pinned === false && (await (await fetch(db + "/api/pins")).json()).pins.length === 0
+      && imgU.status === 404 && imgP.status === 405 && pic;
+  }));
+  ok("--demo: a token-less pin and an upload without the token are refused", await withDemo(async (db) => (await fetch(db + "/api/action", { method: "POST", headers: { "Content-Type": "application/json", Origin: db }, body: JSON.stringify({ action: "chat-pin", chatId: "h-1", project: "A", pinned: true, confirm: true }) })).status === 403 && (await fetch(db + "/api/upload?chat=new", { method: "POST", headers: { "Content-Type": "application/octet-stream", Origin: db }, body: "x" })).status === 403));
+  ok("the real data/pins.json was still not written after the demo server ran", (existsSync(realPinsFile) ? statSync(realPinsFile).mtimeMs : null) === pinsBefore);
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
   ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
   // chat log (Phase 19): a known id from the live list returns the conversation; anything else is 404; no write method works

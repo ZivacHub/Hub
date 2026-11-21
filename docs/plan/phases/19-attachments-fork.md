@@ -105,3 +105,47 @@ Each run cost about 1 US cent of subscription use. The test pictures and Claude'
 - `@"path with spaces"` (the Hub's path has no spaces).
 - `forkSession` against a real closed app chat (fakes only). Forking a chat that HAS a picture in it works (real run above); sending a picture IN the fork's first turn is not offered (fork takes text only).
 - Whether a start with files could follow the project workflow some other way (for example pick up first, then the files as a second turn): needs a decision; today it is refused in plain words.
+
+## 8. Wiring (server): the contract for the page
+Done in `tools/dashboard/server.mjs`. Every POST below needs the per-run token (`X-Hub-Token`, from `GET /api/session`) and the same Origin; the action ones also need `Content-Type: application/json` and `confirm: true`. In `--demo` every button answers `{ ok:false, error:"Sample data mode: the buttons are switched off." }` and stores nothing, EXCEPT pins (memory only, really toggles).
+
+### 8.1 Upload: `POST /api/upload?chat=<Hub chat id h-... | new>`
+- Headers: `Content-Type: application/octet-stream` (exactly), `Origin`, `X-Hub-Token`, `X-Upload-Name: <encodeURIComponent(original name)>`; `Content-Length` is required (a normal `fetch(url, { body: file })` sends it). Body = the raw file, no multipart.
+- Body limit 10.5 MB for this route only. A bigger announced size is refused from the header alone (nothing read, connection closed); a body that grows past it while reading is cut off. The store itself still refuses files over 10 MB (text over 1 MB) with its own sentence.
+- `chat`: `new` (chat not started yet) or a Hub chat id that the engine knows. For an answer attach to the chat's own id.
+- Answer 200: `{ ok:true, uploadId, kind:"image"|"pdf"|"text", name, bytes, mediaType }` (never a path). Store refusals: status 200 `{ ok:false, error }` with the store's sentences from section 1 (for example "The file is empty.", "Files can be at most 10 MB.", "This kind of file can't be attached. ...").
+- Other answers: 400 `{ok:false,error:"Unknown chat."}` (bad or missing `chat`), 400 "The file name could not be read.", 411 "The file size is missing. Try attaching it again.", 413 "Files can be at most 10 MB.", 415 "Send the file as application/octet-stream", 403 "forbidden origin" / "missing or wrong token", 405 for any method but POST. A well-formed but unknown Hub chat id: status 200 `{ ok:false, error:"Unknown chat." }`.
+- Demo: after the guards, 200 `{ ok:false, error:"Sample data mode: the buttons are switched off." }`.
+- Log: `upload <chat key> ok <kind> <bytes>` or `refused`; never the name.
+
+### 8.2 Sending files: the `attachments` field
+- `chat-answer` body `{ action, id, text, attachments?, confirm }` and `chat-start` body `{ action, project, task, model?, remoteControl?, workflow?, attachments?, confirm }`. `attachments` = a list of 1 to 4 upload ids (each 32 lower-case hex characters). Absent or `[]` = exactly the old behaviour (nothing extra reaches the engine).
+- The text may be empty ONLY with at least one attachment (the engine decides and keeps its old sentences otherwise).
+- Bad `attachments` (not a list, more than 4, an id that is not 32 hex characters or not a string): `{ ok:false, error:"The Hub can not send those attached files. Attach them again." }`, nothing sent. Everything else the engine says (section 2 and 3 sentences) is passed on unchanged.
+- After a turn with pictures or PDFs has finished (the chat is no longer working: success or failure) the server removes those stored files; text files stay until the 7-day cleanup; a message the engine refused removes nothing (the person can retry with the same ids). The page must not reuse a picture's id after the message was accepted.
+
+### 8.3 Fork: action `chat-fork`
+- Body exactly `{ action:"chat-fork", id, name?, text?, confirm:true }`; `id` = a Hub chat id (`h-...`), `name` a string of at most 80 characters, `text` a string of at most 4000.
+- Answer: `{ ok:true, id:<new Hub chat id>, note }` (note = "Made a copy of the chat in <project>. The old chat stays as it was.") or `{ ok:false, error }`.
+- Sentences added by the server: "The Hub can not copy that chat. Look at the page again." (extra field, bad id, wrong type), "The name must be at most 80 characters.", "The first message must be at most 4000 characters." The engine's FORK_MESSAGES (section 3) are passed on.
+- Hub chats only (no closed app chats yet).
+
+### 8.4 Pictures: `GET /api/chat-image?id=<chat id>&m=<n>&b=<n>`
+- `id` = any chat id of the chat list (Hub and app chats), `m` and `b` = the numbers of an `image` block from `/api/chat-log` (digits only).
+- 200: the picture bytes with `Content-Type` taken from the bytes (png, jpeg, gif or webp), `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=300`, `Content-Disposition: inline`, `Content-Length`.
+- Errors, small JSON `{ error }`: 400 (bad numbers), 404 (`unknown chat`, or `no such picture`), 413 (over 12 MB), 415 (bytes are not a picture), 422 (bad data). POST/PUT/DELETE: 405. Foreign Host: 403.
+- Use as `<img src="/api/chat-image?id=...&m=...&b=...">`. Demo: a made-up 120x80 PNG for sample chat blocks that are `image` blocks in demo/chat-log.json, 404 otherwise.
+
+### 8.5 Pins
+- `GET /api/pins` -> `{ pins:[{ chatId, project, at }] }` newest first; `?project=<name>` keeps that project's pins. Read-only (POST/PUT 405).
+- Action `chat-pin`, body exactly `{ action:"chat-pin", chatId, project, pinned:true|false, confirm:true }` (token and Origin needed; the page does not ask Ivan first). `chatId` = `h-...`, `s-<8 hex>` or `local_...`; `project` = a plain folder name.
+- Answer: `{ ok:true, pinned, count }` (plus `already:true` when nothing changed) or `{ ok:false, error }`: "The Hub can not pin that chat. Look at the page again." (bad shape, id or project), "At most 50 pinned chats. Unpin one first.", "The Hub could not save the pinned chats. Try again."
+- `GET /api/project?name=...`: every entry of `chats` now also has `pinned: true|false`. The pins of chats that no longer exist are simply not shown by the chat list.
+- Demo: really toggles in memory (gone when the demo server stops); `data/pins.json` is never written in demo.
+
+### 8.6 Content-Security-Policy
+The header already says `img-src 'self' data:`, so same-origin pictures from `/api/chat-image` are allowed; nothing was changed.
+
+### 8.7 Tests and not verified
+- `node tools/dashboard/server.mjs --selftest`: 140 checks (about 90 new, all with a fake engine, a fake picture finder, pins in a temp folder; demo checks use a second `--demo` server on a spare port). No test touches a real chat, the real upload folder or `data/pins.json`.
+- Not verified: a real upload of a big file from a browser, the real engine behind the new routes (only fakes in the server test), `chat-image` against a real saved chat in the browser, the page side.
