@@ -4,7 +4,8 @@
 // Contract (env variables, functions 16.2 and 16.3 hook into): docs/plan/phases/16-17-18-app-work-reports.md, "App contract (16.1)".
 // 16.3 (D53): a real quit first asks the dashboard to stop every project it started (stopHubProjects), then stops the dashboard
 // if this app started it. `--hidden` on the command line (the start-with-Windows entry) = no visible window, dashboard with --boot.
-import { app, BrowserWindow, dialog, nativeTheme, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeTheme, session, shell } from "electron";
+import { buildContextMenuTemplate } from "./lib/contextmenu.mjs";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -111,6 +112,13 @@ export function createWindow({ port, openExternal, showInactive = false, showOnR
   });
   win.removeMenu();
   lockDownNavigation(win.webContents, { port, openExternal });
+  // right-click: Copy / Paste / Select all like Claude desktop (Electron shows nothing by itself); empty space shows no menu
+  win.webContents.on("context-menu", (_e, params) => {
+    try {
+      const tpl = buildContextMenuTemplate(params, { copyLink: (u) => clipboard.writeText(u) });
+      if (tpl.length) Menu.buildFromTemplate(tpl).popup({ window: win });
+    } catch { /* a menu problem must never break the window */ }
+  });
   // showOnReady false (--hidden start): the window is made but stays hidden until "Open Hub"; it exists so Windows' session-end reaches the app
   win.once("ready-to-show", () => { if (showOnReady) (showInactive ? win.showInactive() : win.show()); });
   // D51: the X button (and Alt+F4) only HIDES the window; the Hub keeps running in the background icon. Real quit: state.quitting.

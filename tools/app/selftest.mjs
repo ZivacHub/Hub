@@ -199,6 +199,24 @@ ok("rules: the Hub's own port, wrong scheme, low or missing port, credentials, o
   ok("code: app.setLoginItemSettings( appears once in main.mjs, in the non-self-test wrapper; self-test mode installs a guard; no lib file calls it", (mainSrc.match(/app\.setLoginItemSettings\s*\(/g) || []).length === 1 && /const loginItems = SELFTEST \? fakeLoginItems : \{/.test(mainSrc) && mainSrc.includes("guard.selftestGuard = true;") && mainSrc.includes("app.setLoginItemSettings = guard;") && libCalls.length === 0);
 }
 
+// ---------- 1e. the right-click menu (Ivan 2026-11-22): pure template, no Electron
+{
+  const { buildContextMenuTemplate } = await import("./lib/contextmenu.mjs");
+  const roles = (t) => t.filter((i) => i.type !== "separator").map((i) => i.role || i.label).join(",");
+  const edit = buildContextMenuTemplate({ isEditable: true, selectionText: "abc", editFlags: { canUndo: true, canRedo: false, canCut: true, canCopy: true, canPaste: true, canSelectAll: true } });
+  ok("right-click in a text box: Undo, Redo, Cut, Copy, Paste, Select all; Redo greyed", roles(edit) === "undo,redo,cut,copy,paste,selectAll" && edit.find((i) => i.role === "redo").enabled === false && edit.find((i) => i.role === "cut").enabled === true);
+  const none = buildContextMenuTemplate({ isEditable: true, selectionText: "", editFlags: { canCut: true, canCopy: true } });
+  ok("right-click in an empty text box: Cut and Copy greyed (nothing selected), Paste on", none.find((i) => i.role === "cut").enabled === false && none.find((i) => i.role === "copy").enabled === false && none.find((i) => i.role === "paste").enabled === true);
+  ok("selected text on the page: Copy only", roles(buildContextMenuTemplate({ isEditable: false, selectionText: "hello" })) === "copy");
+  ok("empty space and odd input: no menu at all (the page's own menu stays usable)", buildContextMenuTemplate({ isEditable: false, selectionText: "   " }).length === 0 && buildContextMenuTemplate(undefined).length === 0 && buildContextMenuTemplate(null).length === 0);
+  const copied = [];
+  const linkMenu = buildContextMenuTemplate({ isEditable: false, selectionText: "", linkURL: "https://example.com/a" }, { copyLink: (u) => copied.push(u) });
+  linkMenu[0].click();
+  ok("a web link: only 'Copy link address' (copies, never opens); other schemes get nothing", roles(linkMenu) === "Copy link address" && copied.join() === "https://example.com/a" && buildContextMenuTemplate({ linkURL: "javascript:alert(1)" }, { copyLink() {} }).length === 0 && buildContextMenuTemplate({ linkURL: "claude://x" }, { copyLink() {} }).length === 0);
+  const mainSrc2 = readFileSync(join(HERE, "main.mjs"), "utf8");
+  ok("code: main.mjs wires the 'context-menu' event to the template (and nothing else opens from it)", /webContents\.on\("context-menu"/.test(mainSrc2) && /buildContextMenuTemplate\(params/.test(mainSrc2));
+}
+
 // ---------- 2. the real app, self-test mode
 const electronPids = () => {
   try { return new Set(execFileSync("tasklist", ["/FI", "IMAGENAME eq electron.exe", "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true }).split(/\r?\n/).map((l) => l.split('","')[1]).filter((p) => /^\d+$/.test(p || ""))); } catch { return new Set(); }
