@@ -58,9 +58,10 @@ export function closedCandidates({ hubChats = [], open = [], appRecords = [], ro
 
 /**
  * Pure. hubChats: engine list() items; open: `claude agents --json` entries; appRecords: the six fields of the app records;
- * states: { [sessionId]: { state, at, why, snippet, title } }. Returns { max, working, openListOk, projects }.
+ * states: { [sessionId]: { state, at, why, snippet, title } }; live: { [sessionId]: "busy"|"idle"|"waiting" } from the running program's own live files
+ * (only for OPEN chats; missing = the old rule from the agents list). Returns { max, working, openListOk, projects }.
  */
-export function buildChats({ hubChats = [], open = [], appRecords = [], states = {}, root, now = Date.now(), maxWorking = 2, openListOk = true, redact = (s) => String(s ?? "") } = {}) {
+export function buildChats({ hubChats = [], open = [], appRecords = [], states = {}, live = {}, root, now = Date.now(), maxWorking = 2, openListOk = true, redact = (s) => String(s ?? "") } = {}) {
   const red = (s, n) => clip(String(redact(String(s ?? ""))), n);
   const st = (sid) => (sid && states && typeof states === "object" ? states[sid] : null) || null;
   const needs = (x) => !!x && (x.state === "question" || x.state === "permission");
@@ -106,12 +107,15 @@ export function buildChats({ hubChats = [], open = [], appRecords = [], states =
     if (!project) continue;
     const rec = appBySession.get(sid) || null;
     const s = st(sid);
-    const nm = needs(s);
+    const lv = live && typeof live === "object" && Object.prototype.hasOwnProperty.call(live, sid) ? live[sid] : null;
+    const waiting = lv === "waiting";
+    const nm = needs(s) || waiting;
+    const state = lv === "busy" ? "working" : lv === "waiting" ? "waiting" : lv === "idle" ? "idle" : e.status === "busy" ? "working" : "idle";
     add(project, {
       id: "s-" + sid.slice(0, 8), kind: rec ? "app" : "terminal",
       name: red(rec && rec.title ? rec.title : e.name, 80),
-      state: e.status === "busy" ? "working" : "idle",
-      needsYou: nm, why: nm ? s.state : "", snippet: nm ? red(s.snippet, 220) : "",
+      state,
+      needsYou: nm, why: nm ? (needs(s) ? s.state : "question") : "", snippet: needs(s) ? red(s.snippet, 220) : "",
       remoteControl: rec ? rcOf(rec) : null, // true / false from the app record, null = the record does not say
       since: iso(e.startedAt), lastActive: (s && iso(s.at)) || iso(e.startedAt), model: null, turns: null, canAnswer: false,
       openLink: rec && typeof rec.sessionId === "string" && APP_ID.test(rec.sessionId) ? "claude://claude.ai/epitaxy/" + rec.sessionId : null,
@@ -148,6 +152,30 @@ export function buildChats({ hubChats = [], open = [], appRecords = [], states =
 
 // ---------- the real reading ----------
 const encode = (p) => String(p).replace(/[^A-Za-z0-9]/g, "-");
+let liveCache = null; // { key, at, map }
+/** Reads the running program's live files (%USERPROFILE%\.claude\sessions\<pid>.json), READ-ONLY. Takes ONLY sessionId and status; nothing else is kept or shown.
+ *  Cached 4 s. Returns { [sessionId]: "busy"|"idle"|"waiting" }; any problem = fewer entries (never throws). Not checkable: a stale file of a dead process
+ *  (we do not test whether the pid is alive); that is harmless because only chats in the agents list use it. */
+export function readLiveSessions(dir) {
+  try {
+    const d = dir || join(homedir(), ".claude", "sessions");
+    const key = String(d);
+    if (liveCache && liveCache.key === key && Date.now() - liveCache.at < 4000) return liveCache.map;
+    const map = {};
+    let names = [];
+    try { names = readdirSync(d); } catch { names = []; }
+    for (const f of names) {
+      if (!/^\d+\.json$/.test(f)) continue;
+      try {
+        const j = JSON.parse(readFileSync(join(d, f), "utf8"));
+        if (!j || typeof j.sessionId !== "string" || !SESSION_ID.test(j.sessionId)) continue;
+        if (j.status === "busy" || j.status === "idle" || j.status === "waiting") map[j.sessionId] = j.status;
+      } catch { /* corrupt: skip */ }
+    }
+    liveCache = { key, at: Date.now(), map };
+    return map;
+  } catch { return {}; }
+}
 let slowCache = null; // { at, open, openListOk, appRecords }
 const recCache = new Map(); // file -> { mtimeMs, rec }
 
@@ -245,7 +273,7 @@ export async function readChats({ hubChats = [], redact = (s) => String(s ?? "")
     for (const e of slowCache.open) if (e && projectOf(e.cwd, root)) look(e.sessionId, e.cwd);
     for (const h of hubs) if (h && h.project && h.sessionId) look(h.sessionId, join(root, String(h.project)));
     for (const { rec } of closedCandidates({ hubChats: hubs, open: slowCache.open, appRecords: slowCache.appRecords, root })) look(rec.cliSessionId, rec.cwd); // at most 12 per project
-    const opts = { hubChats: hubs, open: slowCache.open, appRecords: slowCache.appRecords, states, root, now: Date.now(), openListOk: slowCache.openListOk, redact };
+    const opts = { hubChats: hubs, open: slowCache.open, appRecords: slowCache.appRecords, states, live: readLiveSessions(), root, now: Date.now(), openListOk: slowCache.openListOk, redact };
     if (typeof maxWorking === "number") opts.maxWorking = maxWorking;
     return { generatedAt: new Date().toISOString(), ...buildChats(opts) };
   } catch {
@@ -411,11 +439,39 @@ async function selftest() {
     fs.rmSync(base, { recursive: true, force: true });
   }
 
+  // live state of OPEN chats (the running program's own session files)
+  check("live busy -> working", one({ open: [ent({ status: "idle" })], live: { "bbbbbbbb-1111-2222": "busy" } }).state === "working");
+  check("live idle beats agents busy -> idle", one({ open: [ent({ status: "busy" })], live: { "bbbbbbbb-1111-2222": "idle" } }).state === "idle");
+  check("live waiting -> waiting, needs you, why question", (() => { const c = one({ open: [ent({ status: "idle" })], live: { "bbbbbbbb-1111-2222": "waiting" } }); return c.state === "waiting" && c.needsYou && c.why === "question" && c.snippet === ""; })());
+  check("live waiting + saved permission -> why permission, snippet", (() => { const c = one({ open: [ent({})], live: { "bbbbbbbb-1111-2222": "waiting" }, states: { "bbbbbbbb-1111-2222": { state: "permission", snippet: "Run it?" } } }); return c.state === "waiting" && c.why === "permission" && c.snippet === "Run it?"; })());
+  check("no live entry -> old rule", one({ open: [ent({ status: "busy" })], live: { "other-0000-1111": "waiting" } }).state === "working" && one({ open: [ent({ status: "idle" })], live: {} }).state === "idle");
+  check("live ignored for a chat not in the agents list", all(b({ open: [], live: { "bbbbbbbb-1111-2222": "waiting" } })).length === 0);
+  check("live junk value ignored", one({ open: [ent({ status: "busy" })], live: { "bbbbbbbb-1111-2222": "weird" } }).state === "working");
+  check("waiting chat sorts first", (() => { const r = all(b({ open: [ent({ sessionId: "aaaaaaaa-1", status: "busy" }), ent({ sessionId: "cccccccc-1", status: "idle" })], live: { "cccccccc-1": "waiting" } })); return r[0].state === "waiting"; })());
+  {
+    const fs = await import("node:fs"); const os = await import("node:os");
+    const dir = fs.mkdtempSync(join(os.tmpdir(), "hub-live-"));
+    const w = (n, o) => fs.writeFileSync(join(dir, n), typeof o === "string" ? o : JSON.stringify(o));
+    w("101.json", { sessionId: "aaaaaaaa-1111", status: "busy", socket: "SECRET-PATH" });
+    w("102.json", { sessionId: "bbbbbbbb-1111", status: "idle" });
+    w("103.json", { sessionId: "cccccccc-1111", status: "waiting", updatedAt: 1 });
+    w("104.json", "{not json");
+    w("105.json", { sessionId: "dddddddd-1111", status: "strange" });
+    w("106.json", { status: "busy" });
+    w("notes.txt", "x");
+    const m = readLiveSessions(dir);
+    check("live reader: busy/idle/waiting read", m["aaaaaaaa-1111"] === "busy" && m["bbbbbbbb-1111"] === "idle" && m["cccccccc-1111"] === "waiting");
+    check("live reader: corrupt, odd status, no id, other files skipped; only id+status kept", Object.keys(m).length === 3 && JSON.stringify(m).indexOf("SECRET") < 0);
+    check("live reader: cached a few seconds", (() => { w("107.json", { sessionId: "eeeeeeee-1111", status: "busy" }); return readLiveSessions(dir)["eeeeeeee-1111"] === undefined; })());
+    check("live reader: missing folder -> empty", Object.keys(readLiveSessions(join(dir, "nope"))).length === 0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
   // real check
   let r = null, err = "";
   try { r = await readChats({ hubChats: [], redact: (s) => String(s ?? "") }); } catch (e) { err = String(e && e.message); }
   const shapeOk = r && typeof r.generatedAt === "string" && typeof r.max === "number" && typeof r.working === "number" && typeof r.openListOk === "boolean" && Array.isArray(r.projects)
-    && r.projects.every((p) => typeof p.project === "string" && Array.isArray(p.chats) && p.chats.every((c) => ["hub", "app", "terminal"].includes(c.kind) && ["working", "idle", "failed", "stopped", "closed"].includes(c.state) && typeof c.needsYou === "boolean" && typeof c.canAnswer === "boolean" && Array.isArray(c.refused)));
+    && r.projects.every((p) => typeof p.project === "string" && Array.isArray(p.chats) && p.chats.every((c) => ["hub", "app", "terminal"].includes(c.kind) && ["working", "idle", "waiting", "failed", "stopped", "closed"].includes(c.state) && typeof c.needsYou === "boolean" && typeof c.canAnswer === "boolean" && Array.isArray(c.refused)));
   check("real read: shape, no throw", !!shapeOk, err);
   if (r) console.log(`real: openListOk=${r.openListOk}, ${r.projects.length} projects, ${all(r).length} chats (app ${all(r).filter((c) => c.kind === "app").length}, terminal ${all(r).filter((c) => c.kind === "terminal").length}, needing you ${all(r).filter((c) => c.needsYou).length})`);
   const again = await readChats({ hubChats: [], redact: (s) => String(s ?? "") });

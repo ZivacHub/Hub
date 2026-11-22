@@ -130,6 +130,44 @@ function fileBlock(mediaType, bytes, name, red) {
   return out;
 }
 
+
+// ---------- question cards (AskUserQuestion and the Hub's wrap_up tool) ----------
+export const QUESTION_LIMITS = { questions: 6, options: 12, question: 600, header: 80, label: 200, description: 400, recap: 1200, answer: 300 };
+const isQuestionTool = (n) => { n = String(n || ""); return n === "AskUserQuestion" ? "AskUserQuestion" : n === "wrap_up" || /__wrap_up$/.test(n) ? "wrap_up" : null; };
+/** The block for a question tool call, or null when the input is unusable (then the normal tool fold is shown). Pure.
+ *  answered: true + answer (AskUserQuestion with a result text) / false (no result yet) / null (unknown: the user declined, or wrap_up, whose result is only a note, not the answer). */
+function questionBlock(source, input, res, red) {
+  const i = input && typeof input === "object" ? input : {};
+  const Q = QUESTION_LIMITS;
+  const out = { type: "question", source, questions: [] };
+  if (source === "AskUserQuestion") {
+    const qs = Array.isArray(i.questions) ? i.questions : [];
+    for (const q of qs.slice(0, Q.questions)) {
+      if (!q || typeof q !== "object" || typeof q.question !== "string" || !q.question.trim()) continue;
+      const item = { question: red(q.question, Q.question) };
+      if (typeof q.header === "string" && q.header.trim()) item.header = red(q.header, Q.header);
+      if (q.multiSelect === true) item.multiSelect = true;
+      item.options = (Array.isArray(q.options) ? q.options : []).slice(0, Q.options).filter((o) => o && typeof o === "object" && typeof o.label === "string" && o.label.trim())
+        .map((o) => { const x = { label: red(o.label, Q.label) }; if (typeof o.description === "string" && o.description.trim()) x.description = red(o.description, Q.description); return x; });
+      out.questions.push(item);
+    }
+    if (!out.questions.length) return null;
+  } else {
+    const ask = typeof i.ask === "string" ? i.ask.trim() : "";
+    const recap = typeof i.recap === "string" ? i.recap.trim() : "";
+    if (!ask && !recap) return null;
+    if (recap) out.recap = red(recap, Q.recap);
+    if (ask) out.questions.push({ question: red(ask, Q.question), options: (Array.isArray(i.actions) ? i.actions : []).slice(0, Q.options).filter((a) => a && typeof a === "object" && typeof a.label === "string" && a.label.trim()).map((a) => ({ label: red(a.label, Q.label) })) });
+  }
+  if (!res) out.answered = false;
+  else if (source === "wrap_up" || res.is_error === true) out.answered = null;
+  else {
+    const t = cleanUserText(resultText(res.content)) || resultText(res.content).trim();
+    if (t) { out.answered = true; out.answer = red(t, Q.answer); } else out.answered = null;
+  }
+  return out;
+}
+
 const usageTokens = (u) => (u ? (Number(u.input_tokens) || 0) + (Number(u.cache_read_input_tokens) || 0) + (Number(u.cache_creation_input_tokens) || 0) : null);
 
 // ---------- parse one saved chat file (pure: takes the text) ----------
@@ -184,6 +222,8 @@ export function parseChat(text, { redact = (s) => String(s ?? ""), cwdHint = "" 
         if (b.type === "text") { const t = String(b.text ?? ""); if (t.trim()) blocks.push({ type: "text", text: red(t, LIMITS.text) }); }
         else if (b.type === "tool_use") {
           const res = results.get(String(b.id));
+          const qsrc = isQuestionTool(b.name);
+          if (qsrc) { const qb = questionBlock(qsrc, b.input, res, red); if (qb) { blocks.push(qb); continue; } } // the question card replaces the tool fold
           const status = res ? (res.is_error === true ? "error" : "ok") : "unknown";
           const out = res ? cleanUserText(resultText(res.content)) || resultText(res.content).trim() : "";
           blocks.push({ type: "tool", name: String(b.name || "tool"), summary: red(toolSummary(b.name, b.input, cwd), LIMITS.summary), status, output: red(out, LIMITS.output) });
@@ -573,6 +613,44 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     check("pictures: an attachment line after the last user message joins it (the svg one gets the picture at b2); message indexes unchanged", pp.messages.length === 6 && pp.messages.every((m, i) => m.i === i) && pp.blockSources.size === 4, String(pp.blockSources.size));
     check("pictures: sources point at lines and paths, never hold data", [...pp.blockSources.values()].every((s) => Number.isInteger(s.line) && Array.isArray(s.path)) && !JSON.stringify([...pp.blockSources]).includes(pngB.slice(0, 20)));
     check("paging keeps picture blocks whole", (() => { const q = pageOf(pp.messages, { before: 1, limit: 1 }).messages[0]; return q.i === 0 && q.blocks[0].type === "image" && q.blocks[0].m === 0; })());
+  }
+  // question cards
+  {
+    const KEY = "sk-" + "Zq9".repeat(10);
+    const AQ = { questions: [
+      { question: "Which colour?", header: "Colour", multiSelect: false, options: [{ label: "Red", description: "warm" }, { label: "Blue" }] },
+      { question: "Pick extras", header: "Extras", multiSelect: true, options: [{ label: "A", description: "x" }, { label: "B", description: "y" }] },
+    ] };
+    const rr = [
+      U(0, "go"),
+      A(1, "q1", [{ type: "text", text: "Asking." }, { type: "tool_use", id: "aq1", name: "AskUserQuestion", input: AQ }]),
+      U(1, [{ type: "tool_result", tool_use_id: "aq1", content: "User has answered your questions: \"Which colour?\"=\"Red\" with " + KEY + " " + "z ".repeat(300) }]),
+      A(2, "q2", [{ type: "tool_use", id: "aq2", name: "AskUserQuestion", input: { questions: [{ question: "Unanswered?", options: [{ label: "Yes" }] }] } }]),
+      A(3, "q3", [{ type: "tool_use", id: "wu1", name: "mcp__ccd_turn__wrap_up", input: { ask: "Commit now?", actions: [{ label: "Commit" }, { label: "Not now" }, {}], recap: "Done " + KEY } }]),
+      U(3, [{ type: "tool_result", tool_use_id: "wu1", content: [{ type: "text", text: "Shown in the next-step box." }] }]),
+      A(4, "q4", [{ type: "tool_use", id: "wu2", name: "mcp__ccd_turn__wrap_up", input: { recap: "Nothing pending" } }]),
+      A(5, "q5", [{ type: "tool_use", id: "aq3", name: "AskUserQuestion", input: { questions: [{ question: "No options?" }] } }]),
+      U(5, [{ type: "tool_result", tool_use_id: "aq3", is_error: true, content: "The user doesn't want to proceed" }]),
+      A(6, "q6", [{ type: "tool_use", id: "aq4", name: "AskUserQuestion", input: { questions: "bad" } }]),
+      A(7, "q7", [{ type: "tool_use", id: "wu3", name: "wrap_up", input: {} }]),
+      A(8, "q8", [{ type: "tool_use", id: "aq5", name: "AskUserQuestion", input: { questions: [{ question: "Q ".repeat(450), options: [{ label: "L ".repeat(250), description: "D ".repeat(450) }] }] } }]),
+      A(9, "q9", [{ type: "tool_use", id: "rd", name: "Read", input: { file_path: "C:\a\b.png" } }]),
+    ];
+    const pq = parseChat(rr.map((r) => JSON.stringify(r)).join("\n"), { redact });
+    const qs = pq.messages.flatMap((m) => m.blocks).filter((b) => b.type === "question");
+    const tools = pq.messages.flatMap((m) => m.blocks).filter((b) => b.type === "tool");
+    const qj = JSON.stringify(pq.messages);
+    check("questions: AskUserQuestion becomes a question block with both questions, headers, multiSelect, options", qs[0].source === "AskUserQuestion" && qs[0].questions.length === 2 && qs[0].questions[0].header === "Colour" && !("multiSelect" in qs[0].questions[0]) && qs[0].questions[1].multiSelect === true && qs[0].questions[0].options[0].label === "Red" && qs[0].questions[0].options[0].description === "warm" && !("description" in qs[0].questions[0].options[1]), JSON.stringify(qs[0]));
+    check("questions: answered one = answered true + answer, redacted and clipped to 300", qs[0].answered === true && qs[0].answer.length === 300 && qs[0].answer.endsWith("…") && qs[0].answer.includes("Red") && !qj.includes(KEY));
+    check("questions: no result yet = answered false, no answer", qs[1].answered === false && !("answer" in qs[1]) && qs[1].questions[0].question === "Unanswered?");
+    check("questions: wrap_up = one question from ask, options from actions (empty one dropped), recap redacted; result is only a note so answered null", qs[2].source === "wrap_up" && qs[2].questions.length === 1 && qs[2].questions[0].question === "Commit now?" && qs[2].questions[0].options.map((o) => o.label).join() === "Commit,Not now" && qs[2].recap.startsWith("Done ") && qs[2].answered === null && !("answer" in qs[2]), JSON.stringify(qs[2]));
+    check("questions: wrap_up with only a recap = no questions, only recap; no result = answered false", qs[3].source === "wrap_up" && qs[3].questions.length === 0 && qs[3].recap === "Nothing pending" && qs[3].answered === false);
+    check("questions: a declined question (error result) = answered null; question without options = empty options", qs[4].answered === null && qs[4].questions[0].options.length === 0 && qs[4].questions[0].question === "No options?");
+    check("questions: malformed input (questions not a list; wrap_up with nothing) falls back to the plain tool fold", tools.some((t) => t.name === "AskUserQuestion") && tools.some((t) => t.name === "wrap_up") && qs.length === 6, String(qs.length));
+    check("questions: long text clipped (question 600, label 200, description 400)", qs[5].questions[0].question.length === 600 && qs[5].questions[0].options[0].label.length === 200 && qs[5].questions[0].options[0].description.length === 400);
+    check("questions: the question block replaces the tool fold (no tool block for answered/valid ones), messages keep their indexes", !tools.some((t) => t.name === "AskUserQuestion" && t.summary.includes("Which")) && pq.messages.every((m, i) => m.i === i) && pq.messages[1].blocks.map((b) => b.type).join() === "text,question");
+    check("questions: other tools unchanged", tools.some((t) => t.name === "Read"));
+    check("questions: paging keeps the block whole", pageOf(pq.messages, { limit: 200 }).messages[1].blocks[1].type === "question");
   }
   // read-only: no writes in the module; the only process is git
   const src = fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("// ---------- self-test")[0];

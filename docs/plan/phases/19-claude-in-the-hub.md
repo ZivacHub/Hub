@@ -78,3 +78,11 @@ Result: for a chat that is not in the middle of a turn the number is exact. Whil
 - App chats: Remote Control is `true` or `false` only when the app's own record says so; when the record has no such field it is `null` (unknown), never "off". Found on Ivan's real data: a chat with Remote Control on in the app had no field at all.
 - Hub chats keep true/false (the Hub knows it itself); terminal chats are `null`.
 - Pages must say "unknown" or show nothing for `null`, never "Remote Control: off".
+
+## State and question blocks (2026-11-22)
+
+**State of an open chat.** The running Claude program keeps one small file per session in `%USERPROFILE%\.claude\sessions\<pid>.json`. `readLiveSessions()` in `lib/chatlist.mjs` reads ONLY `sessionId` and `status` from them (read-only, cached 4 s, nothing else kept or shown). Mapping for OPEN chats (the ones in `claude agents --json`): `busy` -> `working`; `waiting` -> `waiting` (new state; `needsYou: true`, `why` = "permission" when the saved chat file says so, otherwise "question"); `idle` -> `idle`. No file, a corrupt file or an unknown status -> exactly the old rule (agents list busy/idle). A live file for a chat that is not in the agents list is ignored. Not checkable: a stale file left by a dead program (we do not test whether the pid is alive); harmless, because only chats the agents list calls open ever use it. Closed and Hub chats do not use it.
+
+**Question blocks in the chat feed.** `AskUserQuestion` and the Hub's `wrap_up` tool calls are no longer a folded tool line; the block takes the place of the tool block (message and block numbers `m`/`b` stay consistent):
+`{ type:"question", source:"AskUserQuestion"|"wrap_up", header?, recap?, questions:[{ question, header?, multiSelect?, options:[{ label, description? }] }], answered: true|false|null, answer? }`.
+`answered`: true + `answer` (clipped to 300, redacted) when an AskUserQuestion result has text; false when there is no result yet; null when unknown (the person declined = error result, or wrap_up, whose result is only a note, not the answer). A `wrap_up` with only a recap gives `questions: []`. Unusable input (no questions / nothing to show) falls back to the normal tool fold.

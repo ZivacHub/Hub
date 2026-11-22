@@ -36,6 +36,7 @@ import { makeAppAnswer } from "./lib/appanswer.mjs";
 import { makeHandoffRound } from "./lib/handoffround.mjs";
 import { makePins, MAX_PINS } from "./lib/pins.mjs";
 import { readChatImage } from "./lib/chatimage.mjs";
+import { makeCommands, DEMO_COMMANDS } from "./lib/commands.mjs";
 import { deflateSync } from "node:zlib";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
@@ -119,6 +120,17 @@ async function projectApiRaw(rawName) {
   const root = await projectPageLib.projectRoot(name, { known: cards.map((p) => p.name) });
   const body = await projectPageLib.buildProjectPage({ name, card: cards.find((p) => p.name === name), root, chatGroup: cl.projects.find((p) => String(p.project).toLowerCase() === name.toLowerCase()), hubChats: hub, redact: real.redact });
   return { status: 200, body };
+}
+
+// Slash commands for the chat box (Phase 19): GET /api/commands?project=<name>. Name compared with the known names only, never a path; 30 s cache in the lib.
+const commandsStore = makeCommands();
+async function commandsApi(rawName) {
+  if (rawName === null || rawName === "") return { status: 200, body: { commands: DEMO ? DEMO_COMMANDS : commandsStore.get("", null) } };
+  const known = DEMO ? sample.projects.map((p) => p.name) : real.projects().projects.map((p) => p.name);
+  const name = projectPageLib.resolveName(rawName, known);
+  if (!name) return { status: 404, body: { error: "unknown project" } };
+  if (DEMO) return { status: 200, body: { commands: DEMO_COMMANDS } };
+  return { status: 200, body: { commands: commandsStore.get(name, await projectPageLib.projectRoot(name, { known })) } };
 }
 
 // every chat of a project page carries `pinned: true|false` (Phase 19 pins; the feed lib is not touched, the server adds the flag)
@@ -491,6 +503,7 @@ const server = createServer(async (req, res) => {
     if (path === "/api/upload") return req.method === "POST" ? await handleUpload(req, res, send, new URL(req.url, "http://x").searchParams) : send(405, '{"error":"method not allowed"}');
     if (req.method !== "GET" && req.method !== "HEAD") return send(405, '{"error":"method not allowed"}');
     if (path === "/api/project") { const r = await projectApi(new URL(req.url, "http://x").searchParams.get("name")); return send(r.status, JSON.stringify(r.body)); }
+    if (path === "/api/commands") { const r = await commandsApi(new URL(req.url, "http://x").searchParams.get("project")); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-handoff") { const r = handoffApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/pins") { const p = new URL(req.url, "http://x").searchParams.get("project"); return send(200, JSON.stringify({ pins: pinHooks.pins.list(p === null ? undefined : p) })); }
@@ -544,6 +557,14 @@ server.listen(PORT, HOST, async () => {
   ok("GET /api/project with an unknown name is 404", (await fetch(base + "/api/project?name=NoSuchProject")).status === 404);
   ok("GET /api/project with a path trick, an empty or missing name is 404", (await Promise.all(["..%5C..%5CWindows", "..%2F..", "C%3A%5CWindows", "", firstName.toLowerCase() === firstName ? firstName.toUpperCase() : firstName.toLowerCase()].map((n) => fetch(base + "/api/project?name=" + n).then((r) => r.status)))).every((s) => s === 404) && (await fetch(base + "/api/project")).status === 404);
   ok("POST and PUT to /api/project are refused", (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName), { method: "POST" })).status === 405 && (await fetch(base + "/api/project?name=" + encodeURIComponent(firstName), { method: "PUT" })).status === 405);
+  // slash commands (Phase 19): read only, project by exact name, user commands without a project
+  const rcm = await fetch(base + "/api/commands"); const jcm = await rcm.json();
+  ok("GET /api/commands (no project) lists user commands: name, description, source user, sorted, at most 300", rcm.status === 200 && Array.isArray(jcm.commands) && jcm.commands.length <= 300 && jcm.commands.every((c) => c.name && typeof c.description === "string" && c.description.length <= 180 && c.source === "user") && jcm.commands.every((c, i) => i === 0 || jcm.commands[i - 1].name.localeCompare(c.name, "en") <= 0));
+  const rcp = await fetch(base + "/api/commands?project=" + encodeURIComponent(firstName)); const jcp = await rcp.json();
+  ok("GET /api/commands?project=<known> returns the list (user and project sources only)", rcp.status === 200 && Array.isArray(jcp.commands) && jcp.commands.every((c) => c.source === "user" || c.source === "project") && jcp.commands.length >= jcm.commands.length);
+  ok("GET /api/commands with an unknown project is 404", (await fetch(base + "/api/commands?project=NoSuchProject")).status === 404);
+  ok("GET /api/commands with a path trick or a wrong-case name is 404", (await Promise.all(["..%5C..%5CWindows", "..%2F..", "C%3A%5CWindows", "%00", firstName.toLowerCase() === firstName ? firstName.toUpperCase() : firstName.toLowerCase()].map((n) => fetch(base + "/api/commands?project=" + n).then((r) => r.status)))).every((s) => s === 404));
+  ok("POST and PUT to /api/commands are refused", (await fetch(base + "/api/commands", { method: "POST" })).status === 405 && (await fetch(base + "/api/commands?project=" + encodeURIComponent(firstName), { method: "PUT" })).status === 405);
   ok("PUT is refused", (await fetch(base + "/api/projects", { method: "PUT" })).status === 405);
   ok("POST to a data route is refused", (await fetch(base + "/api/projects", { method: "POST" })).status === 405);
   ok("path tricks refused", (await fetch(base + "/..%2f..%2fserver.mjs")).status === 404);
@@ -891,6 +912,7 @@ server.listen(PORT, HOST, async () => {
   }));
   ok("--demo: a token-less pin and an upload without the token are refused", await withDemo(async (db) => (await fetch(db + "/api/action", { method: "POST", headers: { "Content-Type": "application/json", Origin: db }, body: JSON.stringify({ action: "chat-pin", chatId: "h-1", project: "A", pinned: true, confirm: true }) })).status === 403 && (await fetch(db + "/api/upload?chat=new", { method: "POST", headers: { "Content-Type": "application/octet-stream", Origin: db }, body: "x" })).status === 403));
   ok("the real data/pins.json was still not written after the demo server ran", (existsSync(realPinsFile) ? statSync(realPinsFile).mtimeMs : null) === pinsBefore);
+  ok("--demo: /api/commands serves the fixed sample list, an unknown project is still 404", await withDemo(async (db) => { const d = await (await fetch(db + "/api/commands")).json(); const sample0 = (await (await fetch(db + "/api/projects")).json()).projects[0].name; const dp = await fetch(db + "/api/commands?project=" + encodeURIComponent(sample0)); return d.commands.length === 7 && ["pickup", "handoff", "plan", "overview", "delegate", "docs", "info"].every((n) => d.commands.some((c) => c.name === n && c.description)) && dp.status === 200 && (await fetch(db + "/api/commands?project=NoSuch")).status === 404; }));
   const rc = await fetch(base + "/api/chats"); const jc = await rc.json();
   ok("GET /api/chats returns the list shape", rc.status === 200 && Array.isArray(jc.projects) && Number.isFinite(jc.max) && typeof jc.openListOk === "boolean");
   // chat log (Phase 19): a known id from the live list returns the conversation; anything else is 404; no write method works

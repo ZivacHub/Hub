@@ -227,6 +227,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   check("proposed: date from the heading note; 'not answered yet' = no owner's words", d[1].date === "2026-11-03" && d[1].ownerSaid === "");
   check("long text clipped to about 600 characters", d[1].question.length <= 600 && d[1].question.endsWith("…"));
   check("secret-looking text redacted in decisions", !JSON.stringify(d[2]).includes("abcdef1234567890") && !JSON.stringify(d[2]).includes("sk-a1") && d[2].question.includes("[hidden]"));
+  // an open chat that is waiting for the person (live state "waiting") passes through whole and sorts first
+  { const pw = await buildProjectPage({ name: "Alpha", card, root: root3, chatGroup: { project: "Alpha", chats: [{ id: "s-aaaaaaaa", kind: "app", name: "Waits", state: "waiting", needsYou: true, why: "question", snippet: "", lastActive: t(1), canAnswer: false, openLink: null }, { id: "s-bbbbbbbb", kind: "app", name: "Quiet", state: "idle", needsYou: false, lastActive: t(0), canAnswer: false }] }, hubChats: [], redact, chatsBase: base });
+    check("waiting state passes through: needs you, why question, listed first", pw.chats[0].id === "s-aaaaaaaa" && pw.chats[0].state === "waiting" && pw.chats[0].needsYou === true && pw.chats[0].why === "question" && pw.chats[1].state === "idle"); }
   const page2 = await buildProjectPage({ name: "Beta", card: { name: "Beta" }, root: root2, chatGroup: undefined, hubChats: [], redact, chatsBase: base });
   check("v2 layout (DECISIONS.md in the root) works, no handoff, no chats", page2.decisions.length === 1 && page2.decisions[0].id === "D2" && page2.handoff === null && page2.chats.length === 0);
   const many = Array.from({ length: 30 }, (_, i) => `## D${100 + i} — N${i}   [open]\n**Question:** q${i}\n`).join("\n");
