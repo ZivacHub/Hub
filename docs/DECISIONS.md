@@ -383,3 +383,8 @@ Layout: the two sections below. When a decision is answered, move its block from
 **The owner said (2026-11-21), his own words:** "read, meaning we can use the claudes reader in hub, since that text/promts lives and operate in claude desktop, I think we can use claudes voice that reads".
 **My reading (not his decision yet):** he wants a speaker button on each reply that reads it aloud. The reader is a part of the Claude desktop app and has no way in from outside, so the Hub cannot call it. Proposal: a speaker button using the voice built into the Hub window (Windows voices, free, no download, works now); the Jarvis voice (Kokoro, the voice track in the Jarvis chat) can replace it later.
 **Affects:** Phase 19 (19.9)
+
+## D61 — New Phase 21 "Limits and cost" is added; the Hub may write only the settings file into a project   [decided 2026-11-23 for adding the phase and the rule; the settings file name and the order are proposed]
+**The owner said (2026-11-23), his own words, in the pasted note:** "Add them to the plan as a new phase (this is my OK to add it), run the phase gate first, and tell me where it fits in the order." and "Read-only rule stays: the Hub never changes a project's files except the settings file of point 3."
+**Result:** Phase 21 is on the board (usage meter, hand-off before the limit, settings per project, cost view, ideas from the old orchestration project). The Hub writes into a project only the one settings file. PROPOSED, waiting for his yes: the file is `.claude/hub-settings.json` in each project, the phase sits right after Phase 19.
+**Affects:** Phase 21

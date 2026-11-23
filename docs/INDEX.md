@@ -24,6 +24,7 @@ Every document with "read when". Keep this list current: new doc => new row, sam
 | docs/plan/phases/19-pictures-pins.md | wiring /api/chat-image, drawing pictures or file chips in the chat view, or the Hub pinned chats (feed blocks, picture reader, pins) |
 | docs/plan/phases/19-attachments-fork.md | building or changing attachments or fork of Hub chats (Phase 19): upload store, pictures/files on start and answer, fork, refusal sentences |
 | docs/plan/phases/19-slash-commands.md | building or changing the slash-command list of the Hub chat box (GET /api/commands: contract, sources, what is skipped) |
+| docs/plan/phases/21-limits-and-cost.md | working on Phase 21 (usage meter, hand-off before the limit, settings per project, cost view): his words, what exists, proposed steps |
 | docs/plan/phases/10-dashboard-always-on.md | working on Phase 10 (dashboard starts with Windows, security pass) |
 | docs/plan/phases/04-answer-decisions-by-voice.md | working on Phase 4 |
 | docs/plan/phases/05-always-on-safely.md | working on Phase 5 |
