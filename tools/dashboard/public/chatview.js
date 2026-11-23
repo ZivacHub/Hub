@@ -1,9 +1,10 @@
-// Hub chat workspace (Phase 19, steps 19.1 to 19.5 on the project page). One chat shown as a real conversation:
-//   one slim band (title, kind, state, Remote Control in words and, for a resting Hub chat, its switch) + context bar (+ "Hand off and pick up", always; glowing from 60 percent)
-//   + the whole conversation from GET /api/chat-log (Claude's replies drawn as markdown, tools folded)
-//   + a composer docked at the bottom (Ctrl+Enter sends; asks first; the same requests the project page always sent) + a details column on the right.
-// The root element is built ONCE and moved into the page by project.js, so a refresh never loses the draft, the scroll place or open folds.
-// Safety: every piece of text goes in with textContent (via h()) or md.js (which never makes HTML from the text).
+// Hub chat workspace (Phase 19; clean-up redesign 2026-11). One chat shown as a real conversation, and nothing else on the page:
+//   one slim header band (title with a chevron that opens the chat list, status, Remote Control, compact context bar, "Hand off and pick up", one "..." menu)
+//   + the whole conversation from GET /api/chat-log (Claude's replies as markdown, tools folded, question cards, a quiet action row under every message)
+//   + one long composer (writing box with Attach and Send inside it, slash commands, one slim banner above it when the chat cannot be answered here)
+//   + a "Chat details" rail on the right (closed by default).
+// The root element is built ONCE and kept in the page by project.js, so a refresh never loses the draft, the scroll place or open folds.
+// Safety: every piece of text goes in with textContent (via h()) or md.js (which never makes HTML from the text). No inline styles (the page's policy forbids them): sizes are set with element.style from here.
 import { renderMarkdown } from "./md.js";
 
 const ANSWER_MAX = 4000;
@@ -13,11 +14,11 @@ const ROUND_POLL_MS = 3_000;
 const ROUND_KEEP_MS = 10 * 60_000;
 const OUTPUTS_FIRST = 12;
 const SOON = 60, NOW = 80;
-const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
+const STATE_WORD = { working: "Working", idle: "Idle", waiting: "Waiting for you", failed: "Failed", stopped: "Stopped", closed: "Closed" };
 const KIND_WORD = { hub: "Hub chat", app: "App chat", terminal: "Terminal chat" };
 const SVGNS = "http://www.w3.org/2000/svg";
 const ICONS = {
-  chev: "M6 3.5 10.5 8 6 12.5", check: "M3 8.5 6.5 12 13 4.5", cross: "M4 4l8 8M12 4l-8 8", down: "M3.5 6 8 10.5 12.5 6",
+  chev: "M6 3.5 10.5 8 6 12.5", check: "M3 8.5 6.5 12 13 4.5", cross: "M4 4l8 8M12 4l-8 8", down: "M3.5 6 8 10.5 12.5 6", left: "M10 3.5 5.5 8l4.5 4.5",
   clip: "M13 7.4 8 12.4a3 3 0 0 1-4.3-4.3l5.3-5.3a2 2 0 0 1 2.9 2.9L6.8 11a1 1 0 0 1-1.4-1.4l4.7-4.7",
   copy: "M5.5 5.5h7.5v8H5.5zM3 10.5V2.5h7.5",
   pin: "M9.6 2.3 13.7 6.4 12.2 7.1 10.4 9 10.7 11.7 9.9 12.5 3.5 6.1 4.3 5.3 7 5.6 8.9 3.8zM6.6 9.4 2.6 13.4",
@@ -25,11 +26,23 @@ const ICONS = {
   play: "M5.2 3.3 12.4 8 5.2 12.7z",
   file: "M4 1.8h5l3 3v9.4H4zM9 1.8v3h3",
   picture: "M2.5 3h11v10h-11zM2.5 11l3.5-3.5 3 3 2-2 2.5 2.5M10.5 6.2h.01",
+  speaker: "M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5zM10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.4 3.8a6 6 0 0 1 0 8.4",
+  stop: "M4.5 4.5h7v7h-7z",
+  more: "M3.5 8h.01M8 8h.01M12.5 8h.01",
+  search: "M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM10.4 10.4l3.1 3.1",
+  panel: "M2.5 3h11v10h-11zM10 3v10",
+  plus: "M8 3v10M3 8h10",
+  open: "M9 2.5h4.5V7M13.5 2.5 7 9M12 9.5v3.5H3V4h3.5",
+  radio: "M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z",
+  square: "M3 3h10v10H3z",
+  dia: "M8 2.5 13.5 8 8 13.5 2.5 8z",
+  clock: "M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM8 5v3.2l2 1.3",
+  list: "M3 4.5h10M3 8h10M3 11.5h10",
 };
 export function icon(name) {
   const s = document.createElementNS(SVGNS, "svg");
-  s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("width", "14"); s.setAttribute("height", "14"); s.setAttribute("fill", "none");
-  s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "1.8"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
+  s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("width", "16"); s.setAttribute("height", "16"); s.setAttribute("fill", "none");
+  s.setAttribute("stroke", "currentColor"); s.setAttribute("stroke-width", "1.6"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
   s.setAttribute("aria-hidden", "true"); s.setAttribute("class", "ic ic-" + name);
   const p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", ICONS[name]); s.append(p);
   return s;
@@ -49,6 +62,82 @@ function fmtTime(iso) {
   const t = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const same = d.toDateString() === new Date().toDateString();
   return same ? t : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${t}`;
+}
+
+// ---------- one small real menu (role="menu"): the "..." menus and the right-click menu share it ----------
+// items: { label, icon?, onSelect(), disabled?, reason? (shown under a greyed item), checked?, sep? }. Arrow keys, Home/End, Esc, Tab close it; the focus goes back to returnTo().
+let menuState = null;
+export function closeMenu(restore = true) {
+  const m = menuState;
+  if (!m) return;
+  menuState = null;
+  document.removeEventListener("pointerdown", m.onDown, true);
+  window.removeEventListener("resize", m.onAway);
+  window.removeEventListener("blur", m.onAway);
+  document.removeEventListener("wheel", m.onScroll, true);
+  document.removeEventListener("touchmove", m.onScroll, true);
+  m.el.remove();
+  if (m.opener) m.opener.setAttribute("aria-expanded", "false");
+  if (restore) { const t = m.returnTo ? m.returnTo() : null; if (t && t.isConnected) t.focus({ preventScroll: true }); }
+}
+export function menuIsOpen() { return !!menuState; }
+export function openMenu({ items, label, anchor = null, point = null, returnTo = null, className = "" }) {
+  closeMenu(false);
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const el = mk("div", "mn " + className);
+  el.setAttribute("role", "menu"); el.setAttribute("aria-label", label || "Menu");
+  const btns = [];
+  for (const it of items) {
+    if (!it) continue;
+    if (it.sep) { const sp = mk("div", "mn-sep"); sp.setAttribute("role", "separator"); el.append(sp); continue; }
+    const b = mk("button", "mn-item"); b.type = "button"; b.setAttribute("role", it.checked !== undefined ? "menuitemcheckbox" : "menuitem"); b.tabIndex = -1;
+    if (it.checked !== undefined) b.setAttribute("aria-checked", String(!!it.checked));
+    if (it.disabled) b.setAttribute("aria-disabled", "true");
+    const ic = mk("span", "mn-ic"); if (it.icon) ic.append(icon(it.icon)); b.append(ic);
+    const tx = mk("span", "mn-tx"); tx.append(mk("span", "mn-lab", it.label));
+    if (it.disabled && it.reason) tx.append(mk("span", "mn-why", it.reason));
+    b.append(tx);
+    if (it.badge) b.append(mk("span", "mn-badge", it.badge));
+    b.addEventListener("click", () => {
+      if (it.disabled) return;
+      closeMenu(true);
+      if (it.onSelect) it.onSelect();
+    });
+    btns.push(b); el.append(b);
+  }
+  const onKey = (e) => {
+    const i = btns.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus(); }
+    else if (e.key === "Home") { e.preventDefault(); btns[0].focus(); }
+    else if (e.key === "End") { e.preventDefault(); btns[btns.length - 1].focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+    else if (e.key === "Tab") { e.preventDefault(); closeMenu(true); }
+  };
+  el.addEventListener("keydown", onKey);
+  const m = {
+    el, opener: anchor, returnTo,
+    onDown: (e) => { if (!el.contains(e.target) && !(anchor && anchor.contains(e.target))) closeMenu(false); },
+    onAway: () => closeMenu(false),
+    onScroll: (e) => { if (!el.contains(e.target)) closeMenu(false); },
+  };
+  menuState = m;
+  document.body.append(el);
+  const r = el.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+  let x, y;
+  if (point) { x = point.x; y = point.y; }
+  else if (anchor) { const a = anchor.getBoundingClientRect(); x = a.right - r.width; y = a.bottom + 4; if (y + r.height > vh - 8 && a.top - r.height - 4 > 8) y = a.top - r.height - 4; }
+  else { x = 8; y = 8; }
+  x = Math.max(8, Math.min(x, vw - r.width - 8)); y = Math.max(8, Math.min(y, vh - r.height - 8));
+  el.style.left = `${Math.round(x)}px`; el.style.top = `${Math.round(y)}px`;
+  if (anchor) anchor.setAttribute("aria-expanded", "true");
+  document.addEventListener("pointerdown", m.onDown, true);
+  window.addEventListener("resize", m.onAway);
+  window.addEventListener("blur", m.onAway);
+  document.addEventListener("wheel", m.onScroll, { capture: true, passive: true });
+  document.addEventListener("touchmove", m.onScroll, { capture: true, passive: true });
+  (btns.find((b) => b.getAttribute("aria-disabled") !== "true") || btns[0] || el).focus({ preventScroll: true });
+  return el;
 }
 
 // ---------- attachments: what the page checks before it uploads (the Hub checks again, by the file's first bytes) ----------
@@ -83,7 +172,9 @@ export function fmtBytes(n) {
   return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 const KIND_LABEL = { image: "Picture", pdf: "PDF", text: "Text file" };
+const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window && typeof window.SpeechSynthesisUtterance === "function";
 
+const commandCache = new Map();   // project name -> the command list, asked once per page load
 async function getJson(url) {
   const r = await fetch(url, { cache: "no-store" });
   let json = null;
@@ -111,12 +202,11 @@ export function createChatView(deps) {
 
   // ---------- the fixed frame ----------
   const titleEl = h("h3", { class: "cv-title", id: "cv-title", tabindex: "-1" });
+  const chatsBtn = h("button", { class: "cv-ibtn cv-chev", type: "button", "data-k": "chats", "aria-haspopup": "dialog", "aria-label": "Switch chat", title: "Switch chat" }, icon("down"));
   const tagsEl = h("div", { class: "cv-tags" });
-  const actsEl = h("div", { class: "cv-hact", role: "group", "aria-label": "Chat actions" });
-  const metaEl = h("p", { class: "cv-meta" });
-  const headEl = h("header", { class: "cv-head" }, h("div", { class: "cv-head-top" }, titleEl, tagsEl), h("div", { class: "cv-head-sub" }, metaEl, actsEl));
   const ctxEl = h("div", { class: "cv-ctx-wrap" });
-  const bandEl = h("div", { class: "cv-band" }, headEl, ctxEl);
+  const menuBtn = h("button", { class: "cv-ibtn cv-more", type: "button", "data-k": "menu", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": "Chat menu", title: "Chat menu" }, icon("more"));
+  const bandEl = h("div", { class: "cv-band" }, h("div", { class: "cv-titlewrap" }, titleEl, chatsBtn), tagsEl, h("span", { class: "cv-fill" }), ctxEl, menuBtn);
   const askEl = h("div", { class: "cv-askbar", hidden: true });
   const roundEl = h("div", { class: "cv-round", hidden: true });
   const roundLive = h("p", { class: "sr", role: "status" });
@@ -138,7 +228,7 @@ export function createChatView(deps) {
     h("div", { class: "cv-lb-stage" }, lbImg));
   const el = h("section", { class: "cw", "aria-labelledby": "cv-title" }, bandEl, askEl, roundEl, roundLive, attSay, grid, fileInput, lb);
 
-  const ta = h("textarea", { id: "cv-ta", class: "chat-text cv-ta", rows: "3", maxlength: String(ANSWER_MAX), "aria-describedby": "cv-hint", placeholder: "Write your message" });
+  const ta = h("textarea", { id: "cv-ta", class: "cv-ta", rows: "3", maxlength: String(ANSWER_MAX), "aria-describedby": "cv-hint", placeholder: "Write your message" });
   let countEl = null;
 
   // ---------- focus and scroll that survive a redraw ----------
@@ -200,33 +290,31 @@ export function createChatView(deps) {
   const resumable = () => { const k = mode().kind; return !!st.chat && (st.chat.state === "closed" || st.chat.state === "stopped") && (k === "hub-write" || k === "app-write"); };
   const pctNow = () => (st.context && Number.isFinite(st.context.percent) ? st.context.percent : null);
 
-  // ---------- header and context bar ----------
+  // ---------- header band: title, status, Remote Control; context bar, hand-off button and the "..." menu on the right ----------
+  const isResting = () => !!st.chat && (st.chat.state === "idle" || st.chat.state === "waiting");
+  const isWaiting = () => !!st.chat && st.chat.state !== "working" && (st.chat.state === "waiting" || st.chat.needsYou === true);
+  const RC_HINT = {
+    on: "Remote Control is on: you can reach this chat from your phone. The Hub can't write into it while this is on.",
+    off: "Remote Control is off: this chat is not open to your phone.",
+    unknown: "Remote Control is unknown: the Claude app did not tell the Hub.",
+    terminal: "Remote Control is unknown: a terminal chat does not tell the Hub.",
+  };
   function drawHead() {
     const ch = c();
     if (!ch) return;
-    const state = STATE_WORD[ch.state] ? ch.state : "idle";
+    const state = STATE_WORD[ch.state] && ch.state !== "waiting" ? ch.state : "idle";
     titleEl.textContent = ch.title || "Chat";
     const rv = rcValue();
     const showRc = !(ch.kind === "terminal" && rv === null);
-    const sw = rcSwitchable() ? h("button", { class: "crc-btn", type: "button", "data-k": "rc-toggle", disabled: !!st.ask || st.sending }, rv === true ? "Turn off" : "Turn on") : null;
+    const status = isWaiting()
+      ? h("span", { class: "cneeds", title: ch.why === "permission" ? "Waiting for your permission" : ch.why === "question" ? "Waiting for your answer" : null }, "Waiting for you")
+      : h("span", { class: "cstate cs-" + state }, STATE_WORD[state]);
+    const rcHint = rv === true ? RC_HINT.on : rv === false ? RC_HINT.off : ch.kind === "terminal" ? RC_HINT.terminal : RC_HINT.unknown;
     withFocus(() => tagsEl.replaceChildren(...[
-      h("span", { class: "ckind" }, KIND_WORD[ch.kind] || "Chat"),
-      h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
-      ch.needsYou ? h("span", { class: "cneeds" }, ch.why === "permission" ? "Needs you: permission" : "Needs you") : null,
-      ch.pinned === true ? h("span", { class: "cpinned" }, icon("pin"), "Pinned") : null,
-      showRc ? h("span", { class: "crc" + (rv === true ? " on" : rv === null ? " unk" : "") }, "Remote Control: ", h("b", {}, rcWord()), sw) : null].filter(Boolean)));
-    // chat actions: Pin / Unpin for every chat (no question: it is undone with one click), Fork for a resting Hub chat, Resume for a closed or stopped chat that can be answered
-    const pinned = ch.pinned === true;
-    const acts = [h("button", { class: "btn cv-hbtn", type: "button", "data-k": "pin", disabled: pinBusy, title: pinned ? "Take this chat off the top of All chats" : "Keep this chat at the top of All chats" }, icon("pin"), pinned ? "Unpin" : "Pin")];
-    if (forkable()) acts.push(h("button", { class: "btn cv-hbtn", type: "button", "data-k": "fork", disabled: !!st.ask || st.sending, title: "Start a new chat that begins from everything said here" }, icon("fork"), "Fork"));
-    if (resumable()) acts.push(h("button", { class: "btn cv-hbtn", type: "button", "data-k": "resume", title: "Write the next message to continue this chat" }, icon("play"), "Resume"));
-    withFocus(() => actsEl.replaceChildren(...acts));
-    const bits = [];
-    if (ch.lastActive) bits.push(`Last active ${ago(ch.lastActive)}`);
-    if (st.meta && st.meta.model) bits.push(st.meta.model);
-    if (st.meta && st.meta.branch) bits.push(`branch ${st.meta.branch}`);
-    metaEl.textContent = bits.join("  ·  ");
-    metaEl.hidden = !bits.length;
+      status,
+      showRc ? h("span", { class: "crc" + (rv === true ? " on" : rv === null ? " unk" : ""), title: rcHint }, "Remote Control ", h("b", {}, rcWord())) : null,
+      ch.pinned === true ? h("span", { class: "cpinned", title: "Pinned" }, icon("pin"), h("span", { class: "sr" }, "Pinned")) : null].filter(Boolean)));
+    drawPinRows();
   }
 
   function askRow(ask) {
@@ -251,17 +339,19 @@ export function createChatView(deps) {
       const pct = pctNow();
       if (!ch) { ctxEl.replaceChildren(); askEl.replaceChildren(); askEl.hidden = true; return; }
       if (pct === null) {
-        kids.push(h("p", { class: "cv-ctx-none" }, st.loading ? "Context: reading…" : "Context: not known for this chat."));
+        kids.push(h("p", { class: "cv-ctx-none" }, st.loading ? "Context: reading…" : "Context: not known"));
       } else {
         const lv = ctxLevel(pct);
         const used = ctx.usedTokens, win = ctx.windowTokens;
         const label = `Context: ${pct}% full (about ${fmtTokens(used)} of ${fmtTokens(win)})`;
         const bar = h("div", { class: "cv-bar lv-" + lv, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.min(100, pct), "aria-label": label },
           fillEl(Math.min(100, pct)), tickEl(SOON), tickEl(NOW));
-        kids.push(h("div", { class: "cv-ctx-top" },
-          h("p", { class: "cv-ctx-label" }, label, ctx.estimated ? h("span", { class: "cv-est" }, "estimate") : null,
+        kids.push(h("div", { class: "cv-ctx" },
+          h("p", { class: "cv-ctx-label" }, h("b", {}, `Context ${pct}% full`), h("span", { class: "cv-ctx-sub" }, `${fmtTokens(used)} of ${fmtTokens(win)}${ctx.estimated ? ", estimate" : ""}`),
             lv === "soon" ? h("b", { class: "cv-lv lv-soon" }, "Time to hand off soon") : lv === "now" ? h("b", { class: "cv-lv lv-now" }, "Hand off now") : null),
-          handoffControl(pct)), bar);
+          bar));
+        const ho = handoffControl(pct);
+        if (ho) kids.push(ho);
       }
       const asks = [];
       if (st.ask && st.ask.where === "ctx") asks.push(askRow(st.ask));
@@ -276,20 +366,60 @@ export function createChatView(deps) {
   function fillEl(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
   function tickEl(at) { const i = document.createElement("i"); i.className = "cv-tick"; i.style.left = `${at}%`; return i; }
 
+  function roundWhy() {
+    const ch = c();
+    if (rcValue() === true) return "Turn Remote Control off first.";
+    if (!isResting()) return ch.state === "working" ? "Wait until Claude stops working." : "Only a resting chat can be handed off.";
+    if (roundRunning()) return "A hand-off is already running.";
+    return "";
+  }
   // "Hand off and pick up": always there on Hub chats (D59); a glow from 60 percent (amber) and 80 percent (red-orange); pressed only by Ivan, after a question
   function handoffControl(pct) {
     if (!isHub()) return null;
     if (visibleRound()) return null;
-    const ch = c();
-    let why = "";
-    if (rcValue() === true) why = "Turn Remote Control off first.";
-    else if (ch.state !== "idle") why = ch.state === "working" ? "Wait until Claude stops working." : "Only a resting chat can be handed off.";
-    else if (roundRunning()) why = "A hand-off is already running.";
+    const why = roundWhy();
     const asking = st.ask && st.ask.kind === "round";
     return h("div", { class: "cv-ho" },
-      h("button", { class: "btn" + (pct >= NOW ? " primary glow-now" : pct >= SOON ? " glow-soon" : ""), type: "button", "data-k": "round", disabled: !!why || asking || st.sending, "aria-describedby": why ? "cv-ho-why" : null }, "Hand off and pick up"),
-      why ? h("span", { class: "cv-ho-why", id: "cv-ho-why" }, why) : null);
+      h("button", { class: "btn cv-hobtn" + (pct >= NOW ? " primary glow-now" : pct >= SOON ? " glow-soon" : ""), type: "button", "data-k": "round", disabled: !!why || asking || st.sending, title: why || null, "aria-describedby": why ? "cv-ho-why" : null }, "Hand off and pick up"),
+      why ? h("span", { class: "sr", id: "cv-ho-why" }, why) : null);
   }
+
+  // ---------- the chat menu ("..." in the header) ----------
+  const answerWhy = () => {
+    const ch = c();
+    if (roundRunning()) return "A hand-off is running.";
+    if (rcValue() === true) return "Turn Remote Control off first.";
+    if (ch.state === "working") return "Wait until Claude stops working.";
+    if (ch.canAnswer !== true) return "This chat can't take a message right now.";
+    return "";
+  };
+  const forkWhy = () => (!isHub() ? "Only Hub chats can be copied for now." : answerWhy() || (rcValue() !== false ? "Turn Remote Control off first." : ""));
+  function chatMenuItems() {
+    const ch = c();
+    if (!ch) return [];
+    const items = [];
+    const pinned = ch.pinned === true;
+    items.push({ label: pinned ? "Unpin this chat" : "Pin this chat", icon: "pin", disabled: pinBusy, onSelect: () => togglePin() });
+    items.push(forkable() ? { label: "Fork this chat", icon: "fork", onSelect: () => startAsk("fork") } : { label: "Fork this chat", icon: "fork", disabled: true, reason: forkWhy() });
+    if (rcSwitchable()) items.push({ label: rcValue() === true ? "Turn Remote Control off" : "Turn Remote Control on", onSelect: () => startAsk("rc") });
+    else items.push({ label: "Remote Control", disabled: true, reason: isHub() ? (rcValue() === false ? "You can switch it on once Claude stops working." : "The Hub can't tell if it is on.") : ch.kind === "app" ? "Switch it in the Claude app. The Hub can't change it there." : "A terminal chat does not tell the Hub." });
+    const hubLink = ch.kind === "hub" && typeof ch.openLink === "string" && ch.openLink.startsWith("claude://resume?session=");
+    const appId = ch.kind === "app" ? appIdOf(ch.openLink) : null;
+    if (hubLink) items.push({ label: "Open this chat in the app", icon: "open", onSelect: () => openIn({ action: "chat-open-app", hubId: st.id }) });
+    else if (appId) items.push({ label: "Open this chat in the app", icon: "open", onSelect: () => openIn({ action: "chat-open-app", appId }) });
+    if (isHub()) {
+      items.push({ sep: true });
+      const why = answerWhy();
+      items.push({ label: "Hand off", disabled: !!why || !!st.ask || st.sending, reason: why, onSelect: () => startAsk("handoff") });
+      items.push({ label: "Pick up", disabled: !!why || !!st.ask || st.sending, reason: why, onSelect: () => startAsk("pickup") });
+    }
+    if (resumable()) items.push({ label: "Resume: write the next message", icon: "play", onSelect: () => { if (!ta.disabled) { ta.focus(); composer.scrollIntoView({ block: "nearest" }); } } });
+    items.push({ sep: true });
+    items.push({ label: "Chat details", icon: "panel", checked: !!st.sideOpen, onSelect: () => setSide(!st.sideOpen) });
+    if (isHub() && ch.state === "working") items.push({ label: "Stop this chat", icon: "stop", disabled: !!st.ask || st.sending, onSelect: () => startAsk("stop") });
+    return items;
+  }
+  function openChatMenu() { openMenu({ items: chatMenuItems(), label: "Chat menu", anchor: menuBtn, returnTo: () => menuBtn }); }
 
   // ---------- hand-off progress ----------
   function drawRound() {
@@ -397,6 +527,7 @@ export function createChatView(deps) {
       for (const g of groups(st.messages)) kids.push(g.role === "user" ? userMsg(g.msgs[0]) : claudeMsg(g));
     }
     thread.replaceChildren(...kids);
+    drawPinRows(); paintSpeak();
     if (opts.anchorOlder) scroll.scrollTop = prevTop + (scroll.scrollHeight - prevH);
     else if (wasBottom) toBottom();
     else scroll.scrollTop = prevTop;
@@ -419,9 +550,6 @@ export function createChatView(deps) {
       else out.push({ role: m.role === "user" ? "user" : "assistant", msgs: [m] });
     }
     return out;
-  }
-  function who(name, at) {
-    return h("div", { class: "cv-who" }, h("span", { class: "cv-name" }, name), at ? h("time", { class: "cv-time", datetime: at }, fmtTime(at)) : null);
   }
   // ----- pictures and files in the conversation -----
   const picSrc = (b) => `/api/chat-image?id=${encodeURIComponent(st.id)}&m=${b.m}&b=${b.b}`;
@@ -448,11 +576,36 @@ export function createChatView(deps) {
     return h("div", { class: "cv-fileitem" }, icon("file"), h("span", { class: "cv-fileitem-name" }, word), Number.isFinite(b.bytes) ? h("span", { class: "cv-fileitem-size" }, fmtBytes(b.bytes)) : null);
   }
   const textOf = (msgs) => msgs.flatMap((m) => (m.blocks || []).filter((b) => b.type === "text" && b.text).map((b) => b.text)).join("\n\n");
-  // the small row under a message: Copy now; the read-aloud button would sit after it (D60, waits for Ivan's yes, not built)
+  const groupAt = (i) => groups(st.messages).find((x) => x.msgs[0].i === i) || null;
+
+  // ----- the quiet row under EVERY message (always visible): Copy, Fork, Pin, Read aloud, and the time at the right end -----
+  const forkTitle = () => (forkable() ? "Fork this chat: start a new chat from everything said here" : `Fork this chat: ${forkWhy().replace(/\.$/, "").toLowerCase()}`);
+  function actBtn(k, ic, label, id) {
+    return h("button", { class: "cv-act", type: "button", "data-k": k, "data-id": String(id), "aria-label": label, title: label }, icon(ic));
+  }
   function actRow(msgs) {
-    if (!textOf(msgs).trim()) return null;
-    return h("div", { class: "cv-acts", role: "group", "aria-label": "Message actions" },
-      h("button", { class: "cv-act", type: "button", "data-k": "copy", "data-id": String(msgs[0].i) }, icon("copy"), h("span", {}, "Copy")));
+    const i = msgs[0].i;
+    const hasText = !!textOf(msgs).trim();
+    const kids = [];
+    if (hasText) kids.push(actBtn("copy", "copy", "Copy message", i));
+    if (isHub()) kids.push(actBtn("fork", "fork", "Fork this chat", i));
+    kids.push(actBtn("pin", "pin", "Pin this chat", i));
+    if (hasText && canSpeak) kids.push(actBtn("speak", "speaker", "Read aloud", i));
+    const at = msgs[msgs.length - 1].at;
+    return h("div", { class: "cv-acts", role: "group", "aria-label": "Message actions" }, ...kids, at ? h("time", { class: "cv-time", datetime: at }, fmtTime(at)) : null);
+  }
+  // keeps the Pin and Fork icons in every row in step with the chat (state, "pressed", why Fork is off)
+  function drawPinRows() {
+    const ch = c();
+    if (!ch) return;
+    const pinned = ch.pinned === true;
+    for (const b of thread.querySelectorAll('.cv-act[data-k="pin"]')) {
+      b.setAttribute("aria-pressed", String(pinned));
+      const t = pinned ? "Unpin this chat" : "Pin this chat";
+      b.setAttribute("aria-label", t); b.title = t; b.disabled = pinBusy;
+    }
+    const can = forkable() && !st.ask && !st.sending;
+    for (const b of thread.querySelectorAll('.cv-act[data-k="fork"]')) { b.disabled = !can; b.title = forkTitle(); }
   }
   function userMsg(m) {
     const parts = [];
@@ -470,7 +623,7 @@ export function createChatView(deps) {
     }
     flush();
     if (!parts.length) parts.push(h("div", { class: "cv-bubble" }, "(empty)"));
-    return h("article", { class: "cv-msg cv-u" }, who("You", m.at), ...parts, actRow([m]));
+    return h("article", { class: "cv-msg cv-u", "data-mi": String(m.i), tabindex: "-1", "aria-label": "You" }, ...parts, actRow([m]));
   }
   function claudeMsg(g) {
     const body = h("div", { class: "cv-body" });
@@ -482,6 +635,10 @@ export function createChatView(deps) {
         else if (b.type === "tool") {
           if (!tools) { tools = h("ul", { class: "cv-tools" }); body.append(tools); }
           tools.append(toolItem(b, `${m.i}:${bi}`));
+        } else if (b.type === "question") {
+          tools = null;
+          const card = questionCard(b, `${m.i}:${bi}`);
+          if (card) body.append(card);
         } else if (b.type === "text" && b.text) {
           tools = null;
           const box = h("div", { class: "md cv-md" });
@@ -491,7 +648,72 @@ export function createChatView(deps) {
       });
     }
     if (!body.childNodes.length) body.append(h("p", { class: "cv-empty-reply" }, "(no text in this reply)"));
-    return h("article", { class: "cv-msg cv-c" }, who("Claude", g.msgs[0].at), body, actRow(g.msgs));
+    return h("article", { class: "cv-msg cv-c", "data-mi": String(g.msgs[0].i), tabindex: "-1", "aria-label": "Claude" }, body, actRow(g.msgs));
+  }
+
+  // ----- question cards (feed block "question"): drawn like the Claude app, read-only. The card never sends anything. -----
+  const qPage = new Map();         // block key -> the question shown (a block can hold several)
+  const qBlocks = new Map();       // block key -> the block, for the pager
+  const plainLabel = (t) => String(t || "").replace(/\s*\(recommended\)\s*$/i, "").trim().toLowerCase();
+  function answerTexts(b, qs, page) {
+    const a = b.answer;
+    if (a === undefined || a === null || a === "") return [];
+    if (Array.isArray(a)) { const v = qs.length > 1 && a.length === qs.length ? a[page] : a; return (Array.isArray(v) ? v : [v]).map(String).filter(Boolean); }
+    if (typeof a === "object") { const v = a[qs[page].question] !== undefined ? a[qs[page].question] : Object.values(a)[page]; return v === undefined ? [] : (Array.isArray(v) ? v : [v]).map(String).filter(Boolean); }
+    return [String(a)];
+  }
+  function questionCard(b, key) {
+    const qs = Array.isArray(b.questions) ? b.questions.filter((q) => q && typeof q.question === "string" && q.question) : [];
+    if (!qs.length) return null;
+    qBlocks.set(key, b);
+    const page = Math.max(0, Math.min(qPage.get(key) || 0, qs.length - 1));
+    const q = qs[page];
+    const multi = q.multiSelect === true;
+    const answered = b.answered === true;
+    const texts = answered ? answerTexts(b, qs, page) : [];
+    const opts = Array.isArray(q.options) ? q.options.filter((o) => o && typeof o.label === "string") : [];
+    const joined = texts.map((t) => t.toLowerCase());
+    const chosen = opts.map((o) => { const l = plainLabel(o.label); return !!l && joined.some((t) => t === o.label.toLowerCase() || t === l || t.includes(l)); });
+    const unmatched = answered && texts.length > 0 && !chosen.some(Boolean);
+    const rows = opts.map((o, i) => h("li", { class: "cv-q-opt" + (chosen[i] ? " on" : ""), role: multi ? "checkbox" : "radio", "aria-checked": String(chosen[i]), "aria-disabled": "true" },
+      h("span", { class: "cv-q-mark" + (multi ? " sq" : ""), "aria-hidden": "true" }, chosen[i] && multi ? icon("check") : null),
+      h("span", { class: "cv-q-opt-tx" }, h("span", { class: "cv-q-lab" }, o.label), o.description ? h("span", { class: "cv-q-desc" }, o.description) : null)));
+    if (unmatched) {
+      rows.push(h("li", { class: "cv-q-opt on", role: multi ? "checkbox" : "radio", "aria-checked": "true", "aria-disabled": "true" },
+        h("span", { class: "cv-q-mark" + (multi ? " sq" : ""), "aria-hidden": "true" }, multi ? icon("check") : null),
+        h("span", { class: "cv-q-opt-tx" }, h("span", { class: "cv-q-lab" }, "Answer"), h("span", { class: "cv-q-desc" }, texts.join(", ")))));
+    } else {
+      rows.push(h("li", { class: "cv-q-opt other", role: multi ? "checkbox" : "radio", "aria-checked": "false", "aria-disabled": "true" },
+        h("span", { class: "cv-q-mark" + (multi ? " sq" : ""), "aria-hidden": "true" }), h("span", { class: "cv-q-opt-tx" }, h("span", { class: "cv-q-lab" }, "Other"))));
+    }
+    const pager = qs.length > 1 ? h("div", { class: "cv-q-pager", role: "group", "aria-label": "Questions" },
+      h("button", { class: "cv-ibtn sm", type: "button", "data-k": "q-prev", "data-id": key, "aria-label": "Previous question", disabled: page === 0 }, icon("left")),
+      h("span", { class: "cv-q-count", "aria-live": "polite" }, `${page + 1} of ${qs.length}`),
+      h("button", { class: "cv-ibtn sm", type: "button", "data-k": "q-next", "data-id": key, "aria-label": "Next question", disabled: page === qs.length - 1 }, icon("chev"))) : null;
+    let foot = null;
+    if (answered) foot = h("p", { class: "cv-q-foot ok" }, icon("check"), "Answered");
+    else if (b.answered === false && st.chat && st.chat.kind === "app") foot = h("p", { class: "cv-q-foot" }, "Answer it in the Claude app");
+    else if (b.answered === false && mode().kind === "hub-write") foot = h("p", { class: "cv-q-foot" }, "Write your answer in the box below");
+    return h("div", { class: "cv-q-wrap", "data-qkey": key },
+      b.recap ? h("p", { class: "cv-q-recap" }, b.recap) : null,
+      h("section", { class: "cv-q", "aria-label": "Question" + (qs.length > 1 ? ` ${page + 1} of ${qs.length}` : "") },
+        h("header", { class: "cv-q-head" },
+          h("div", { class: "cv-q-ask" }, q.header ? h("span", { class: "cv-q-chip" }, q.header) : null, h("p", { class: "cv-q-text" }, q.question)),
+          pager),
+        h("ul", { class: "cv-q-opts", role: multi ? "group" : "radiogroup", "aria-label": q.question, "aria-disabled": "true" }, rows),
+        foot ? h("div", { class: "cv-q-footrow" }, foot) : null));
+  }
+  function qMove(key, dir, btn) {
+    const b = qBlocks.get(key);
+    if (!b) return;
+    const n = (b.questions || []).length;
+    qPage.set(key, Math.max(0, Math.min((qPage.get(key) || 0) + dir, n - 1)));
+    const old = [...thread.querySelectorAll("[data-qkey]")].find((x) => x.dataset.qkey === key);
+    const card = questionCard(b, key);
+    if (old && card) old.replaceWith(card);
+    const want = dir < 0 ? "q-next" : "q-prev";
+    const nb = card && ([...card.querySelectorAll("button[data-k]")].find((x) => x.dataset.k === btn.dataset.k && !x.disabled) || [...card.querySelectorAll("button[data-k]")].find((x) => x.dataset.k === want));
+    if (nb) nb.focus({ preventScroll: true });
   }
   function toolItem(b, key) {
     const status = b.status === "ok" || b.status === "error" ? b.status : "unknown";
@@ -584,24 +806,110 @@ export function createChatView(deps) {
     t.remove();
     return ok;
   }
-  async function copyMessage(btn) {
-    const i = Number(btn.dataset.id);
-    const g = groups(st.messages).find((x) => x.msgs[0].i === i);
-    const text = g ? textOf(g.msgs) : "";
-    if (!text) return;
+  async function copyPlain(text) {
+    if (!text) return false;
     let ok = false;
     try { await navigator.clipboard.writeText(text); ok = true; } catch { ok = legacyCopy(text); }
-    if (!ok) { setNote("Could not copy. Select the text and press Ctrl+C.", true); return; }
+    if (!ok) { setNote("Could not copy. Select the text and press Ctrl+C.", true); return false; }
     const tick = ++copyTick;
     setNote("Copied");
-    const lab = btn.querySelector("span");
-    if (lab) lab.textContent = "Copied";
-    setTimeout(() => {
-      if (lab && lab.isConnected) lab.textContent = "Copy";
-      const n = document.getElementById("note");
-      if (tick === copyTick && n && n.textContent === "Copied") setNote("");
-    }, 1600);
+    setTimeout(() => { const n = document.getElementById("note"); if (tick === copyTick && n && n.textContent === "Copied") setNote(""); }, 1600);
+    return true;
   }
+  async function copyMessage(btn) {
+    const g = groupAt(Number(btn.dataset.id));
+    const text = g ? textOf(g.msgs) : "";
+    if (!text || !(await copyPlain(text))) return;
+    btn.replaceChildren(icon("check")); btn.classList.add("done");
+    setTimeout(() => { if (btn.isConnected) { btn.replaceChildren(icon("copy")); btn.classList.remove("done"); } }, 1600);
+  }
+
+  // ----- read aloud (Ivan's wish): the browser's own speech, no download. Reads the reply text only: no code blocks, no tool lines. -----
+  function speechText(md) {
+    return String(md)
+      .replace(/```[\s\S]*?(```|$)/g, " ").replace(/~~~[\s\S]*?(~~~|$)/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/`([^`]*)`/g, "$1")
+      .replace(/^\s{0,3}#{1,6}\s*/gm, "").replace(/^\s*[-*+]\s+/gm, "").replace(/^\s*\d+[.)]\s+/gm, "").replace(/^\s*>\s?/gm, "")
+      .replace(/\*{1,3}|~~/g, "").replace(/\|/g, " ").replace(/<[^>]+>/g, " ")
+      .replace(/([.!?:;])[ \t]*\n+/g, "$1 ").replace(/\n+/g, ". ").replace(/\s{2,}/g, " ").trim();
+  }
+  let speaking = null, speakUtter = null;
+  function paintSpeak() {
+    for (const b of el.querySelectorAll('.cv-act[data-k="speak"]')) {
+      const on = speaking !== null && Number(b.dataset.id) === speaking;
+      if (on === (b.dataset.on === "1")) continue;
+      b.dataset.on = on ? "1" : "";
+      b.replaceChildren(icon(on ? "stop" : "speaker"));
+      const t = on ? "Stop reading" : "Read aloud";
+      b.setAttribute("aria-label", t); b.title = t; b.setAttribute("aria-pressed", String(on));
+    }
+  }
+  function stopSpeak() {
+    if (canSpeak) { try { speechSynthesis.cancel(); } catch { /* ignore */ } }
+    speaking = null; speakUtter = null; paintSpeak();
+  }
+  function toggleSpeak(i) {
+    if (!canSpeak) return;
+    if (speaking === i) { stopSpeak(); return; }
+    const g = groupAt(i);
+    const text = g ? speechText(textOf(g.msgs)) : "";
+    if (!text) { setNote("There is no text to read in this message."); return; }
+    try { speechSynthesis.cancel(); } catch { /* ignore */ }
+    const u = new SpeechSynthesisUtterance(text);
+    // D60 (proposed): window voice; Jarvis voice may replace it later
+    const done = () => { if (speakUtter === u) { speaking = null; speakUtter = null; paintSpeak(); } };
+    u.onend = done; u.onerror = done;
+    speaking = i; speakUtter = u; paintSpeak();
+    try { speechSynthesis.speak(u); } catch { done(); }
+  }
+
+  // ----- right-click on a message: a real menu at the pointer (Shift+F10 or the Menu key opens it on the focused message) -----
+  const visibleText = (m) => [...m.querySelectorAll(".cv-bubble, .cv-md")].map((x) => x.innerText.trim()).filter(Boolean).join("\n\n");
+  function selectionIn(m) {
+    const sel = window.getSelection ? window.getSelection() : null;
+    if (!sel || sel.isCollapsed || !sel.anchorNode || !m.contains(sel.anchorNode) || !m.contains(sel.focusNode)) return "";
+    return sel.toString().trim();
+  }
+  function msgMenu(m, { point, picBtn = null, returnTo }) {
+    const i = Number(m.dataset.mi);
+    const g = groupAt(i);
+    if (!g) return;
+    const items = [];
+    const sel = selectionIn(m);
+    if (sel) items.push({ label: "Copy selection", icon: "copy", onSelect: () => copyPlain(sel) });
+    if (picBtn) items.push({ label: "Open large view", icon: "picture", onSelect: () => openPicture(picBtn) });
+    const raw = textOf(g.msgs);
+    if (raw.trim()) {
+      items.push({ label: "Copy message", icon: "copy", onSelect: () => copyPlain(visibleText(m) || raw) });
+      items.push({ label: "Copy as Markdown", onSelect: () => copyPlain(raw) });
+      if (canSpeak) items.push({ label: speaking === i ? "Stop reading" : "Read aloud", icon: speaking === i ? "stop" : "speaker", onSelect: () => toggleSpeak(i) });
+    }
+    if (items.length) items.push({ sep: true });
+    if (isHub()) items.push(forkable() && !st.ask && !st.sending ? { label: "Fork this chat", icon: "fork", onSelect: () => startAsk("fork") } : { label: "Fork this chat", icon: "fork", disabled: true, reason: forkWhy() || "Finish the question that is open first." });
+    items.push({ label: c() && c().pinned === true ? "Unpin this chat" : "Pin this chat", icon: "pin", disabled: pinBusy, onSelect: () => togglePin() });
+    openMenu({ items, label: "Message menu", point, returnTo, className: "mn-msg" });
+  }
+  thread.addEventListener("contextmenu", (e) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || t.closest("input, textarea, [contenteditable]")) return;
+    const m = t.closest(".cv-msg");
+    if (!m) return;
+    e.preventDefault();
+    const pic = t.closest(".cv-pic");
+    const prev = document.activeElement, id = m.dataset.mi;
+    msgMenu(m, { point: { x: e.clientX, y: e.clientY }, picBtn: pic ? pic.querySelector(".cv-pic-btn") : null,
+      returnTo: () => (prev && prev !== document.body && prev.isConnected && thread.contains(prev) ? prev : [...thread.querySelectorAll(".cv-msg")].find((x) => x.dataset.mi === id) || null) });
+  });
+  scroll.addEventListener("keydown", (e) => {
+    if (!(e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t || t.closest("input, textarea, [contenteditable]")) return;
+    const m = t.closest(".cv-msg") || (t === scroll ? [...thread.querySelectorAll(".cv-msg")].pop() : null);
+    if (!m) return;
+    e.preventDefault();
+    const r = (t === scroll ? m : t).getBoundingClientRect();
+    msgMenu(m, { point: { x: Math.max(r.left + 8, 8), y: Math.min(r.bottom, window.innerHeight - 80) }, returnTo: () => (t.isConnected ? t : m) });
+  });
 
   function openPicture(btn) {
     const img = btn.querySelector("img");
@@ -771,18 +1079,59 @@ export function createChatView(deps) {
   function openButtons(m) {
     const ch = c();
     const out = [];
-    if (ch.kind === "hub" && typeof ch.openLink === "string" && ch.openLink.startsWith("claude://resume?session=")) out.push(h("button", { class: "btn", type: "button", "data-k": "open-hub" }, "Open in the app"));
-    if (ch.kind === "app" && m.appId) out.push(h("button", { class: "btn open-this", type: "button", "data-k": "open-app", "data-id": m.appId }, "Open this chat"));
+    if (ch.kind === "hub" && typeof ch.openLink === "string" && ch.openLink.startsWith("claude://resume?session=")) out.push(h("button", { class: "btn", type: "button", "data-k": "open-hub" }, "Open it"));
+    if (ch.kind === "app" && m.appId) out.push(h("button", { class: "btn open-this", type: "button", "data-k": "open-app", "data-id": m.appId }, "Open it"));
     return out;
   }
-  function field(label, { disabled = false, readOnly = false, files = false } = {}) {
-    const draft = drafts.get(st.id) || "";
-    if (ta.value !== draft) ta.value = draft;
-    ta.disabled = disabled; ta.readOnly = readOnly;
-    countEl = h("span", { class: "cv-count" }, `${ta.value.length} / ${ANSWER_MAX}`);
-    return h("div", { class: "cf-field cv-field" },
-      h("label", { for: "cv-ta" }, label), ta,
-      h("p", { class: "cv-hint", id: "cv-hint" }, h("span", {}, "Ctrl+Enter sends. Enter starts a new line.", files ? h("span", { class: "cv-hint-files" }, " Drop files here or paste a picture to attach it.") : null), countEl));
+  const writable = (m = mode()) => m.kind === "hub-write" || m.kind === "app-write";
+  const PLACEHOLDER = {
+    "hub-write": "Write your message. Type / for commands.", "app-write": "Write your answer. Type / for commands.",
+    "hub-working": "Claude is working. You can write when it stops.", "hub-round": "A hand-off is running. You can write when it is finished.",
+    "hub-rc": "Remote Control is on: answer it on your phone.", "hub-other": "This chat can't take a message from the Hub right now.",
+    "app-note": "Answer it in the Claude app.", terminal: "Answer it in the terminal.", none: "",
+  };
+
+  // ONE slim banner above the writing box when this chat cannot be answered here (instead of notices stacked under it)
+  function composerBanner(m) {
+    const ch = c();
+    const text = (t, work = false) => h("span", { class: "cv-cb-text" }, work ? h("span", { class: "cv-pulse", "aria-hidden": "true" }) : null, t);
+    const acts = [];
+    let t = null;
+    if (m.kind === "hub-working") {
+      t = text("Claude is working. You can write when it stops.", true);
+      acts.push(h("button", { class: "btn", type: "button", "data-k": "stop", disabled: st.sending || !!st.ask }, "Stop"));
+    } else if (m.kind === "hub-round") t = text("A hand-off is running. You can write when it is finished.", true);
+    else if (m.kind === "hub-rc") {
+      t = text("Remote Control is on. Answer it on your phone, or turn it off to answer here.", ch.state === "working");
+      if (rcSwitchable()) acts.push(h("button", { class: "btn", type: "button", "data-k": "rc-toggle", disabled: st.sending || !!st.ask }, "Turn Remote Control off"));
+      if (ch.state === "working") acts.push(h("button", { class: "btn", type: "button", "data-k": "stop", disabled: st.sending || !!st.ask }, "Stop"));
+      acts.push(...openButtons(m));
+    } else if (m.kind === "hub-other") { t = text("This chat can't take a message from the Hub right now."); acts.push(...openButtons(m)); }
+    else if (m.kind === "app-note") {
+      t = text(ch.state === "closed" ? (ch.remoteControl === true ? "This chat is closed and Remote Control is on. Answer it on your phone, or open it in the Claude app." : "This chat is closed. Answer it in the Claude app.") : "This chat runs in the Claude app.");
+      acts.push(...openButtons(m));
+    } else if (m.kind === "terminal") t = text("This chat runs in a terminal. Answer it there.");
+    else if (m.kind === "app-write") { t = text("This chat is closed. Answering here continues it in the Claude app."); acts.push(...openButtons(m)); }
+    if (!t) return null;
+    const bits = [];
+    if (m.kind === "app-note" || m.kind === "terminal") {
+      bits.push(h("span", { class: "cv-cb-or" }, "or"));
+      bits.push(h("span", { class: "cv-cb-soon", title: "Copying an app or terminal chat into the Hub needs your decision first" }, "continue it here as a copy", h("em", {}, "coming soon")));
+    } else if (forkable()) {
+      bits.push(h("span", { class: "cv-cb-or" }, "or"), h("button", { class: "linkbtn", type: "button", "data-k": "fork" }, "continue it here as a copy"));
+    }
+    return h("div", { class: "cv-cbanner", role: "status" }, t, h("span", { class: "cv-cb-acts" }, ...acts, ...bits));
+  }
+
+  // the writing box is at least 3 lines and grows with the text up to about 10 lines
+  function autosize() {
+    if (!ta.isConnected || !ta.clientWidth) return;
+    if (!ta.value) { ta.style.height = ""; return; }
+    ta.style.height = "auto";
+    const cs = getComputedStyle(ta);
+    const line = parseFloat(cs.lineHeight) || 22;
+    const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    ta.style.height = `${Math.min(ta.scrollHeight, Math.round(line * 10 + pad))}px`;
   }
 
   function drawComposer() {
@@ -791,60 +1140,103 @@ export function createChatView(deps) {
       if (!ch) { composer.replaceChildren(); return; }
       const m = mode();
       const kids = [];
-      const hasText = !!(drafts.get(st.id) || "").trim();
+      const can = writable(m);
       const asking = st.ask && st.ask.where === "composer";
       const busy = st.sending;
-      const stopBtn = () => h("button", { class: "btn", type: "button", "data-k": "stop", disabled: busy || !!asking }, "Stop");
-      const actionRow = (btns) => (asking ? askRow(st.ask) : h("div", { class: "actions" }, ...btns.flat().filter(Boolean)));
-      if (m.kind === "hub-write") {
-        const list = attList();
-        const locked = busy || !!asking;
-        if (list.length) kids.push(h("ul", { class: "cv-chips", "aria-label": "Attached files" }, list.map((e) => chipEl(e, locked))));
-        kids.push(field("Your message", { disabled: busy, readOnly: !!asking, files: true }));
-        kids.push(actionRow([
-          h("button", { class: "btn primary", type: "button", "data-k": "send", disabled: !sendReady() }, busy ? "Sending…" : attBusy() ? "Uploading…" : "Send"),
-          h("button", { class: "btn cv-attach", type: "button", "data-k": "attach", "aria-label": "Attach files or pictures", title: "Attach files or pictures", disabled: locked }, icon("clip"), "Attach"),
-          h("button", { class: "btn quiet-act", type: "button", "data-k": "handoff", disabled: busy }, "Hand off"),
-          h("button", { class: "btn quiet-act", type: "button", "data-k": "pickup", disabled: busy }, "Pick up"),
-          openButtons(m)]));
-      } else if (m.kind === "hub-working") {
-        kids.push(h("p", { class: "cv-note work", role: "status" }, h("span", { class: "cv-pulse", "aria-hidden": "true" }), "Claude is working… you can write when it stops."));
-        kids.push(field("Your message", { disabled: true }));
-        kids.push(actionRow([stopBtn(), openButtons(m)]));
-      } else if (m.kind === "hub-round") {
-        kids.push(h("p", { class: "cv-note work", role: "status" }, h("span", { class: "cv-pulse", "aria-hidden": "true" }), "A hand-off is running. You can write when it is finished."));
-        kids.push(field("Your message", { disabled: true }));
-      } else if (m.kind === "hub-rc") {
-        kids.push(h("p", { class: "cv-note" }, "Remote Control is on. Answer it on your phone, or turn Remote Control off to answer it here."));
-        const offBtn = h("button", { class: "btn", type: "button", "data-k": "rc-toggle", disabled: busy || !!st.ask }, "Turn Remote Control off");
-        if (ch.state === "working") kids.push(actionRow([stopBtn(), offBtn, h("span", { class: "cp-rc" }, "Working…"), openButtons(m)]));
-        else kids.push(h("div", { class: "actions" }, offBtn, ...openButtons(m)));
-      } else if (m.kind === "hub-other") {
-        kids.push(h("p", { class: "cv-note" }, "This chat can't take a message from the Hub right now."));
-        if (openButtons(m).length) kids.push(h("div", { class: "actions" }, ...openButtons(m)));
-      } else if (m.kind === "app-write") {
-        kids.push(h("p", { class: "cv-note" }, "This chat is closed. You can answer it here: Claude continues in the same chat. Or open it in the Claude app."));
-        kids.push(field("Your message", { disabled: busy, readOnly: !!asking }));
+      const hasText = !!(drafts.get(st.id) || "").trim();
+      const bn = composerBanner(m);
+      if (bn) kids.push(bn);
+      if (asking) kids.push(askRow(st.ask));
+      if (m.kind === "app-write") {
         if (busy) kids.push(h("p", { class: "app-busy", role: "status" }, h("span", { class: "dot", "aria-hidden": "true" }), "Answering from the Hub. Don't type in this chat in the app until it is done."));
         const res = results.get(st.id);
         if (res && !busy) kids.push(appResult(res));
-        kids.push(actionRow([
-          h("button", { class: "btn primary", type: "button", "data-k": "send-app", disabled: busy || !hasText }, busy ? "Answering…" : "Send"),
-          openButtons(m), h("span", { class: "cp-rc" }, "Remote Control: off")]));
-      } else if (m.kind === "app-note") {
-        kids.push(h("p", { class: "cv-note" }, ch.state === "closed"
-          ? (ch.remoteControl === true ? "This chat is closed and Remote Control is on. Answer it on your phone, or open it in the Claude app." : "This chat is closed. Open it in the Claude app and answer it there.")
-          : "This chat is open in the Claude app. Answer it there so it does not split."));
-        const rc = `Remote Control: ${rcWord().toLowerCase()}`;
-        kids.push(h("div", { class: "actions" }, ...openButtons(m), h("span", { class: "cp-rc" }, rc)));
-      } else if (m.kind === "terminal") {
-        kids.push(h("p", { class: "cv-note" }, "This chat is open in a terminal. Answer it there."));
       }
-      composer.classList.toggle("is-empty", !kids.length);
+      const draft = drafts.get(st.id) || "";
+      if (ta.value !== draft) ta.value = draft;
+      ta.disabled = !can || busy; ta.readOnly = !!asking;
+      ta.placeholder = PLACEHOLDER[m.kind] || "";
+      countEl = h("span", { class: "cv-count" }, `${ta.value.length} / ${ANSWER_MAX}`);
+      const list = m.kind === "hub-write" ? attList() : [];
+      const locked = busy || !!asking;
+      const sendKey = m.kind === "app-write" ? "send-app" : "send";
+      const sendOn = can && (m.kind === "app-write" ? !busy && hasText : sendReady());
+      const sendLabel = busy ? (m.kind === "app-write" ? "Answering…" : "Sending…") : attBusy() && m.kind === "hub-write" ? "Uploading…" : "Send";
+      const box = h("div", { class: "cv-box" + (can ? "" : " off") },
+        list.length ? h("ul", { class: "cv-chips", "aria-label": "Attached files" }, list.map((e) => chipEl(e, locked))) : null,
+        h("label", { for: "cv-ta", class: "sr" }, "Your message"),
+        ta,
+        h("div", { class: "cv-box-foot" },
+          m.kind === "hub-write" ? h("button", { class: "cv-ibtn", type: "button", "data-k": "attach", "aria-label": "Attach files or pictures", title: "Attach files or pictures", disabled: locked }, icon("clip")) : h("span", {}),
+          h("button", { class: "btn primary cv-send", type: "button", "data-k": sendKey, disabled: !sendOn }, sendLabel)));
+      kids.push(h("div", { class: "cv-boxwrap" }, slashEl, box));
+      if (can) kids.push(h("p", { class: "cv-hint", id: "cv-hint" }, h("span", {}, "Ctrl+Enter sends. Enter starts a new line.", m.kind === "hub-write" ? h("span", { class: "cv-hint-files" }, " Drop files here or paste a picture to attach it.") : null), countEl));
+      else kids.push(h("span", { id: "cv-hint", class: "sr" }, PLACEHOLDER[m.kind] || ""));
       composer.replaceChildren(...kids);
+      paintSlash();
+      autosize();
     });
     if (st.ask && st.ask.where === "composer" && st.ask.fresh) { st.ask.fresh = false; const y = composer.querySelector('[data-k="yes"]'); if (y) y.focus(); }
   }
+
+  // ---------- slash commands: "/" as the first character opens a small list above the box. It only inserts "/name " into the box; nothing is sent. ----------
+  // The list comes from GET /api/commands?project=<name> (asked once per page load and project). If the route fails there is no list, and typing "/" is just text.
+  const sl = { open: false, items: [], active: 0 };
+  const slashEl = h("ul", { class: "cv-slash", id: "cv-slash", role: "listbox", "aria-label": "Commands", hidden: true });
+  async function loadCommands() {
+    const proj = deps.projectName();
+    if (commandCache.has(proj)) return commandCache.get(proj);
+    const p = (async () => {
+      try {
+        const r = await getJson(`/api/commands?project=${encodeURIComponent(proj)}`);
+        if (r.ok && r.json && Array.isArray(r.json.commands)) {
+          return r.json.commands.filter((x) => x && typeof x.name === "string" && /^[\w:.-]{1,64}$/.test(x.name))
+            .map((x) => ({ name: x.name, description: typeof x.description === "string" ? x.description : "", hint: typeof x.hint === "string" ? x.hint : "", source: typeof x.source === "string" ? x.source : "" }));
+        }
+      } catch { /* no list: the box stays plain text */ }
+      return [];
+    })();
+    commandCache.set(proj, p);
+    return p;
+  }
+  function closeSlash() { if (!sl.open) return; sl.open = false; paintSlash(); }
+  function paintSlash() {
+    const show = sl.open && sl.items.length > 0 && writable();
+    slashEl.hidden = !show;
+    ta.setAttribute("aria-expanded", String(show));
+    if (!show) { ta.removeAttribute("aria-controls"); ta.removeAttribute("aria-activedescendant"); slashEl.replaceChildren(); return; }
+    ta.setAttribute("aria-controls", "cv-slash");
+    slashEl.replaceChildren(...sl.items.map((c2, i) => h("li", { class: "cv-sl-opt" + (i === sl.active ? " on" : ""), role: "option", id: "cv-sl-" + i, "aria-selected": String(i === sl.active), "data-i": String(i) },
+      h("span", { class: "cv-sl-name" }, "/" + c2.name, c2.hint ? h("i", {}, " " + c2.hint) : null), h("span", { class: "cv-sl-desc" }, c2.description), c2.source ? h("span", { class: "cv-sl-src" }, c2.source) : null)));
+    ta.setAttribute("aria-activedescendant", "cv-sl-" + sl.active);
+    const on = slashEl.children[sl.active];
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+  }
+  async function updateSlash() {
+    const v = ta.value;
+    if (!writable() || !/^\/[^\s]*$/.test(v)) { closeSlash(); return; }
+    const q = v.slice(1).toLowerCase();
+    const all = await loadCommands();
+    if (ta.value !== v) return;   // typed on meanwhile: the newer call decides
+    const starts = all.filter((x) => x.name.toLowerCase().startsWith(q)), inside = all.filter((x) => !x.name.toLowerCase().startsWith(q) && x.name.toLowerCase().includes(q));
+    sl.items = [...starts, ...inside].slice(0, 60);
+    sl.active = 0; sl.open = sl.items.length > 0;
+    paintSlash();
+  }
+  function pickSlash(i) {
+    const it = sl.items[i];
+    if (!it || !st.id) return;
+    ta.value = `/${it.name} `;
+    drafts.set(st.id, ta.value);
+    closeSlash();
+    onDraftChange();
+    ta.focus({ preventScroll: true });
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch { /* ignore */ }
+  }
+  slashEl.addEventListener("mousedown", (e) => e.preventDefault());
+  slashEl.addEventListener("click", (e) => { const li = e.target instanceof Element ? e.target.closest(".cv-sl-opt") : null; if (li) pickSlash(Number(li.dataset.i)); });
+  ta.addEventListener("blur", () => { setTimeout(() => { if (document.activeElement !== ta) closeSlash(); }, 0); });
+
   function appResult(res) {
     if (res.ok && res.reply) {
       const box = h("div", { class: "said-wrap app-result" + (res.warn ? " warn" : "") }, h("span", { class: "cp-label" }, res.warn ? res.text : "Claude replied"));
@@ -883,9 +1275,9 @@ export function createChatView(deps) {
       const m = mode(); if (m.kind !== "app-write" || !text) return;
       a = { where: "composer", text: "Send this answer into the chat in the Claude app?", extra: "Don't type in that chat while it works.", body: { action: "chat-answer-app", appId: m.appId, text }, payload: text };
     }
-    else if (kind === "stop") { if (!isHub()) return; a = { where: "composer", text: "Stop this chat?", extra: "You can answer it later to continue.", body: { action: "chat-stop", id: st.id } }; }
-    else if (kind === "handoff") { if (!isHub()) return; a = { where: "composer", text: "Hand off this chat?", extra: "Claude saves where the work stands and writes the handoff note. " + SAFE, body: { action: "chat-answer", id: st.id, text: "/handoff" } }; }
-    else if (kind === "pickup") { if (!isHub()) return; a = { where: "composer", text: "Run /pickup in this chat?", extra: SAFE, body: { action: "chat-answer", id: st.id, text: "/pickup" } }; }
+    else if (kind === "stop") { if (!isHub()) return; a = { where: "ctx", text: "Stop this chat?", extra: "You can answer it later to continue.", body: { action: "chat-stop", id: st.id } }; }
+    else if (kind === "handoff") { if (!isHub()) return; a = { where: "ctx", text: "Hand off this chat?", extra: "Claude saves where the work stands and writes the handoff note. " + SAFE, body: { action: "chat-answer", id: st.id, text: "/handoff" } }; }
+    else if (kind === "pickup") { if (!isHub()) return; a = { where: "ctx", text: "Run /pickup in this chat?", extra: SAFE, body: { action: "chat-answer", id: st.id, text: "/pickup" } }; }
     else if (kind === "rc") {
       if (!rcSwitchable()) return;
       const on = rcValue() !== true;
@@ -901,14 +1293,12 @@ export function createChatView(deps) {
     st.ask = { ...a, kind, chatId: st.id, fresh: true };
     st.roundMsg = "";
     setNote("");
-    drawComposer(); drawContext(); drawHead(); drawSide();
+    drawComposer(); drawContext(); drawHead(); drawSide(); drawPinRows();
   }
   // a closed question hands the focus back to the button that opened it (the switch), so the keyboard does not lose its place
   function focusBack(a) {
     if (!a || (a.kind !== "rc" && a.kind !== "fork")) return;
-    const want = a.kind === "fork" ? "fork" : "rc-toggle";
-    const b = [...el.querySelectorAll(`[data-k="${want}"]`)].find((x) => !x.disabled && x.offsetParent !== null);
-    if (b) b.focus({ preventScroll: true });
+    menuBtn.focus({ preventScroll: true });
   }
   function cancelAsk() { if (!st.ask) return; const a = st.ask; st.ask = null; drawComposer(); drawContext(); drawHead(); drawSide(); focusBack(a); }
 
@@ -980,13 +1370,15 @@ export function createChatView(deps) {
     setTimeout(() => { if (st.id === id) refresh(); }, 2500);
   }
 
-  ta.addEventListener("input", () => {
+  function onDraftChange() {
     if (!st.id) return;
     drafts.set(st.id, ta.value);
     if (countEl) countEl.textContent = `${ta.value.length} / ${ANSWER_MAX}`;
     const b = composer.querySelector('[data-k="send"], [data-k="send-app"]');
-    if (b) b.disabled = b.dataset.k === "send" ? !sendReady() : !ta.value.trim() || st.sending;
-  });
+    if (b) b.disabled = !writable() || (b.dataset.k === "send" ? !sendReady() : !ta.value.trim() || st.sending);
+    autosize();
+  }
+  ta.addEventListener("input", () => { onDraftChange(); updateSlash(); });
   ta.addEventListener("paste", (e) => {
     const cd = e.clipboardData;
     if (!cd || !cd.files || !cd.files.length || cd.getData("text/plain")) return;   // text pastes as text; a picture on its own is attached
@@ -1008,6 +1400,11 @@ export function createChatView(deps) {
   el.addEventListener("input", (e) => { const t = e.target; if (t && t.dataset && t.dataset.k === "fork-name" && st.ask) st.ask.name = t.value; });
   el.addEventListener("keydown", (e) => { const t = e.target; if (e.key === "Enter" && t && t.dataset && t.dataset.k === "fork-name") { e.preventDefault(); confirmAsk(); } });
   ta.addEventListener("keydown", (e) => {
+    if (sl.open && sl.items.length) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); sl.active = (sl.active + (e.key === "ArrowDown" ? 1 : sl.items.length - 1)) % sl.items.length; paintSlash(); return; }
+      if ((e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey)) { e.preventDefault(); pickSlash(sl.active); return; }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSlash(); return; }
+    }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       if (st.ask) return;
@@ -1015,43 +1412,33 @@ export function createChatView(deps) {
     }
   });
 
-  // ---------- details column (right edge, own scroll, collapsible) ----------
-  const RC_TEXT = {
-    on: "On: you can reach this chat from your phone. The Hub can't write into it while this is on.",
-    off: "Off: this chat is not open to your phone.",
-    unknown: "Unknown (the Claude app did not tell the Hub). Check the switch in the Claude app.",
-    terminal: "Unknown: a terminal chat does not tell the Hub.",
-  };
-  function rcSection() {
-    const rc = rcValue();
-    const ch = c();
-    const text = rc === true ? RC_TEXT.on : rc === false ? RC_TEXT.off : ch && ch.kind === "terminal" ? RC_TEXT.terminal : RC_TEXT.unknown;
-    // On / Off get a bold word; Unknown says everything in its one sentence (no stuttering "Unknown / Unknown (...)")
-    const kids = [h("h4", {}, "Remote Control")];
-    if (rc !== null) kids.push(h("p", { class: "cv-rc-word" }, h("b", { class: rc === true ? "rc-on" : "" }, rcWord())));
-    kids.push(h("p", { class: rc === null ? "cv-small cv-rc-unk" : "cv-small" }, text));
-    if (rcSwitchable()) {
-      kids.push(h("div", { class: "actions" }, h("button", { class: "btn", type: "button", "data-k": "rc-toggle", disabled: !!st.ask || st.sending }, rc === true ? "Turn off" : "Turn on")));
-    } else if (isHub() && rc === false) {
-      kids.push(h("p", { class: "cv-small" }, "You can switch it on once Claude stops working."));
-    } else if (ch && ch.kind === "app") {
-      kids.push(h("p", { class: "cv-small" }, "Switch it in the Claude app: the Hub can not change Remote Control of a chat the app runs."));
-    }
-    return h("section", { class: "cv-sec" }, kids);
+  // ---------- details column (right edge, own scroll). Closed by default as a slim rail; the choice is remembered. On a phone it opens as a full-screen sheet. ----------
+  function setSide(open) {
+    st.sideOpen = !!open;
+    try { localStorage.setItem("hub-chat-side-v2", st.sideOpen ? "open" : "closed"); } catch { /* storage blocked */ }
+    drawSide();
+    if (scroll.clientHeight) { if (st.stick) toBottom(); updateJump(); }
+    const f = st.sideOpen ? side.querySelector('[data-k="side-close"]') : side.querySelector('[data-k="side-open"]');
+    if (f && (st.sideOpen || window.innerWidth > 900)) f.focus({ preventScroll: true });
+    else if (!st.sideOpen) menuBtn.focus({ preventScroll: true });
   }
   function drawSide() {
     const ch = c();
     if (!ch) { side.replaceChildren(); return; }
     if (st.sideOpen === null) {
       let saved = null;
-      try { saved = localStorage.getItem("hub-chat-side"); } catch { /* storage blocked */ }
-      st.sideOpen = saved === "open" ? true : saved === "closed" ? false : !(window.matchMedia && matchMedia("(max-width: 900px)").matches);
+      try { saved = localStorage.getItem("hub-chat-side-v2"); } catch { /* storage blocked */ }
+      st.sideOpen = saved === "open";
     }
     const open = st.sideOpen;
     el.classList.toggle("side-closed", !open);
     const prev = side.querySelector(".cv-side-body");
     const keepTop = prev ? prev.scrollTop : 0;
     withFocus(() => {
+      if (!open) {
+        side.replaceChildren(h("button", { class: "cv-rail", type: "button", "data-k": "side-open", "aria-expanded": "false", "aria-controls": "cv-side-body", title: "Show chat details" }, icon("panel"), h("span", { class: "cv-rail-label" }, "Chat details")));
+        return;
+      }
       const meta = st.meta || {};
       const val = (v) => (v === null || v === undefined || v === "" ? h("span", { class: "unk" }, st.loading ? "Reading…" : "Not known") : String(v));
       const dl = (rows) => h("dl", { class: "cv-dl" }, rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
@@ -1059,9 +1446,10 @@ export function createChatView(deps) {
       const shown = st.outputsAll ? outs : outs.slice(0, OUTPUTS_FIRST);
       const ctx = st.context;
       const secs = [
+        h("section", { class: "cv-sec" }, h("h4", {}, "Chat"),
+          dl([["Kind", KIND_WORD[ch.kind] || "Chat"], ["Last active", ch.lastActive ? ago(ch.lastActive) : val(null)]])),
         h("section", { class: "cv-sec" }, h("h4", {}, "Environment"),
           dl([["Folder", val(meta.cwd)], ["Branch", val(meta.branch)], ["Model", val(meta.model)], ["Permission mode", val(meta.permissionMode)]])),
-        rcSection(),
         h("section", { class: "cv-sec" }, h("h4", {}, "Outputs", outs.length ? h("span", { class: "count" }, String(outs.length)) : null),
           outs.length ? h("ul", { class: "cv-outs" }, shown.map((o) => h("li", {},
             h("span", { class: "cv-path" }, o.path), h("span", { class: "cv-out-meta" }, [o.tool, o.outside ? "outside the project" : null, o.at ? ago(o.at) : null].filter(Boolean).join(", ")))))
@@ -1073,8 +1461,9 @@ export function createChatView(deps) {
             : h("p", { class: "cv-small" }, st.loading ? "Reading…" : "Not known for this chat."),
           ctx && ctx.basis ? h("p", { class: "cv-small" }, `Counted from the ${ctx.basis}.`) : null)];
       side.replaceChildren(
-        h("button", { class: "cv-side-sum", type: "button", "data-k": "side-toggle", "aria-expanded": String(open), "aria-controls": "cv-side-body" }, icon("chev"), h("span", { class: "cv-side-label" }, "Chat details")),
-        h("div", { class: "cv-side-body", id: "cv-side-body", hidden: !open }, secs));
+        h("div", { class: "sheet-head" }, h("h4", { class: "sheet-title" }, "Chat details"),
+          h("button", { class: "cv-ibtn", type: "button", "data-k": "side-close", "aria-label": "Close chat details", title: "Close chat details" }, icon("cross"))),
+        h("div", { class: "cv-side-body", id: "cv-side-body" }, secs));
     });
     const body = side.querySelector(".cv-side-body");
     if (body && keepTop) body.scrollTop = keepTop;
@@ -1098,19 +1487,19 @@ export function createChatView(deps) {
     if (k === "older") { loadOlder(); return; }
     if (k === "retry") { st.loading = true; st.error = ""; st.sig = ""; drawThread({ force: true }); refresh({ force: true }); return; }
     if (k === "outputs-all") { st.outputsAll = !st.outputsAll; drawSide(); return; }
-    if (k === "side-toggle") {
-      st.sideOpen = !st.sideOpen;
-      try { localStorage.setItem("hub-chat-side", st.sideOpen ? "open" : "closed"); } catch { /* storage blocked */ }
-      drawSide(); if (scroll.clientHeight) { if (st.stick) toBottom(); updateJump(); }
-      return;
-    }
+    if (k === "side-open") { setSide(true); return; }
+    if (k === "side-close") { setSide(false); return; }
+    if (k === "menu") { if (menuIsOpen()) closeMenu(true); else openChatMenu(); return; }
+    if (k === "chats") { if (deps.openChats) deps.openChats(b); return; }
+    if (k === "speak") { toggleSpeak(Number(b.dataset.id)); return; }
+    if (k === "q-prev" || k === "q-next") { qMove(b.dataset.id, k === "q-prev" ? -1 : 1, b); return; }
     if (k === "attach") { if (canAttach()) fileInput.click(); return; }
     if (k === "att-remove") { removeAtt(b.dataset.id); return; }
     if (k === "pic") { openPicture(b); return; }
     if (k === "lb-close") { lb.close(); return; }
     if (k === "copy") { copyMessage(b); return; }
     if (k === "pin") { togglePin(); return; }
-    if (k === "fork") { startAsk("fork"); return; }
+    if (k === "fork") { if (!b.disabled) startAsk("fork"); return; }
     if (k === "resume") { if (!ta.disabled) { ta.focus(); composer.scrollIntoView({ block: "nearest" }); } return; }
     if (k === "rc-toggle") { startAsk("rc"); return; }
     if (k === "send" || k === "send-app" || k === "stop" || k === "handoff" || k === "pickup" || k === "round") { startAsk(k); return; }
@@ -1133,6 +1522,7 @@ export function createChatView(deps) {
     st.id = chat.id; st.messages = []; st.total = 0; st.context = null; st.meta = null; st.savedOk = true;
     st.loading = true; st.error = ""; st.olderBusy = false; st.olderErr = ""; st.stick = true; st.top = 0; st.openTools = new Set();
     st.sig = ""; st.outputsAll = false; st.ask = null; st.sending = false; st.roundMsg = ""; st.fetching = false;
+    stopSpeak(); closeSlash(); closeMenu(false);
     bannerEl.hidden = true;
     ta.value = drafts.get(chat.id) || "";
   }

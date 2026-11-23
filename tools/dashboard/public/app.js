@@ -265,7 +265,7 @@ const sending = new Set();          // chat ids with a request on its way
 const ANSWER_MAX = 4000;
 const TASK_MAX = 4000;
 const MODELS = [["", "Default"], ["haiku", "Haiku"], ["sonnet", "Sonnet"], ["opus", "Opus"]];
-const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
+const STATE_WORD = { working: "Working", waiting: "Waiting for you", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
 const KIND_WORD = { hub: "Hub", app: "App", terminal: "Terminal" };
 const FIRST_LINES = 4;
 function lastModel() { try { const m = localStorage.getItem("hub-chat-model"); return MODELS.some(([v]) => v === m) ? m : ""; } catch { return ""; } }

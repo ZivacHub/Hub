@@ -256,6 +256,8 @@ a.run.on:hover { text-decoration: underline; }
 .cs-stopped::before { border-radius: 1px; background: var(--off); }
 .cs-closed { color: var(--muted); border-color: var(--line); border-style: dashed; font-weight: 500; }
 .cs-closed::before { border-radius: 0; background: transparent; border: 2px solid currentColor; border-top-color: transparent; width: 9px; height: 9px; transform: rotate(45deg); }
+.cs-waiting { background: var(--warn-bg); color: var(--warn); border-color: color-mix(in oklab, var(--warn) 35%, transparent); }
+.cs-waiting::before { border-radius: 0; transform: rotate(45deg); width: 7px; height: 7px; }
 .cs-failed { background: var(--c-bad-bg); color: var(--c-bad); border-color: color-mix(in oklch, var(--c-bad) 40%, transparent); }
 .cs-failed::before { border-radius: 0; clip-path: polygon(0 0, 100% 0, 50% 100%); width: 9px; height: 8px; }
 .ckind { flex: none; font-size: 0.75rem; color: var(--muted); }

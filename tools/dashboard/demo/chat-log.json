@@ -71,6 +71,30 @@
             {
               "type": "text",
               "text": "## Where we are\n\nPhase 4 (captions) is on step **4.3: burn the captions into the clip**.\n\n- 4.1 and 4.2 are done.\n- The handoff says empty captions still break the export.\n\nShall I start with the empty-caption fix?"
+            },
+            {
+              "type": "question",
+              "source": "AskUserQuestion",
+              "header": "Order",
+              "questions": [
+                {
+                  "question": "Which should I do first?",
+                  "header": "Order",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "label": "Fix empty captions first (Recommended)",
+                      "description": "The export breaks on them today, so 4.3 would build on a bug."
+                    },
+                    {
+                      "label": "Start step 4.3 now",
+                      "description": "Burn the captions in, and fix empty ones afterwards."
+                    }
+                  ]
+                }
+              ],
+              "answered": true,
+              "answer": "Fix empty captions first (Recommended)"
             }
           ]
         },
@@ -194,6 +218,59 @@
             {
               "type": "text",
               "text": "## Export formats today\n\nI read the code instead of timing it, because the timing script could not find its sample file. So the speeds below are **estimates** from the code, not measurements.\n\n| Format | Works today | Speed (estimate) | Notes |\n|---|---|---|---|\n| `srt` | yes | instant | plain text, one file per clip |\n| `vtt` | yes | instant | same as srt, web style |\n| `burn` | not yet | slow (about 1 min per clip) | this is step 4.3 |\n\n### What I suggest\n\n1. Keep `srt` and `vtt` as they are.\n2. Build `burn` next, with the vertical cut first.\n3. Time all three on the real sample clips once `burn` exists.\n\nSee the plan in `docs/plan/BOARD.md` for where this fits. A very long line without spaces must not break the layout: `src/captions/export-with-a-very-long-file-name-that-keeps-going-and-going-and-going.mjs`."
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 15,
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Step 4.3 is ready to build. Two choices from you first."
+            },
+            {
+              "type": "question",
+              "source": "AskUserQuestion",
+              "header": "Caption style",
+              "recap": "Both styles work with the export fix. The word-by-word style takes about twice as long to export.",
+              "questions": [
+                {
+                  "question": "Which caption style should I burn into the clip?",
+                  "header": "Style",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "label": "Word-by-word highlight (Recommended)",
+                      "description": "Lively, like short-video apps. Most viewers watch without sound."
+                    },
+                    {
+                      "label": "Whole sentences",
+                      "description": "Calm and easy to read. Faster to export."
+                    }
+                  ]
+                },
+                {
+                  "question": "Which extra files should the export write?",
+                  "header": "Files",
+                  "multiSelect": true,
+                  "options": [
+                    {
+                      "label": "A .srt subtitle file",
+                      "description": "For players that show subtitles by themselves."
+                    },
+                    {
+                      "label": "A preview picture",
+                      "description": "One still from the middle of the clip."
+                    },
+                    {
+                      "label": "A short log",
+                      "description": "What was exported and how long it took."
+                    }
+                  ]
+                }
+              ],
+              "answered": false
             }
           ]
         }
@@ -358,6 +435,35 @@
             {
               "type": "text",
               "text": "Three presets are drafted: **vertical**, **wide** and **square**.\n\nShould the square one be included in the export list?"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "agoMinutes": 300,
+          "blocks": [
+            {
+              "type": "question",
+              "source": "AskUserQuestion",
+              "header": "Formats",
+              "questions": [
+                {
+                  "question": "Should the presets include a square format too?",
+                  "header": "Square",
+                  "multiSelect": false,
+                  "options": [
+                    {
+                      "label": "Yes, add square",
+                      "description": "1080 by 1080, good for feeds."
+                    },
+                    {
+                      "label": "No, only vertical and wide",
+                      "description": "Fewer presets to keep tidy."
+                    }
+                  ]
+                }
+              ],
+              "answered": false
             }
           ]
         }

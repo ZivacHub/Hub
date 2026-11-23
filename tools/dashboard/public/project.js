@@ -1,9 +1,11 @@
-// Hub project page (step 17.4, chat workspace from Phase 19). One project: what waits on Ivan, its chats, the handoff's next steps.
-// Reads GET /api/project?name=... every 30 s. The "Latest chat" tab is a chat workspace (chatview.js); a chat chosen in "All chats" opens in the same view.
-// The only things that change anything: the composer and the buttons in the workspace (chatview.js) and the New chat form here, all using the
+// Hub project page (step 17.4, chat workspace from Phase 19, clean-up redesign 2026-11). One project: the chat IS the page.
+// One slim top bar (name, phase, progress, a quiet "N decisions waiting" chip, a "..." project menu). Everything else opens in a right-hand drawer:
+// All chats (search, pinned first then newest), Decisions waiting, Next steps from the handoff, New chat. The chat view itself lives in chatview.js.
+// Reads GET /api/project?name=... every 30 s.
+// The only things that change anything: the composer and the menus in the workspace (chatview.js) and the New chat form here, all using the
 // SAME request route the dashboard already uses (POST /api/action with the per-run token, confirm:true), and every one of them asks "...?" first.
 // All text goes in with textContent (via h()), never as HTML, because it comes from project files.
-import { createChatView, icon } from "./chatview.js";
+import { createChatView, icon, openMenu, closeMenu } from "./chatview.js";
 
 const REFRESH_MS = 30_000;
 const $ = (id) => document.getElementById(id);
@@ -30,7 +32,7 @@ function ago(iso) {
   return d === 1 ? "yesterday" : `${d} days ago`;
 }
 
-const STATE_WORD = { working: "Working", idle: "Idle", failed: "Failed", stopped: "Stopped", closed: "Closed" };
+const STATE_WORD = { working: "Working", idle: "Idle", waiting: "Waiting for you", failed: "Failed", stopped: "Stopped", closed: "Closed" };
 const KIND_WORD = { hub: "Hub chat", app: "App chat", terminal: "Terminal chat" };
 const TASK_MAX = 4000;
 // the same choices as the dashboard's New chat form (public/app.js)
@@ -40,15 +42,15 @@ function rememberModel(m) { try { localStorage.setItem("hub-chat-model", m); } c
 
 let data = null;
 let session = null;
-let noteText = "";
-let chatTab = "latest";            // "latest" | "all": the chosen Chats tab, kept across the 30 s refresh (D56)
-let viewId = null;                 // a chat chosen in "All chats"; null = the latest chat
+let viewId = null;                 // a chat chosen in the drawer; null = the latest chat
 let newForm = null;                // { text, model, remoteControl, skipWorkflow } while the New chat form is open
-let openDecs = new Set();           // decisions folded open on this page, kept across the 30 s refresh
-let nextOpen = false;              // the "Next steps" fold
+let openDecs = new Set();          // decisions folded open in the drawer, kept across the 30 s refresh
 let newAsk = null;                 // { text, extra } while "Start a chat ...?" is open
+let drawer = null;                 // { kind: "chats" | "decs" | "next" | "new", opener } while the drawer is open
+let chatQuery = "";                // the search words in the All chats drawer
+let updatedText = "";
 
-function setNote(text, bad = false) { noteText = text; const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
+function setNote(text, bad = false) { const n = $("note"); n.textContent = text; n.hidden = !text; n.className = "note" + (bad ? " bad" : ""); }
 
 async function ensureSession() {
   if (session) return session;
@@ -72,28 +74,129 @@ function appIdOf(link) {
   return APP_ID.test(id) ? id : null;
 }
 
-function fill(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
-
 // the per-run token for the file upload (same token the other requests use); fresh = ask the Hub for a new one
 async function getToken(fresh = false) { if (fresh) session = null; await ensureSession(); return session.token; }
 
 const cv = createChatView({
   h, ago, send, appIdOf, setNote, getToken, projectName: () => ((data && data.project) || { name: NAME }).name,
-  onChanged: () => load(true),
+  onChanged: () => load(),
   onRoundDone: () => { viewId = null; },   // the new chat is now the latest chat
+  openChats: (opener) => openDrawer("chats", opener),
 });
 
-// ---------- pieces ----------
-function header(p) {
+// ---------- helpers on the chat list ----------
+function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
+function latestOf(chats) { return chats.reduce((best, c) => (!best || msOf(c) > msOf(best) ? c : best), null); }
+function chatInView() {
+  const chats = (data && data.chats) || [];
+  if (!chats.length) return null;
+  return (viewId && chats.find((c) => c.id === viewId)) || latestOf(chats);
+}
+// pinned chats first, then the newest
+function ordered(chats) { return [...chats].sort((a, b) => (b.pinned === true) - (a.pinned === true) || msOf(b) - msOf(a)); }
+const needsYou = (c) => c.needsYou === true || c.state === "waiting";
+// chats other than the one in view that wait for Ivan
+function othersNeeding() { const cur = chatInView(); return ((data && data.chats) || []).filter((c) => needsYou(c) && (!cur || c.id !== cur.id)); }
+
+// ---------- the top bar ----------
+function paintTop() {
+  const d = data;
+  const p = d.project || { name: NAME };
+  document.title = `Hub · ${p.name}`;
+  $("pt-name").textContent = p.name;
   const pct = p.percent ?? 0;
   const done = p.phase === null && pct === 100;
-  const phase = done ? "Every phase finished" : p.phase ? `Phase ${p.phase.number} of ${p.phase.of} · ${p.phase.title}` : "No phase in progress";
-  return h("section", { class: "panel ph", "aria-labelledby": "ph-name" },
-    h("div", { class: "ph-id" }, h("h2", { id: "ph-name", class: "ph-name" }, p.name), h("p", { class: "ph-phase" }, phase)),
-    h("div", { class: "ph-prog" },
-      h("div", { class: "bar", role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": `${p.name} progress` }, fill(pct)),
-      h("p", { class: "ph-steps" }, h("b", { class: "ph-pct" }, `${pct}%`), ` done · ${p.stepsDone} of ${p.stepsTotal} steps · ${p.phasesDone} of ${p.phasesTotal} phases`)),
-    p.nextStep ? h("p", { class: "ph-next" }, h("span", { class: "k" }, "Next step"), p.nextStep) : null);
+  $("pt-phase").textContent = done ? "Every phase finished" : p.phase ? `Phase ${p.phase.number} of ${p.phase.of} · ${p.phase.title}` : "No phase in progress";
+  const bar = $("pt-bar");
+  bar.setAttribute("aria-valuenow", String(pct)); bar.setAttribute("aria-label", `${p.name} progress`);
+  bar.replaceChildren(fill(pct));
+  $("pt-pct").textContent = `${pct}%`;
+  $("pt-prog").title = `${p.stepsDone} of ${p.stepsTotal} steps · ${p.phasesDone} of ${p.phasesTotal} phases`;
+  $("demo-tag").hidden = !d.demo;
+  const dec = d.decisions || [];
+  const chip = $("pt-decs");
+  chip.hidden = !dec.length;
+  chip.querySelector(".pt-chip-text").textContent = `${dec.length} decision${dec.length > 1 ? "s" : ""} waiting`;
+  const n = othersNeeding().length;
+  const dot = $("pt-dot");
+  dot.hidden = !n; dot.textContent = n ? String(n) : "";
+  $("pt-more").setAttribute("aria-label", n ? `Project menu. ${n} other chat${n > 1 ? "s" : ""} need${n > 1 ? "" : "s"} you` : "Project menu");
+  $("summary").textContent = `${p.name}: ${dec.length ? dec.length + " decision" + (dec.length > 1 ? "s" : "") + " waiting" : "no decisions waiting"}`;
+}
+function fill(pct) { const i = document.createElement("i"); i.style.width = `${pct}%`; return i; }
+
+function openProjectMenu() {
+  const chats = (data && data.chats) || [];
+  const n = othersNeeding().length;
+  openMenu({
+    label: "Project menu", anchor: $("pt-more"), returnTo: () => $("pt-more"),
+    items: [
+      { label: `All chats (${chats.length})`, icon: "list", badge: n ? `${n} need${n > 1 ? "" : "s"} you` : "", onSelect: () => openDrawer("chats", $("pt-more")) },
+      { label: "New chat", icon: "plus", onSelect: () => startNewChat($("pt-more")) },
+      { label: "Next steps from the handoff", icon: "clock", onSelect: () => openDrawer("next", $("pt-more")) },
+      { sep: true },
+      { label: updatedText || "Not updated yet", disabled: true },
+    ],
+  });
+}
+
+// ---------- the drawer (one at a time; the page behind it is switched off while it is open) ----------
+const scrim = h("div", { class: "dr-scrim", hidden: true });
+const drTitle = h("h2", { class: "sheet-title", id: "dr-title" });
+const drTools = h("div", { class: "dr-tools" });
+const drClose = h("button", { class: "cv-ibtn", type: "button", "data-act": "dr-close", "aria-label": "Close", title: "Close" }, icon("cross"));
+const drBody = h("div", { class: "dr-body" });
+const dr = h("aside", { class: "dr", role: "dialog", "aria-modal": "true", "aria-labelledby": "dr-title", tabindex: "-1", hidden: true },
+  h("div", { class: "sheet-head" }, drTitle, drTools, drClose), drBody);
+document.body.append(scrim, dr);
+const BEHIND = () => [document.querySelector("header.top"), $("banner"), $("project-main")].filter(Boolean);
+
+function openDrawer(kind, opener) {
+  closeMenu(false);
+  const was = drawer;
+  drawer = { kind, opener: (was && was.opener) || opener || $("pt-more") };
+  if (kind === "chats") chatQuery = "";
+  scrim.hidden = false; dr.hidden = false;
+  for (const e of BEHIND()) e.setAttribute("inert", "");
+  requestAnimationFrame(() => { dr.classList.add("open"); scrim.classList.add("open"); });
+  renderDrawer(true);
+}
+function closeDrawer(restore = true) {
+  if (!drawer) return;
+  const op = drawer.opener;
+  if (drawer.kind === "new") newForm = null;   // Esc, the scrim and Cancel all drop an unsent New chat form
+  drawer = null; newAsk = null;
+  dr.classList.remove("open"); scrim.classList.remove("open");
+  scrim.hidden = true; dr.hidden = true;
+  for (const e of BEHIND()) e.removeAttribute("inert");
+  if (restore) { const t = op && op.isConnected && !op.disabled ? op : $("pt-more"); t.focus({ preventScroll: true }); }
+}
+scrim.addEventListener("click", () => closeDrawer());
+// on the document (not only the drawer): a redraw can drop the focus on the page, and Esc and Tab must still work
+document.addEventListener("keydown", (e) => {
+  if (!drawer) return;
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (newAsk) { newAsk = null; renderDrawer(); const t = $("nc-text"); if (t) t.focus(); } else closeDrawer(); return; }
+  if (e.key !== "Tab") return;
+  const f = [...dr.querySelectorAll("button, [href], input, select, textarea, summary, [tabindex]:not([tabindex='-1'])")].filter((x) => !x.disabled && x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  const inDr = dr.contains(document.activeElement) && document.activeElement !== dr;
+  if (e.shiftKey && (document.activeElement === first || !inDr)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !inDr)) { e.preventDefault(); first.focus(); }
+});
+
+function chatRow(c) {
+  const state = STATE_WORD[c.state] && c.state !== "waiting" ? c.state : "idle";
+  const current = chatInView() && chatInView().id === c.id;
+  return h("li", {}, h("button", { class: "dr-row" + (current ? " cur" : ""), type: "button", "data-act": "open", "data-id": c.id, "aria-current": current ? "true" : null },
+    h("span", { class: "dr-row-top" },
+      h("span", { class: "dr-row-title" }, c.title || "Chat"),
+      c.pinned === true ? h("span", { class: "dr-pin", title: "Pinned" }, icon("pin"), h("span", { class: "sr" }, "Pinned")) : null,
+      current ? h("span", { class: "dr-cur" }, icon("check"), h("span", { class: "sr" }, "Open now")) : null),
+    h("span", { class: "dr-row-sub" },
+      needsYou(c) && c.state !== "working" ? h("span", { class: "cneeds" }, "Waiting for you") : h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
+      h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
+      c.lastActive ? h("span", { class: "dr-when" }, ago(c.lastActive)) : null)));
 }
 
 function decisionItem(d) {
@@ -114,40 +217,10 @@ function decisionItem(d) {
         d.recommendation ? h("p", { class: "dec-line rec" }, h("span", { class: "k" }, "Claude recommends"), d.recommendation) : null)));
 }
 
-function decisionsSection(list) {
-  return h("section", { class: "panel sec decs-panel", "aria-labelledby": "h-dec" },
-    h("div", { class: "decs-head" },
-      h("h2", { id: "h-dec" }, "Waiting on you ", list.length ? h("span", { class: "count" }, String(list.length)) : null),
-      list.length ? h("p", { class: "quiet-line" }, "Answering decisions from this page comes later. For now, tell Claude your choice in the chat.") : null),
-    list.length ? h("ul", { class: "decs" }, list.map(decisionItem)) : h("p", { class: "empty" }, "Nothing waits on you here."));
-}
-
-function msOf(c) { const n = Date.parse(c && c.lastActive); return Number.isFinite(n) ? n : 0; }
-function latestOf(chats) { return chats.reduce((best, c) => (!best || msOf(c) > msOf(best) ? c : best), null); }
-
-// pinned chats first (in the order the Hub sent them), then the rest as the Hub sent them
-function pinnedFirst(chats) { return [...chats.filter((c) => c.pinned === true), ...chats.filter((c) => c.pinned !== true)]; }
-
-// a row in "All chats": a summary and one button that opens the chat in the workspace
-function chatRow(c) {
-  const state = STATE_WORD[c.state] ? c.state : "idle";
-  const current = viewId === c.id;
-  return h("li", { class: "pg-row" + (c.needsYou ? " needs" : "") },
-    h("div", { class: "row-main" },
-      h("span", { class: "ch-title" }, c.title || "Chat"),
-      h("span", { class: "ch-tags" },
-        h("span", { class: "ckind" }, KIND_WORD[c.kind] || "Chat"),
-        h("span", { class: "cstate cs-" + state }, STATE_WORD[state]),
-        c.needsYou ? h("span", { class: "cneeds" }, c.why === "permission" ? "Needs you: permission" : "Needs you") : null,
-        c.pinned === true ? h("span", { class: "cpinned" }, icon("pin"), "Pinned") : null),
-      h("span", { class: "row-when" }, c.lastActive ? ago(c.lastActive) : ""),
-      h("button", { class: "btn row-show", type: "button", "data-act": "open", "data-id": c.id, "aria-label": `Open chat: ${c.title || "Chat"}`, "aria-current": current ? "true" : null }, "Open")));
-}
-
 // ---------- New chat (19.5): the same request the dashboard's form sends ----------
 function newChatForm() {
   const project = (data.project || { name: NAME }).name;
-  const ta = h("textarea", { id: "nc-text", class: "chat-text", rows: "4", maxlength: String(TASK_MAX), "aria-describedby": "nc-count" });
+  const ta = h("textarea", { id: "nc-text", class: "chat-text", rows: "5", maxlength: String(TASK_MAX), "aria-describedby": "nc-count" });
   ta.value = newForm.text;
   const sel = h("select", { id: "nc-model", class: "chat-model" }, MODELS.map(([v, l]) => h("option", { value: v }, l)));
   sel.value = newForm.model;
@@ -168,153 +241,104 @@ function newChatForm() {
       h("button", { class: "btn", type: "button", "data-act": "nc-close" }, "Cancel")));
 }
 
-function chatsSection(chats) {
-  const newBtn = newForm ? null : h("button", { class: "btn", type: "button", "data-act": "nc-open" }, "New chat");
-  const heading = h("h2", { id: "h-chats" }, "Chats ", chats.length ? h("span", { class: "count" }, String(chats.length)) : null);
-  const pad = [];
-  if (newForm) pad.push(newChatForm());
-  if (!chats.length) {
-    pad.push(h("p", { class: "empty" }, "No chats for this project yet."));
-    return h("section", { class: "panel sec chats-panel", "aria-labelledby": "h-chats" }, h("div", { class: "chats-bar" }, heading, h("span", { class: "chats-fill" }), newBtn), h("div", { class: "chats-pad" }, pad));
-  }
-  const latest = latestOf(chats);
-  const shown = viewId && chats.find((c) => c.id === viewId);
-  if (viewId && !shown) viewId = null;
-  const others = chats.filter((c) => c.needsYou && c !== latest);
-  const older = !!shown && shown !== latest;
-  // the two notices sit in the slim bar (one line each), so the conversation starts high on the page
-  const notices = [];
-  if (others.length) {
-    const names = others.map((c) => c.title || "Chat");
-    notices.push(h("p", { class: "chat-notice", role: "status" },
-      h("span", { class: "dia", "aria-hidden": "true" }, "◆"),
-      h("span", { class: "cn-text" }, others.length === 1 ? "1 other chat needs you: " : `${others.length} other chats need you: `, h("b", {}, names.join(", "))),
-      h("button", { class: "linkbtn", type: "button", "data-act": "tab", "data-tab": "all" }, "open All chats")));
-  }
-  if (older && chatTab !== "all") notices.push(h("p", { class: "view-note" }, "An older chat. ", h("button", { class: "linkbtn", type: "button", "data-act": "latest" }, "Show the latest chat")));
-  const tab = (key, label, extra) => h("button", { class: "tab", type: "button", role: "tab", id: "tab-" + key, "aria-controls": "tabpanel-chats", "aria-selected": String(chatTab === key), tabindex: chatTab === key ? "0" : "-1", "data-act": "tab", "data-tab": key }, label, extra);
-  const bar = h("div", { class: "chats-bar" }, heading,
-    h("div", { class: "tabs", role: "tablist", "aria-label": "Chats" },
-      tab("latest", older ? "This chat" : "Latest chat"),
-      tab("all", `All chats (${chats.length})`, others.length ? [h("span", { class: "tab-dia", "aria-hidden": "true" }, " ◆"), h("span", { class: "sr" }, ", some need you")] : null)),
-    h("div", { class: "chats-notices" }, notices), newBtn);
-  const panel = h("div", { class: "tabpanel", role: "tabpanel", id: "tabpanel-chats", "aria-labelledby": "tab-" + chatTab, tabindex: "-1" });
-  if (chatTab === "all") {
-    panel.append(h("div", { class: "chats-pad" }, h("ul", { class: "pg-rows" }, pinnedFirst(chats).map(chatRow))));
-  } else {
-    panel.append(h("div", { id: "cw-slot", class: "cw-slot" }));
-  }
-  return h("section", { class: "panel sec chats-panel", "aria-labelledby": "h-chats" }, bar, pad.length ? h("div", { class: "chats-pad" }, pad) : null, panel);
+function startNewChat(opener) {
+  newForm = { text: "", model: lastModel(), remoteControl: false, skipWorkflow: false }; newAsk = null; setNote("");
+  openDrawer("new", opener);
+  const t = $("nc-text"); if (t) t.focus();
 }
 
-function nextStepsSection(ho) {
-  const t = ho && typeof ho.nextSteps === "string" ? ho.nextSteps.trim() : "";
-  return h("details", { class: "panel sec next-fold", id: "next-fold", open: nextOpen },
-    h("summary", { id: "h-next" }, "Next steps from the handoff"),
-    t ? h("pre", { class: "handoff" }, t) : h("p", { class: "empty" }, "No handoff note with next steps yet."));
+function listOfChats() {
+  const chats = ordered((data && data.chats) || []);
+  const q = chatQuery.trim().toLowerCase();
+  const shown = q ? chats.filter((c) => (c.title || "").toLowerCase().includes(q)) : chats;
+  return shown.length ? h("ul", { class: "dr-list" }, shown.map(chatRow)) : h("p", { class: "empty dr-empty" }, chats.length ? "No chat matches those words." : "No chats for this project yet.");
 }
 
-// ---------- render with nothing lost ----------
-function paintTop() {
-  const d = data;
-  const p = d.project || { name: NAME };
-  document.title = `Hub · ${p.name}`;
-  $("crumb").textContent = p.name;
-  $("demo-tag").hidden = !d.demo;
-  const dec = d.decisions || [], chats = d.chats || [];
-  const needN = chats.filter((c) => c.needsYou).length;
-  $("summary").textContent = `${dec.length ? dec.length + " decision" + (dec.length > 1 ? "s" : "") : "No decisions"} waiting · ${needN ? needN + " chat" + (needN > 1 ? "s" : "") + " need" + (needN > 1 ? "" : "s") + " you" : "no chat needs you"}`;
-}
-
-function chatInView() {
-  const chats = (data && data.chats) || [];
-  if (!chats.length) return null;
-  return (viewId && chats.find((c) => c.id === viewId)) || latestOf(chats);
-}
-
-// the workspace shows only while the Latest chat tab is open; the other tab leaves it out of the page (its state is kept)
-function placeWorkspace() {
-  const slot = $("cw-slot");
-  if (!slot) { cv.show(null); return; }
-  cv.snapshot();
-  slot.append(cv.el);
-  fitWorkspace();
-  cv.show(chatInView());
-  cv.restore();
-}
-
-// The workspace is as tall as the window space left under the blocks above it (never less than MIN_CW, so the conversation stays readable).
-// Only a CSS variable is set; the look itself lives in chatview.css.
-const MIN_CW = 690, BOTTOM_GAP = 16;
-function fitWorkspace() {
-  const slot = $("cw-slot");
-  if (!slot) return;
-  const top = slot.getBoundingClientRect().top + window.scrollY;
-  const h2 = Math.max(MIN_CW, Math.floor(window.innerHeight - top - BOTTOM_GAP));
-  document.documentElement.style.setProperty("--cw-h", `${h2}px`);
-}
-let fitTimer = null;
-function fitSoon() { cancelAnimationFrame(fitTimer); fitTimer = requestAnimationFrame(fitWorkspace); }
-window.addEventListener("resize", fitSoon);
-// a decision folded open or closed moves the workspace: measure again
-document.addEventListener("toggle", (e) => {
-  const t = e.target;
-  if (!t || !t.classList) return;
-  if (t.classList.contains("dec-fold")) { if (t.open) openDecs.add(t.dataset.id); else openDecs.delete(t.dataset.id); fitSoon(); }
-  else if (t.id === "next-fold") nextOpen = t.open;
-}, true);
-
-function render() {
-  const d = data;
+// fill the drawer for its kind. `first` = just opened (the focus goes in); otherwise only what is safe to redraw is redrawn.
+function renderDrawer(first = false) {
+  if (!drawer || !data) return;
+  const chats = data.chats || [];
   const ae = document.activeElement;
-  const keepId = ae && ae.id && /^nc-(text|model|rc|skip)$/.test(ae.id) ? ae.id : null;
+  const keepId = !first && ae && ae.id && /^nc-(text|model|rc|skip)$/.test(ae.id) ? ae.id : null;
   const sel = keepId === "nc-text" ? [ae.selectionStart, ae.selectionEnd] : null;
-  const keepBtn = ae && ae.dataset && ["tab", "open", "nc-open"].includes(ae.dataset.act) ? { act: ae.dataset.act, id: ae.dataset.id, tab: ae.dataset.tab } : null;
-  const y = window.scrollY;
-  cv.snapshot();
-
-  paintTop();
-  const p = d.project || { name: NAME };
-  $("page").replaceChildren(header(p), decisionsSection(d.decisions || []), chatsSection(d.chats || []), nextStepsSection(d.handoff));
-  placeWorkspace();
-
-  if (keepId) {
+  const keepAct = !first && ae && ae.dataset && ae.closest && dr.contains(ae) && ["open", "nc-ask", "nc-yes", "nc-cancel-ask", "nc-close"].includes(ae.dataset.act) ? { act: ae.dataset.act, id: ae.dataset.id } : null;
+  drTools.replaceChildren();
+  if (drawer.kind === "chats") {
+    drTitle.textContent = `All chats (${chats.length})`;
+    drTools.append(h("button", { class: "btn dr-new", type: "button", "data-act": "nc-open" }, icon("plus"), "New chat"));
+    const n = othersNeeding().length;
+    let box = drBody.querySelector(".dr-search input");
+    if (!box || first) {
+      box = h("input", { class: "dr-q", type: "search", id: "dr-q", placeholder: "Search chats", "aria-label": "Search chats", autocomplete: "off" });
+      box.value = chatQuery;
+      drBody.replaceChildren(
+        h("div", { class: "dr-attn-slot" }),
+        h("div", { class: "dr-search" }, icon("search"), box),
+        h("div", { class: "dr-listwrap" }));
+    }
+    const attn = drBody.querySelector(".dr-attn-slot");
+    attn.replaceChildren(n ? h("p", { class: "dr-attn", role: "status" }, h("span", { class: "pt-dot sm" }, String(n)), `${n} other chat${n > 1 ? "s" : ""} need${n > 1 ? "" : "s"} you`) : "");
+    drBody.querySelector(".dr-listwrap").replaceChildren(listOfChats());
+  } else if (drawer.kind === "decs") {
+    const list = data.decisions || [];
+    drTitle.textContent = `Decisions waiting (${list.length})`;
+    drBody.replaceChildren(
+      h("p", { class: "quiet-line" }, "Answering decisions from this page comes later. For now, tell Claude your choice in the chat."),
+      list.length ? h("ul", { class: "decs" }, list.map(decisionItem)) : h("p", { class: "empty" }, "Nothing waits on you here."));
+  } else if (drawer.kind === "next") {
+    const t = data.handoff && typeof data.handoff.nextSteps === "string" ? data.handoff.nextSteps.trim() : "";
+    drTitle.textContent = "Next steps from the handoff";
+    drBody.replaceChildren(t ? h("pre", { class: "handoff" }, t) : h("p", { class: "empty" }, "No handoff note with next steps yet."));
+  } else if (drawer.kind === "new") {
+    drTitle.textContent = "New chat";
+    if (newForm) drBody.replaceChildren(newChatForm());
+  }
+  if (!first && !dr.contains(document.activeElement)) dr.focus({ preventScroll: true });   // the redraw dropped the focus: keep it in the drawer
+  if (first) {
+    const f = drawer.kind === "chats" ? $("dr-q") : drawer.kind === "new" ? $("nc-text") : drClose;
+    (f || drClose).focus({ preventScroll: true });
+  } else if (keepId) {
     const t = $(keepId);
     if (t) { t.focus(); if (sel) { try { t.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } } }
-  } else if (keepBtn) {
-    const b = [...document.querySelectorAll(`button[data-act="${keepBtn.act}"]`)].find((x) => x.dataset.id === keepBtn.id && x.dataset.tab === keepBtn.tab);
+  } else if (keepAct) {
+    const b = [...dr.querySelectorAll(`button[data-act="${keepAct.act}"]`)].find((x) => x.dataset.id === keepAct.id);
     if (b) b.focus();
   }
-  if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
 }
 
-// While Ivan types in the composer or the New chat form, or a "...?" question is open, the page is not redrawn
-// (the chat view still gets fresh data); everything he typed is kept in any case.
-function busy() {
-  if (newAsk) return true;
-  const ae = document.activeElement;
-  if (cv.hasFocus()) return true;
-  return !!(newForm && ae && ae.closest && ae.closest(".chat-form"));
+// ---------- the page: the chat, or a short empty state ----------
+const slot = h("div", { id: "cw-slot", class: "cw-slot" });
+const empty = h("div", { class: "pg-empty", hidden: true },
+  h("p", { class: "pg-empty-title" }, "No chats for this project yet."),
+  h("button", { class: "btn primary", type: "button", "data-act": "nc-open" }, icon("plus"), "New chat"));
+$("page").append(slot, empty);
+slot.append(cv.el);
+
+function render() {
+  paintTop();
+  const cur = chatInView();
+  slot.hidden = !cur; empty.hidden = !!cur;
+  cv.show(cur);
+  if (drawer && drawer.kind !== "new") renderDrawer();   // the New chat form is never redrawn under Ivan's hands
 }
+
+document.addEventListener("toggle", (e) => {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains("dec-fold")) { if (t.open) openDecs.add(t.dataset.id); else openDecs.delete(t.dataset.id); }
+}, true);
 
 document.addEventListener("click", async (e) => {
-  const b = e.target.closest("button[data-act]");
+  const tgt = e.target instanceof Element ? e.target : null;
+  if (!tgt) return;
+  if (tgt.closest("#pt-more")) { if (document.querySelector(".mn")) closeMenu(true); else openProjectMenu(); return; }
+  if (tgt.closest("#pt-decs")) { openDrawer("decs", $("pt-decs")); return; }
+  const b = tgt.closest("button[data-act]");
   if (!b) return;
   const act = b.dataset.act, id = b.dataset.id;
-  if (act === "tab") {
-    chatTab = b.dataset.tab === "all" ? "all" : "latest";
-    render();
-    const t2 = $("tab-" + chatTab); if (t2) t2.focus();
-    return;
-  }
-  if (act === "open") { viewId = id; chatTab = "latest"; render(); cv.focusHeading(); return; }
-  if (act === "latest") { viewId = null; render(); cv.focusHeading(); return; }
-  if (act === "nc-open") {
-    newForm = { text: "", model: lastModel(), remoteControl: false, skipWorkflow: false }; newAsk = null; setNote(""); render();
-    const t = $("nc-text"); if (t) t.focus();
-    return;
-  }
-  if (act === "nc-close") { newForm = null; newAsk = null; render(); const o = document.querySelector('button[data-act="nc-open"]'); if (o) o.focus(); return; }
+  if (act === "dr-close") { closeDrawer(); return; }
+  if (act === "open") { viewId = id; closeDrawer(false); render(); cv.focusHeading(); return; }
+  if (act === "nc-open") { startNewChat(drawer ? drawer.opener : $("pt-more")); return; }
+  if (act === "nc-close") { closeDrawer(); return; }
   if (act === "nc-ask") {
     const text = newForm ? newForm.text.trim() : "";
     if (!text) { setNote("Write what Claude should do first.", true); const t = $("nc-text"); if (t) t.focus(); return; }
@@ -325,37 +349,40 @@ document.addEventListener("click", async (e) => {
         + "Claude works without a window and uses your Claude allowance."
         + (newForm.remoteControl ? " Remote Control is on: the chat keeps running in the background so you can open it on your phone. You cannot answer it here while it is on." : ""),
     };
-    setNote(""); render();
-    const y2 = document.querySelector(".chat-form .actions.ask .btn.primary"); if (y2) y2.focus();
+    setNote(""); renderDrawer();
+    const y2 = dr.querySelector(".chat-form .actions.ask .btn.primary"); if (y2) y2.focus();
     return;
   }
-  if (act === "nc-cancel-ask") { newAsk = null; render(); const t = $("nc-text"); if (t) t.focus(); return; }
+  if (act === "nc-cancel-ask") { newAsk = null; renderDrawer(); const t = $("nc-text"); if (t) t.focus(); return; }
   if (act === "nc-yes") {
     const f = newForm; newAsk = null;
     const task = f ? f.text.trim() : "";
-    if (!task) { render(); return; }
+    if (!task) { renderDrawer(); return; }
     const project = (data.project || { name: NAME }).name;
     const body = { action: "chat-start", project, task };
     if (f.model) body.model = f.model;
     if (f.remoteControl) body.remoteControl = true;
     if (f.skipWorkflow) body.workflow = false;
-    setNote("Working on it…"); render();
+    setNote("Working on it…"); renderDrawer();
     let r;
     try { r = await send(body); } catch { r = { ok: false, error: "The Hub did not answer." }; }
     if (r.ok) {
       setNote(r.message || "Done.");
-      newForm = null; viewId = null; chatTab = "latest";
-      await load(true);
+      newForm = null; viewId = null;
+      closeDrawer();
+      await load();
       // the new chat becomes the latest chat as soon as the Hub lists it
-      setTimeout(() => load(true), 3000); setTimeout(() => load(true), 8000);
-    } else { setNote(r.error || "That did not work.", true); render(); }
+      setTimeout(() => load(), 3000); setTimeout(() => load(), 8000);
+    } else { setNote(r.error || "That did not work.", true); renderDrawer(); }
     return;
   }
 });
 
 document.addEventListener("input", (e) => {
   const t = e.target;
-  if (!newForm || !t || !t.id) return;
+  if (!t || !t.id) return;
+  if (t.id === "dr-q") { chatQuery = t.value; const w = dr.querySelector(".dr-listwrap"); if (w) w.replaceChildren(listOfChats()); return; }
+  if (!newForm) return;
   if (t.id === "nc-text") { newForm.text = t.value; const c = $("nc-count"); if (c) c.textContent = `${t.value.length} / ${TASK_MAX}`; }
 });
 document.addEventListener("change", (e) => {
@@ -365,25 +392,15 @@ document.addEventListener("change", (e) => {
   if (t.id === "nc-skip") newForm.skipWorkflow = t.checked;
   if (t.id === "nc-model") { newForm.model = t.value; rememberModel(newForm.model); }
 });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && newAsk) { newAsk = null; render(); return; }
-  const tb = e.target instanceof Element ? e.target.closest('button[role="tab"]') : null;
-  if (!tb) return;
-  let to = null;
-  if (e.key === "ArrowRight" || e.key === "ArrowLeft") to = tb.dataset.tab === "all" ? "latest" : "all";
-  else if (e.key === "Home") to = "latest"; else if (e.key === "End") to = "all";
-  if (!to) return;
-  e.preventDefault();
-  chatTab = to; render();
-  const t2 = $("tab-" + to); if (t2) t2.focus();
-});
 
 function fail(msg) {
   $("summary").textContent = msg;
+  $("pt-name").textContent = "Project";
+  slot.hidden = true; empty.hidden = true;
   $("page").replaceChildren(h("div", { class: "none" }, h("p", { class: "none-title" }, msg), h("p", {}, h("a", { href: "/" }, "Back to the dashboard"))));
 }
 
-async function load(force = false) {
+async function load() {
   if (!NAME) { fail("No project chosen."); return; }
   try {
     const r = await fetch("/api/project?name=" + encodeURIComponent(NAME), { cache: "no-store" });
@@ -393,9 +410,8 @@ async function load(force = false) {
     if (!j || typeof j !== "object" || !j.project) throw new Error("project");
     data = j;
     $("banner").hidden = true;
-    if (force || !busy()) render();
-    else { paintTop(); if ($("cw-slot")) cv.show(chatInView()); }
-    $("updated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    updatedText = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    render();
   } catch {
     $("banner").hidden = false;
     if (!data) $("summary").textContent = "Can't read the project";
@@ -417,6 +433,6 @@ $("theme").addEventListener("click", () => {
 paintToggle();
 
 load();
-// refresh every 30 s while in front; typed text and open questions are never replaced (the chat view also reads its own messages, 15 s while Claude works)
+// refresh every 30 s while in front (the chat view also reads its own messages, 15 s while Claude works); what Ivan typed is never replaced
 setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
