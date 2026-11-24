@@ -9,7 +9,7 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, dirname, extname, normalize, sep } from "node:path";
+import { join, dirname, extname, normalize, sep, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +38,8 @@ import { makePins, MAX_PINS } from "./lib/pins.mjs";
 import { readChatImage } from "./lib/chatimage.mjs";
 import { makeCommands, DEMO_COMMANDS } from "./lib/commands.mjs";
 import { makeUsage, demoUsage } from "./lib/usage.mjs";
+import { makeSettings } from "./lib/settings.mjs";
+import { makeCost } from "./lib/cost.mjs";
 import { deflateSync } from "node:zlib";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
@@ -176,7 +178,79 @@ async function usageApi(sp) {
   return usageHooks.engine.snapshot({ liveSessionIds, labels, probe: sp.get("live") !== "0" });
 }
 
+// Settings (Phase 21.4): GET /api/settings and the guarded action settings-set. Contract: docs/plan/phases/21-settings.md.
+// The project list is the one /api/projects uses; a project name only picks a folder out of that list (exact match), never becomes a path.
+// --demo: the same store on an in-memory file system seeded from demo/settings.json, so nothing is ever written there.
+const BUS_ROOT = join(HERE, "..", "..", "..");
+const knownProjectNames = () => (DEMO ? sample.projects.map((p) => p.name) : real.projects().projects.map((p) => p.name));
+function makeDemoSettingsStore() {
+  const demo = JSON.parse(readFileSync(join(HERE, "demo", "settings.json"), "utf8"));
+  const names = demo.projects.map((p) => p.name), files = new Map();
+  const dataFile = join(parse(BUS_ROOT).root, "hub-demo", "hub-defaults.json");
+  const folder = (n) => join(parse(BUS_ROOT).root, "hub-demo", "projects", n);
+  const pf = (n) => join(folder(n), ".claude", "hub-settings.json");
+  files.set(dataFile, JSON.stringify({ version: 1, settings: demo.defaults }));
+  for (const p of demo.projects) {
+    const o = Object.fromEntries(Object.entries(p.values).filter(([, v]) => v.source === "project").map(([k, v]) => [k, v.value]));
+    if (Object.keys(o).length) files.set(pf(p.name), JSON.stringify({ version: 1, settings: o }));
+  }
+  const miss = (p) => Object.assign(new Error("ENOENT " + p), { code: "ENOENT" });
+  const store = makeSettings({
+    dataFile, projectNames: () => names, projectFolder: (n) => (names.includes(n) ? folder(n) : null), definitions: demo.definitions,
+    fsHooks: {
+      readFileSync: (p) => { if (!files.has(p)) throw miss(p); return files.get(p); },
+      writeFileSync: (p, t) => { files.set(p, String(t)); }, renameSync: (a, b) => { files.set(b, files.get(a)); files.delete(a); },
+      mkdirSync: () => {}, rmSync: (p) => { files.delete(p); },
+    },
+  });
+  return { ...store, getAll: () => ({ demo: true, ...store.getAll() }) };
+}
+const settingsHooks = {
+  store: DEMO ? makeDemoSettingsStore() : makeSettings({
+    dataFile: join(HERE, "..", "..", "data", "hub-defaults.json"),
+    projectNames: knownProjectNames,
+    projectFolder: (name) => (knownProjectNames().includes(name) ? join(BUS_ROOT, name) : null),
+  }),
+  log: (...a) => gameLog(...a),
+};
+const SETTINGS_KEYS = new Set(["action", "scope", "project", "id", "value", "confirm"]);
+function settingsAction(body) {
+  const logId = typeof body.id === "string" && /^[A-Za-z0-9]{1,40}$/.test(body.id) ? body.id : "-";
+  const scope = body.scope === "default" || body.scope === "project" ? body.scope : "-";
+  const shapeOk = Object.keys(body).every((k) => SETTINGS_KEYS.has(k)) && typeof body.id === "string" && "value" in body && (body.value === null || typeof body.value === "string")
+    && ((body.scope === "default" && !("project" in body)) || (body.scope === "project" && typeof body.project === "string"));
+  if (!shapeOk) {
+    settingsHooks.log("settings-set", `${scope} ${logId}`, "refused: wrong request shape");
+    return { ok: false, error: "The Hub can not change that setting. Look at the page again." };
+  }
+  const r = body.scope === "default" ? settingsHooks.store.setDefault(body.id, body.value) : settingsHooks.store.setProject(body.project, body.id, body.value);
+  if (!r || r.ok !== true) { settingsHooks.log("settings-set", `${scope} ${logId}`, "refused"); return { ok: false, error: String(r?.error || "The setting could not be saved. Nothing was changed.") }; }
+  settingsHooks.log("settings-set", `${scope} ${logId}`, body.value === null ? "removed" : "saved");
+  return { ok: true, settings: settingsHooks.store.getAll() };
+}
+
+// Cost view (Phase 21.6, read only): GET /api/cost[?project=<exact name>[&since=YYYY-MM-DD]]. Shape: docs/plan/phases/21-cost-view.md.
+const costDemo = DEMO ? JSON.parse(readFileSync(join(HERE, "demo", "cost.json"), "utf8")) : null;
+const costHooks = { engine: DEMO ? null : makeCost({ bussnusRoot: BUS_ROOT, projects: knownProjectNames }) };
+function costApi(sp) {
+  const rawName = sp.get("project"), rawSince = sp.get("since");
+  let since;
+  if (rawSince !== null && rawSince !== "") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawSince) || Number.isNaN(Date.parse(rawSince + "T00:00:00Z"))) return { status: 400, body: { error: "bad since: use YYYY-MM-DD" } };
+    since = rawSince;
+  }
+  if (rawName === null) {
+    if (DEMO) return { status: 200, body: costDemo.overview };
+    return { status: 200, body: costHooks.engine.overview({ since }) };
+  }
+  const name = projectPageLib.resolveName(rawName, DEMO ? Object.keys(costDemo.projects) : knownProjectNames());
+  if (!name) return { status: 404, body: { error: "unknown project" } };
+  if (DEMO) return { status: 200, body: costDemo.projects[name] };
+  return { status: 200, body: costHooks.engine.forProject(name, { since }) };
+}
+
 const api = {
+  "/api/settings": () => settingsHooks.store.getAll(),
   "/api/chats": () => (DEMO ? demoChats() : chatlist.readChats({ hubChats: chats.list(), redact: real.redact })),
   "/api/projects": () => (DEMO ? demoProjects() : real.projects()),
   "/api/decisions": () => (DEMO ? { generatedAt: new Date().toISOString(), decisions: sample.decisions } : real.decisions()),
@@ -199,7 +273,7 @@ const api = {
 };
 
 const hostOk = (h) => /^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(h || ""); // blocks DNS-rebinding tricks
-const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app", "chat-handoff-round", "chat-fork", "chat-pin"];
+const ACTIONS = ["start", "stop", "open-claude", "autostart", "game-off", "game-on", "game-ignore", "game-unignore", "chat-start", "chat-answer", "chat-stop", "chat-app-link", "chat-remote-control", "chat-open-app", "chat-answer-app", "chat-handoff-round", "chat-fork", "chat-pin", "settings-set"];
 const err = (m) => JSON.stringify({ ok: false, error: m });
 
 // Game mode buttons (step 13.4). No names come from the page except the app to ignore, and that must be the app the Hub itself is showing.
@@ -507,6 +581,7 @@ async function handleAction(req, send) {
   if (!ACTIONS.includes(body.action)) return send(400, err("unknown action"));
   if (raw.length > 2000 && !body.action.startsWith("chat-")) return send(413, err("too big"));
   if (body.action === "chat-pin") return send(200, JSON.stringify(pinAction(body)));   // pinning is reversible and stays on in --demo (memory only)
+  if (body.action === "settings-set") return send(200, JSON.stringify(settingsAction(body)));   // reversible; in --demo it changes memory only
   if (DEMO) return send(200, err("Sample data mode: the buttons are switched off."));
   let result;
   if (body.action.startsWith("game-")) result = await gameAction(body);
@@ -531,6 +606,7 @@ const server = createServer(async (req, res) => {
     if (path === "/api/chat-handoff") { const r = handoffApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/usage") return send(200, JSON.stringify(await usageApi(new URL(req.url, "http://x").searchParams)));
+    if (path === "/api/cost") { const r = costApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/pins") { const p = new URL(req.url, "http://x").searchParams.get("project"); return send(200, JSON.stringify({ pins: pinHooks.pins.list(p === null ? undefined : p) })); }
     if (path === "/api/chat-image") {
       const r = await chatImageApi(new URL(req.url, "http://x").searchParams);
@@ -1001,6 +1077,62 @@ server.listen(PORT, HOST, async () => {
     Object.assign(usageHooks, realUsage);
     try { rmSync(ut, { recursive: true, force: true }); } catch { /* temp folder */ }
   }
+  // --- settings and cost (Phase 21.4 / 21.6): fakes only. A store on a temp folder (never data/hub-defaults.json or a project's .claude), a fake cost engine (no real chats) ---
+  {
+    const { mkdtempSync: mkt, mkdirSync: mkd, readFileSync: rf, existsSync: ex, rmSync: rmt } = await import("node:fs"); const { tmpdir: td } = await import("node:os");
+    const st = mkt(join(td(), "hub-srv-set-")), realSettings = settingsHooks.store, realSetLog = settingsHooks.log, realCost = costHooks.engine;
+    const folders = { Alpha: join(st, "Alpha"), Beta: join(st, "Beta") }; for (const f of Object.values(folders)) mkd(f, { recursive: true });
+    const dfile = join(st, "data", "hub-defaults.json"), pfile = (n) => join(folders[n], ".claude", "hub-settings.json");
+    settingsHooks.store = makeSettings({ dataFile: dfile, projectNames: () => Object.keys(folders), projectFolder: (n) => (Object.hasOwn(folders, n) ? folders[n] : null) });
+    const sLogs = []; settingsHooks.log = (...a) => sLogs.push(a.join(" "));
+    const sg = await (await fetch(base + "/api/settings")).json();
+    ok("GET /api/settings returns definitions, defaults and one entry per known project", sg.definitions.length >= 2 && sg.defaults.reportAfterPhase === "short" && sg.projects.map((p) => p.name).join() === "Alpha,Beta" && sg.projects[0].values.reportAfterPhase.source === "default");
+    ok("POST and PUT to /api/settings are 405", (await fetch(base + "/api/settings", { method: "POST" })).status === 405 && (await fetch(base + "/api/settings", { method: "PUT" })).status === 405);
+    const ss = (o, h = json) => raw("/api/action", h, cj({ action: "settings-set", ...o }), "POST");
+    const ssJ = async (o) => JSON.parse((await ss(o)).text);
+    const s1 = await ssJ({ scope: "default", id: "reportAfterPhase", value: "full" });
+    ok("settings-set default: { ok, settings } with the fresh values, saved in the (fake) defaults file", s1.ok === true && s1.settings.defaults.reportAfterPhase === "full" && s1.settings.projects[0].values.reportAfterPhase.value === "full" && JSON.parse(rf(dfile, "utf8")).settings.reportAfterPhase === "full");
+    const s2 = await ssJ({ scope: "project", project: "Alpha", id: "backgroundPictures", value: "off" });
+    ok("settings-set project: the override shows as source project, only in that project's file", s2.ok === true && s2.settings.projects[0].values.backgroundPictures.source === "project" && s2.settings.projects[0].values.backgroundPictures.value === "off" && s2.settings.projects[1].values.backgroundPictures.source === "default" && JSON.parse(rf(pfile("Alpha"), "utf8")).settings.backgroundPictures === "off" && !ex(pfile("Beta")));
+    const s3 = await ssJ({ scope: "project", project: "Alpha", id: "backgroundPictures", value: null });
+    ok("settings-set project with value null removes the override", s3.ok === true && s3.settings.projects[0].values.backgroundPictures.source === "default" && s3.settings.projects[0].values.backgroundPictures.value === "always");
+    const bad = async (o, text) => { const r = await ssJ(o); return r.ok === false && r.error === text && r.settings === undefined; };
+    ok("settings-set: a bad id, a bad value, a null default and an unknown project are refused in the store's words", await bad({ scope: "default", id: "nope", value: "full" }, "That setting does not exist.") && await bad({ scope: "default", id: "reportAfterPhase", value: "loud" }, "That choice is not one of the options for this setting.") && await bad({ scope: "default", id: "reportAfterPhase", value: null }, "A default cannot be removed; pick one of the choices.") && await bad({ scope: "project", project: "Gamma", id: "reportAfterPhase", value: "full" }, "That is not one of your BUSNUS projects.") && await bad({ scope: "project", project: "..\\Alpha", id: "reportAfterPhase", value: "full" }, "That is not one of your BUSNUS projects.") && await bad({ scope: "project", project: "alpha", id: "reportAfterPhase", value: "full" }, "That is not one of your BUSNUS projects."));
+    const shape = "The Hub can not change that setting. Look at the page again.";
+    ok("settings-set refuses extra fields, a missing or non-text value, a project on scope default, a missing project, a wrong scope and a non-string id", await bad({ scope: "default", id: "reportAfterPhase", value: "full", cwd: "C:\\x" }, shape) && await bad({ scope: "default", id: "reportAfterPhase" }, shape) && await bad({ scope: "default", id: "reportAfterPhase", value: 5 }, shape) && await bad({ scope: "default", project: "Alpha", id: "reportAfterPhase", value: "full" }, shape) && await bad({ scope: "project", id: "reportAfterPhase", value: "full" }, shape) && await bad({ scope: "other", id: "reportAfterPhase", value: "full" }, shape) && await bad({ scope: "default", id: 5, value: "full" }, shape));
+    const beforeAlpha = ex(pfile("Alpha"));
+    ok("settings-set without the token is 403, from another Origin 403, with no Origin 403, without confirm 400, not JSON 415; nothing changes", (await ss({ scope: "default", id: "reportAfterPhase", value: "off" }, { ...json, "X-Hub-Token": "" })).status === 403 && (await ss({ scope: "default", id: "reportAfterPhase", value: "off" }, { ...json, Origin: "http://evil.example" })).status === 403 && (await ss({ scope: "default", id: "reportAfterPhase", value: "off" }, { "Content-Type": "application/json", "X-Hub-Token": tok })).status === 403 && (await raw("/api/action", json, JSON.stringify({ action: "settings-set", scope: "default", id: "reportAfterPhase", value: "short" }), "POST")).status === 400 && (await ss({ scope: "default", id: "reportAfterPhase", value: "short" }, { ...json, "Content-Type": "text/plain" })).status === 415 && JSON.parse(rf(dfile, "utf8")).settings.reportAfterPhase === "full" && ex(pfile("Alpha")) === beforeAlpha);
+    ok("settings-set log lines carry scope, setting id and result only (no project name, no value)", sLogs.includes("settings-set default reportAfterPhase saved") && sLogs.includes("settings-set project backgroundPictures saved") && sLogs.includes("settings-set project backgroundPictures removed") && sLogs.some((l) => l.endsWith("refused")) && sLogs.some((l) => l.endsWith("refused: wrong request shape")) && sLogs.every((l) => !/Alpha|Beta|full|off|C:/.test(l)));
+    settingsHooks.store = realSettings; settingsHooks.log = realSetLog; rmt(st, { recursive: true, force: true });
+    // cost: a fake engine records what the route asks for
+    const cc = []; costHooks.engine = { forProject: (n, o) => { cc.push(["p", n, o.since]); return { name: n, totals: {}, chats: [], phases: [] }; }, overview: (o) => { cc.push(["o", o.since]); return { projects: [] }; } };
+    const cj1 = await (await fetch(base + "/api/cost?project=" + encodeURIComponent(firstName))).json();
+    ok("GET /api/cost?project=<known> asks the engine for that exact name (no since)", cj1.name === firstName && cc.at(-1).join() === "p," + firstName + ",");
+    await fetch(base + "/api/cost?project=" + encodeURIComponent(firstName) + "&since=2026-11-01");
+    ok("GET /api/cost passes a good since through", cc.at(-1).join() === "p," + firstName + ",2026-11-01");
+    const n0 = cc.length, rbs = await fetch(base + "/api/cost?project=" + encodeURIComponent(firstName) + "&since=yesterday"), rbs2 = await fetch(base + "/api/cost?since=2026-13-45");
+    ok("GET /api/cost with a bad since is 400 {error:'bad since: use YYYY-MM-DD'} and the engine is not asked", rbs.status === 400 && (await rbs.json()).error === "bad since: use YYYY-MM-DD" && rbs2.status === 400 && cc.length === n0);
+    const ru2 = await fetch(base + "/api/cost?project=NoSuchProject");
+    ok("GET /api/cost with an unknown project is 404 {error:'unknown project'}; path tricks and a wrong-case name too", ru2.status === 404 && (await ru2.json()).error === "unknown project" && (await Promise.all(["..%5C..%5CWindows", "..%2F..", "C%3A%5CWindows", "%00", "", firstName.toLowerCase() === firstName ? firstName.toUpperCase() : firstName.toLowerCase()].map((n) => fetch(base + "/api/cost?project=" + n).then((r) => r.status)))).every((s) => s === 404) && cc.length === n0);
+    const ro = await (await fetch(base + "/api/cost?since=2026-11-01")).json();
+    ok("GET /api/cost without a project is the overview", Array.isArray(ro.projects) && cc.at(-1).join() === "o,2026-11-01");
+    ok("POST and PUT to /api/cost are 405", (await fetch(base + "/api/cost", { method: "POST" })).status === 405 && (await fetch(base + "/api/cost?project=" + encodeURIComponent(firstName), { method: "PUT" })).status === 405);
+    costHooks.engine = realCost;
+  }
+  ok("--demo: settings are served from the sample, settings-set toggles in memory only (nothing written), cost is served from demo/cost.json", await withDemo(async (db, dt) => {
+    const dh = { "Content-Type": "application/json", Origin: db, "X-Hub-Token": dt };
+    const dpost = async (o) => (await fetch(db + "/api/action", { method: "POST", headers: dh, body: JSON.stringify({ confirm: true, ...o }) })).json();
+    const { existsSync: ex } = await import("node:fs"); const hd = join(HERE, "..", "..", "data", "hub-defaults.json"); const hadFile = ex(hd);
+    const g = await (await fetch(db + "/api/settings")).json();
+    const a = await dpost({ action: "settings-set", scope: "default", id: "reportAfterPhase", value: "full" });
+    const b = await dpost({ action: "settings-set", scope: "project", project: "Hub", id: "backgroundPictures", value: "off" });
+    const c = await dpost({ action: "settings-set", scope: "project", project: "Hub", id: "backgroundPictures", value: null });
+    const e = await dpost({ action: "settings-set", scope: "project", project: "NotThere", id: "backgroundPictures", value: "off" });
+    const g2 = await (await fetch(db + "/api/settings")).json();
+    const cp = await (await fetch(db + "/api/cost?project=Hub")).json(), co = await (await fetch(db + "/api/cost")).json();
+    return g.demo === true && g.projects.length === 4 && a.ok === true && a.settings.defaults.reportAfterPhase === "full" && b.ok === true && b.settings.projects.find((p) => p.name === "Hub").values.backgroundPictures.source === "project" && c.ok === true && c.settings.projects.find((p) => p.name === "Hub").values.backgroundPictures.source === "default" && e.ok === false && g2.defaults.reportAfterPhase === "full" && ex(hd) === hadFile
+      && cp.name === "Hub" && Array.isArray(co.projects) && (await fetch(db + "/api/cost?project=Nope")).status === 404 && (await fetch(db + "/api/cost", { method: "POST" })).status === 405;
+  }));
   ok("--demo: /api/usage serves the fixed sample (74 percent warn, one ok, app-history with an estimate, sample chats)", await withDemo(async (db) => { const d = await (await fetch(db + "/api/usage")).json(); return d.demo === true && d.limits.fiveHour.percent === 74 && d.limits.fiveHour.status === "warn" && d.limits.weekly.status === "ok" && d.limits.fiveHour.source === "app-history" && d.limits.fiveHour.alternatives.some((a) => a.source === "estimate") && d.chats.length >= 3 && (await fetch(db + "/api/usage", { method: "POST" })).status === 405; }));
   server.close();
 });
