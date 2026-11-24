@@ -1,0 +1,508 @@
+{
+ "generatedAt": "2026-11-24T08:00:00.000Z",
+ "note": "Sample data for --demo. Not real numbers.",
+ "projects": {
+  "Hub": {
+   "name": "Hub",
+   "totals": {
+    "main": {
+     "fresh": 1680,
+     "cacheWrite": 1370000,
+     "cacheRead": 61900000,
+     "out": 216000,
+     "replies": 353,
+     "weighted": 8984180
+    },
+    "helpers": {
+     "fresh": 550,
+     "cacheWrite": 445000,
+     "cacheRead": 16900000,
+     "out": 130000,
+     "replies": 165,
+     "weighted": 2896800
+    },
+    "all": {
+     "fresh": 2230,
+     "cacheWrite": 1815000,
+     "cacheRead": 78800000,
+     "out": 346000,
+     "replies": 518,
+     "weighted": 11880980
+    },
+    "weighted": 11880980
+   },
+   "chatCount": 4,
+   "chats": [
+    {
+     "sessionId": "3f9a0c11-aaaa-4bbb-8ccc-000000000002",
+     "title": "Hub · 21.1 Limits research · 23 Nov 14:00",
+     "start": "2026-11-23T14:00:00.000Z",
+     "end": "2026-11-23T16:30:00.000Z",
+     "hours": 2.5,
+     "main": {
+      "fresh": 410,
+      "cacheWrite": 380000,
+      "cacheRead": 17100000,
+      "out": 52000,
+      "replies": 98,
+      "weighted": 2445410
+     },
+     "helpers": {
+      "fresh": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "out": 0,
+      "replies": 0,
+      "weighted": 0
+     },
+     "helperCount": 0,
+     "models": {
+      "opus-5": 100
+     },
+     "phaseGuess": {
+      "phase": 21,
+      "share": 0.5,
+      "basis": "time"
+     }
+    },
+    {
+     "sessionId": "3f9a0c11-aaaa-4bbb-8ccc-000000000001",
+     "title": "Hub · 19.12 Clean project page · 20 Nov 09:10",
+     "start": "2026-11-20T09:10:00.000Z",
+     "end": "2026-11-20T13:00:00.000Z",
+     "hours": 3.83,
+     "main": {
+      "fresh": 820,
+      "cacheWrite": 610000,
+      "cacheRead": 28400000,
+      "out": 96000,
+      "replies": 150,
+      "weighted": 4083320
+     },
+     "helpers": {
+      "fresh": 310,
+      "cacheWrite": 240000,
+      "cacheRead": 9800000,
+      "out": 71000,
+      "replies": 90,
+      "weighted": 1635310
+     },
+     "helperCount": 1,
+     "models": {
+      "opus-5": 62,
+      "sonnet-5-5": 38
+     },
+     "phaseGuess": {
+      "phase": 19,
+      "share": 1,
+      "basis": "helpers"
+     }
+    },
+    {
+     "sessionId": "3f9a0c11-aaaa-4bbb-8ccc-000000000003",
+     "title": "Hub · 14.9 Chat link · 17 Nov 03:30",
+     "start": "2026-11-17T03:30:00.000Z",
+     "end": "2026-11-17T05:00:00.000Z",
+     "hours": 1.5,
+     "main": {
+      "fresh": 260,
+      "cacheWrite": 210000,
+      "cacheRead": 9400000,
+      "out": 38000,
+      "replies": 61,
+      "weighted": 1392760
+     },
+     "helpers": {
+      "fresh": 180,
+      "cacheWrite": 150000,
+      "cacheRead": 5200000,
+      "out": 44000,
+      "replies": 55,
+      "weighted": 927680
+     },
+     "helperCount": 2,
+     "models": {
+      "opus-5": 53,
+      "sonnet-5-5": 47
+     },
+     "phaseGuess": {
+      "phase": 14,
+      "share": 1,
+      "basis": "helpers"
+     }
+    },
+    {
+     "sessionId": "3f9a0c11-aaaa-4bbb-8ccc-000000000004",
+     "title": "Hub · 15.3 Helpers screen · 15 Nov 15:50",
+     "start": "2026-11-15T15:50:00.000Z",
+     "end": "2026-11-15T17:20:00.000Z",
+     "hours": 1.5,
+     "main": {
+      "fresh": 190,
+      "cacheWrite": 170000,
+      "cacheRead": 7000000,
+      "out": 30000,
+      "replies": 44,
+      "weighted": 1062690
+     },
+     "helpers": {
+      "fresh": 60,
+      "cacheWrite": 55000,
+      "cacheRead": 1900000,
+      "out": 15000,
+      "replies": 20,
+      "weighted": 333810
+     },
+     "helperCount": 1,
+     "models": {
+      "opus-5": 70,
+      "haiku-5": 30
+     },
+     "phaseGuess": {
+      "phase": 15,
+      "share": 1,
+      "basis": "helpers"
+     }
+    }
+   ],
+   "phases": [
+    {
+     "phase": 14,
+     "title": "Run my chats from the Hub",
+     "helperTokens": {
+      "fresh": 180,
+      "cacheWrite": 150000,
+      "cacheRead": 5200000,
+      "out": 44000,
+      "replies": 55,
+      "weighted": 927680,
+      "recordedOnly": 0
+     },
+     "helperTasks": 2,
+     "mainShare": {
+      "tokens": {
+       "fresh": 260,
+       "cacheWrite": 210000,
+       "cacheRead": 9400000,
+       "out": 38000,
+       "replies": 61,
+       "weighted": 1392760
+      },
+      "basis": "helpers"
+     }
+    },
+    {
+     "phase": 15,
+     "title": "Managers and helpers",
+     "helperTokens": {
+      "fresh": 60,
+      "cacheWrite": 55000,
+      "cacheRead": 1900000,
+      "out": 15000,
+      "replies": 20,
+      "weighted": 333810,
+      "recordedOnly": 0
+     },
+     "helperTasks": 1,
+     "mainShare": {
+      "tokens": {
+       "fresh": 190,
+       "cacheWrite": 170000,
+       "cacheRead": 7000000,
+       "out": 30000,
+       "replies": 44,
+       "weighted": 1062690
+      },
+      "basis": "helpers"
+     }
+    },
+    {
+     "phase": 19,
+     "title": "Claude inside the Hub",
+     "helperTokens": {
+      "fresh": 310,
+      "cacheWrite": 240000,
+      "cacheRead": 9800000,
+      "out": 71000,
+      "replies": 90,
+      "weighted": 1635310,
+      "recordedOnly": 0
+     },
+     "helperTasks": 1,
+     "mainShare": {
+      "tokens": {
+       "fresh": 820,
+       "cacheWrite": 610000,
+       "cacheRead": 28400000,
+       "out": 96000,
+       "replies": 150,
+       "weighted": 4083320
+      },
+      "basis": "helpers"
+     }
+    },
+    {
+     "phase": 21,
+     "title": "Limits and cost",
+     "helperTokens": {
+      "fresh": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "out": 0,
+      "replies": 0,
+      "weighted": 0,
+      "recordedOnly": 640000
+     },
+     "helperTasks": 1,
+     "mainShare": {
+      "tokens": {
+       "fresh": 210,
+       "cacheWrite": 190000,
+       "cacheRead": 8600000,
+       "out": 26000,
+       "replies": 1,
+       "weighted": 1227710
+      },
+      "basis": "time"
+     }
+    },
+    {
+     "phase": null,
+     "title": "Not matched to a phase",
+     "helperTokens": {
+      "fresh": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "out": 0,
+      "replies": 0,
+      "weighted": 0,
+      "recordedOnly": 0
+     },
+     "helperTasks": 0,
+     "mainShare": {
+      "tokens": {
+       "fresh": 200,
+       "cacheWrite": 190000,
+       "cacheRead": 8500000,
+       "out": 26000,
+       "replies": 1,
+       "weighted": 1217700
+      },
+      "basis": "unassigned"
+     }
+    }
+   ]
+  },
+  "ClipForge": {
+   "name": "ClipForge",
+   "totals": {
+    "main": {
+     "fresh": 450,
+     "cacheWrite": 380000,
+     "cacheRead": 16000000,
+     "out": 59000,
+     "replies": 103,
+     "weighted": 2370450
+    },
+    "helpers": {
+     "fresh": 120,
+     "cacheWrite": 100000,
+     "cacheRead": 3400000,
+     "out": 30000,
+     "replies": 36,
+     "weighted": 615120
+    },
+    "all": {
+     "fresh": 570,
+     "cacheWrite": 480000,
+     "cacheRead": 19400000,
+     "out": 89000,
+     "replies": 139,
+     "weighted": 2985570
+    },
+    "weighted": 2985570
+   },
+   "chatCount": 2,
+   "chats": [
+    {
+     "sessionId": "7c1d2e33-bbbb-4ccc-9ddd-000000000006",
+     "title": "ClipForge · 4.1 Upload check · 14 Nov 08:00",
+     "start": "2026-11-14T08:00:00.000Z",
+     "end": "2026-11-14T09:20:00.000Z",
+     "hours": 1.33,
+     "main": {
+      "fresh": 150,
+      "cacheWrite": 120000,
+      "cacheRead": 5000000,
+      "out": 18000,
+      "replies": 33,
+      "weighted": 740150
+     },
+     "helpers": {
+      "fresh": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "out": 0,
+      "replies": 0,
+      "weighted": 0
+     },
+     "helperCount": 0,
+     "models": {
+      "sonnet-5-5": 100
+     }
+    },
+    {
+     "sessionId": "7c1d2e33-bbbb-4ccc-9ddd-000000000005",
+     "title": "ClipForge · 3.2 Caption timing · 12 Nov 10:00",
+     "start": "2026-11-12T10:00:00.000Z",
+     "end": "2026-11-12T12:30:00.000Z",
+     "hours": 2.5,
+     "main": {
+      "fresh": 300,
+      "cacheWrite": 260000,
+      "cacheRead": 11000000,
+      "out": 41000,
+      "replies": 70,
+      "weighted": 1630300
+     },
+     "helpers": {
+      "fresh": 120,
+      "cacheWrite": 100000,
+      "cacheRead": 3400000,
+      "out": 30000,
+      "replies": 36,
+      "weighted": 615120
+     },
+     "helperCount": 1,
+     "models": {
+      "opus-5": 66,
+      "sonnet-5-5": 34
+     },
+     "phaseGuess": {
+      "phase": 3,
+      "share": 1,
+      "basis": "helpers"
+     }
+    }
+   ],
+   "phases": [
+    {
+     "phase": 3,
+     "title": "Captions",
+     "helperTokens": {
+      "fresh": 120,
+      "cacheWrite": 100000,
+      "cacheRead": 3400000,
+      "out": 30000,
+      "replies": 36,
+      "weighted": 615120,
+      "recordedOnly": 0
+     },
+     "helperTasks": 1,
+     "mainShare": {
+      "tokens": {
+       "fresh": 300,
+       "cacheWrite": 260000,
+       "cacheRead": 11000000,
+       "out": 41000,
+       "replies": 70,
+       "weighted": 1630300
+      },
+      "basis": "helpers"
+     }
+    },
+    {
+     "phase": null,
+     "title": "Not matched to a phase",
+     "helperTokens": {
+      "fresh": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "out": 0,
+      "replies": 0,
+      "weighted": 0,
+      "recordedOnly": 0
+     },
+     "helperTasks": 0,
+     "mainShare": {
+      "tokens": {
+       "fresh": 150,
+       "cacheWrite": 120000,
+       "cacheRead": 5000000,
+       "out": 18000,
+       "replies": 1,
+       "weighted": 740150
+      },
+      "basis": "unassigned"
+     }
+    }
+   ]
+  }
+ },
+ "overview": {
+  "projects": [
+   {
+    "name": "Hub",
+    "totals": {
+     "main": {
+      "fresh": 1680,
+      "cacheWrite": 1370000,
+      "cacheRead": 61900000,
+      "out": 216000,
+      "replies": 353,
+      "weighted": 8984180
+     },
+     "helpers": {
+      "fresh": 550,
+      "cacheWrite": 445000,
+      "cacheRead": 16900000,
+      "out": 130000,
+      "replies": 165,
+      "weighted": 2896800
+     },
+     "all": {
+      "fresh": 2230,
+      "cacheWrite": 1815000,
+      "cacheRead": 78800000,
+      "out": 346000,
+      "replies": 518,
+      "weighted": 11880980
+     },
+     "weighted": 11880980
+    },
+    "chatCount": 4
+   },
+   {
+    "name": "ClipForge",
+    "totals": {
+     "main": {
+      "fresh": 450,
+      "cacheWrite": 380000,
+      "cacheRead": 16000000,
+      "out": 59000,
+      "replies": 103,
+      "weighted": 2370450
+     },
+     "helpers": {
+      "fresh": 120,
+      "cacheWrite": 100000,
+      "cacheRead": 3400000,
+      "out": 30000,
+      "replies": 36,
+      "weighted": 615120
+     },
+     "all": {
+      "fresh": 570,
+      "cacheWrite": 480000,
+      "cacheRead": 19400000,
+      "out": 89000,
+      "replies": 139,
+      "weighted": 2985570
+     },
+     "weighted": 2985570
+    },
+    "chatCount": 2
+   }
+  ]
+ }
+}
