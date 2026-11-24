@@ -37,6 +37,7 @@ import { makeHandoffRound } from "./lib/handoffround.mjs";
 import { makePins, MAX_PINS } from "./lib/pins.mjs";
 import { readChatImage } from "./lib/chatimage.mjs";
 import { makeCommands, DEMO_COMMANDS } from "./lib/commands.mjs";
+import { makeUsage, demoUsage } from "./lib/usage.mjs";
 import { deflateSync } from "node:zlib";
 import { appendFileSync, mkdirSync } from "node:fs";
 const real = DEMO ? null : await import("./lib/data.mjs");
@@ -150,6 +151,29 @@ async function chatLogApi(sp) {
   const hub = chats.list();
   const cl = await chatlist.readChats({ hubChats: hub, redact: real.redact });
   return chatLogLib.readChatLog({ ...q, chatList: cl, hubChats: hub, appRecords: chatlist.readAppRecords(), redact: real.redact });
+}
+
+// Usage meter (Phase 21.2, read only): GET /api/usage[?live=0]. live=0 = never ask claude now (cached numbers only). Shape: docs/plan/phases/21-usage-meter.md.
+// The engine (lib/usage.mjs) asks a windowless claude one get_usage question (no chat message), reads the app's usage history and counts this PC's chat files.
+// Replaceable so the self-test only uses fakes (no real claude, no real chats).
+const usageHooks = {
+  engine: DEMO ? null : makeUsage(),
+  // running chats: the running program's live files plus the Hub's working chats (session ids only)
+  liveIds: () => [...Object.keys(chatlist.readLiveSessions()), ...chats.list().filter((c) => c && c.state === "working" && c.sessionId).map((c) => String(c.sessionId))],
+  // names and page ids per chat: the Hub's own chats, then the app's records (titles redacted, like the chat list)
+  labels: () => {
+    const out = {};
+    for (const r of chatlist.readAppRecords()) if (r && typeof r.cliSessionId === "string" && r.cliSessionId) out[r.cliSessionId] = { name: real.redact(String(r.title || "Chat")).slice(0, 80), chatId: "s-" + r.cliSessionId.slice(0, 8) };
+    for (const c of chats.list()) if (c && c.sessionId) out[String(c.sessionId)] = { name: real.redact(String(c.name || c.task || "Hub chat")).slice(0, 80), chatId: c.id };
+    return out;
+  },
+};
+async function usageApi(sp) {
+  if (DEMO) return demoUsage(Date.now());
+  let liveSessionIds, labels;
+  try { liveSessionIds = usageHooks.liveIds(); } catch { liveSessionIds = undefined; }
+  try { labels = usageHooks.labels(); } catch { labels = undefined; }
+  return usageHooks.engine.snapshot({ liveSessionIds, labels, probe: sp.get("live") !== "0" });
 }
 
 const api = {
@@ -506,6 +530,7 @@ const server = createServer(async (req, res) => {
     if (path === "/api/commands") { const r = await commandsApi(new URL(req.url, "http://x").searchParams.get("project")); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-handoff") { const r = handoffApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
     if (path === "/api/chat-log") { const r = await chatLogApi(new URL(req.url, "http://x").searchParams); return send(r.status, JSON.stringify(r.body)); }
+    if (path === "/api/usage") return send(200, JSON.stringify(await usageApi(new URL(req.url, "http://x").searchParams)));
     if (path === "/api/pins") { const p = new URL(req.url, "http://x").searchParams.get("project"); return send(200, JSON.stringify({ pins: pinHooks.pins.list(p === null ? undefined : p) })); }
     if (path === "/api/chat-image") {
       const r = await chatImageApi(new URL(req.url, "http://x").searchParams);
@@ -948,5 +973,34 @@ server.listen(PORT, HOST, async () => {
   ok("open-claude outside the projects folder refused", bad.status === 200 && JSON.parse(bad.text).ok === false);
   const big = await raw("/api/action", json, JSON.stringify({ action: "start", id: "x".repeat(5000), confirm: true }), "POST");
   ok("oversized body refused", big.status === 413 || big.status === 0);
+  // usage meter (21.2): read only. The engine is swapped for fakes (temp folders, a pretend claude), so no real claude runs and no real chat is read
+  {
+    const { mkdtempSync, mkdirSync: mkd, writeFileSync: wf, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { EventEmitter } = await import("node:events");
+    const ut = mkdtempSync(join(tmpdir(), "hub-usage-srv-"));
+    const SID = "0a1b2c3d-1111-4222-8333-444455556666";
+    const pd = join(ut, "home", ".claude", "projects", "C--x"); mkd(pd, { recursive: true });
+    wf(join(pd, SID + ".jsonl"), JSON.stringify({ type: "assistant", timestamp: new Date(Date.now() - 60000).toISOString(), requestId: "req_1", message: { id: "msg_1", model: "m", content: [], usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 1000, output_tokens: 20 } } }) + "\n");
+    const hd = join(ut, "app", "Claude-Data", "claude_test"); mkd(hd, { recursive: true });
+    wf(join(hd, "plan-usage-history.json"), JSON.stringify({ version: 2, samples: [{ t: Date.now() - 3 * 60000, org: "org-SERVER-TEST-SECRET", u: { fh: 74, sd: 41 } }] }));
+    let probes = 0;
+    const fakeSpawn = () => {
+      probes++; const ch = new EventEmitter(); ch.stdout = new EventEmitter(); ch.kill = () => ch.emit("close", null);
+      ch.stdin = { on() {}, end(s) { const id = JSON.parse(s).request_id; setTimeout(() => { ch.stdout.emit("data", JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: id, response: { rate_limits_available: false, rate_limits: null } } }) + "\n"); ch.emit("close", 0); }, 5); } };
+      return ch;
+    };
+    const realUsage = { ...usageHooks };
+    usageHooks.engine = makeUsage({ homeDir: join(ut, "home"), appDataDir: join(ut, "app"), spawnFn: fakeSpawn, config: { hubDir: join(ut, "hub"), projectsRoot: join(ut, "busnus") } });
+    usageHooks.liveIds = () => [SID]; usageHooks.labels = () => ({ [SID]: { name: "Test chat", chatId: "s-0a1b2c3d" } });
+    const ru = await fetch(base + "/api/usage"); const ju = await ru.json(); const tu = JSON.stringify(ju);
+    ok("GET /api/usage returns both limits, levels, chats and totals (fakes only)", ru.status === 200 && ju.limits.fiveHour.percent === 74 && ju.limits.fiveHour.status === "warn" && ju.limits.fiveHour.source === "app-history" && ju.limits.weekly.status === "ok" && ju.overall === "warn" && ju.levels.warnAt === 70 && ju.levels.stopAt === 90 && ju.levels.neverAbove === 95 && ju.live.state === "not-available" && ju.chats.length === 1 && ju.chats[0].live === true && ju.chats[0].name === "Test chat" && ju.chats[0].chatId === "s-0a1b2c3d" && ju.chats[0].sessionId === "0a1b2c3d" && ju.total.fiveHour.replies === 1);
+    ok("GET /api/usage gives out no account id, full session id, request or message id, app folder name", !tu.includes("org-") && !tu.includes(SID) && !tu.includes("req_1") && !tu.includes("msg_1") && !tu.includes("claude_test"));
+    ok("GET /api/usage?live=0 and a second look soon after do not ask claude again", (await fetch(base + "/api/usage?live=0")).status === 200 && (await fetch(base + "/api/usage")).status === 200 && probes === 1);
+    ok("POST and PUT to /api/usage are refused", (await fetch(base + "/api/usage", { method: "POST" })).status === 405 && (await fetch(base + "/api/usage", { method: "PUT" })).status === 405);
+    Object.assign(usageHooks, realUsage);
+    try { rmSync(ut, { recursive: true, force: true }); } catch { /* temp folder */ }
+  }
+  ok("--demo: /api/usage serves the fixed sample (74 percent warn, one ok, app-history with an estimate, sample chats)", await withDemo(async (db) => { const d = await (await fetch(db + "/api/usage")).json(); return d.demo === true && d.limits.fiveHour.percent === 74 && d.limits.fiveHour.status === "warn" && d.limits.weekly.status === "ok" && d.limits.fiveHour.source === "app-history" && d.limits.fiveHour.alternatives.some((a) => a.source === "estimate") && d.chats.length >= 3 && (await fetch(db + "/api/usage", { method: "POST" })).status === 405; }));
   server.close();
 });
