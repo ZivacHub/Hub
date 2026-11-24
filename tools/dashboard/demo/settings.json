@@ -1,0 +1,34 @@
+{
+  "demo": true,
+  "definitions": [
+    {
+      "id": "reportAfterPhase",
+      "label": "After each phase, make",
+      "help": "What the workflow writes up when a phase is finished. A shorter report costs fewer tokens.",
+      "choices": [
+        { "value": "full", "label": "Full report", "help": "A full report with pictures." },
+        { "value": "short", "label": "Short summary", "help": "A few plain sentences, no pictures." },
+        { "value": "onRequest", "label": "Only when I ask", "help": "Nothing until you ask for it." }
+      ],
+      "default": "short"
+    },
+    {
+      "id": "backgroundPictures",
+      "label": "Pictures made in the background",
+      "help": "Reference pictures the workflow can prepare while you do other things. Each one uses tokens.",
+      "choices": [
+        { "value": "always", "label": "Always", "help": "Made automatically whenever the workflow wants them." },
+        { "value": "onRequest", "label": "Only when I ask", "help": "Made only after you ask for them." },
+        { "value": "off", "label": "Off", "help": "Never made in the background." }
+      ],
+      "default": "always"
+    }
+  ],
+  "defaults": { "reportAfterPhase": "short", "backgroundPictures": "always" },
+  "projects": [
+    { "name": "AI_Orcestration", "values": { "reportAfterPhase": { "value": "short", "source": "default" }, "backgroundPictures": { "value": "always", "source": "default" } } },
+    { "name": "Hub", "values": { "reportAfterPhase": { "value": "full", "source": "project" }, "backgroundPictures": { "value": "always", "source": "default" } } },
+    { "name": "Socials Automatisation", "values": { "reportAfterPhase": { "value": "short", "source": "default" }, "backgroundPictures": { "value": "off", "source": "project" } } },
+    { "name": "THE UNMADE", "values": { "reportAfterPhase": { "value": "onRequest", "source": "project" }, "backgroundPictures": { "value": "onRequest", "source": "project" } } }
+  ]
+}
